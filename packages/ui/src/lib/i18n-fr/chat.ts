@@ -349,11 +349,59 @@ const chat = {
 					"L'adresse, la clé et le nom de l'en-tête seront disponibles une fois la routine enregistrée.",
 				failure: "L'adresse et la clé de cette routine n'ont pas pu être lues.",
 			},
+			filter: {
+				label: "Filtre",
+				everyEvent: "Chaque événement déclenche cette routine.",
+				add: "Ajouter une ligne",
+				row: "Ligne {{rank}}",
+				remove: "Supprimer la ligne sur {{field}}",
+				matchMode: {
+					label: "Déclencher quand",
+					all: "Chaque ligne est vraie",
+					any: "Une ligne est vraie",
+				},
+				field: {
+					label: "Champ",
+					otherPath: "Un autre chemin",
+				},
+				path: {
+					label: "Chemin",
+					placeholder: "sender.address",
+				},
+				operator: {
+					label: "Opérateur",
+				},
+				value: {
+					label: "Valeur",
+					true: "Vrai",
+					false: "Faux",
+				},
+				operators: {
+					exists: "est présent",
+					not_exists: "est absent",
+					equals: "est égal à",
+					not_equals: "est différent de",
+					contains: "contient",
+					not_contains: "ne contient pas",
+					starts_with: "commence par",
+					ends_with: "finit par",
+					gt: "est supérieur à",
+					lt: "est inférieur à",
+				},
+				fieldTypes: {
+					string: "texte",
+					number: "nombre",
+					boolean: "booléen",
+					datetime: "date",
+				},
+			},
 			error: {
 				blankTitle: "Une routine a besoin d'un titre.",
 				blankInstruction: "Une routine a besoin d'une instruction.",
 				unreadableExpression:
 					"Cette expression n'est pas lisible comme un horaire.",
+				unsupportedOperator:
+					"{{operator}} ne convient pas à un champ déclaré {{fieldType}}.",
 			},
 		},
 		row: {

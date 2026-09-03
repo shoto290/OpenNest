@@ -1,6 +1,7 @@
-import type {
-	RoutineFormModel,
-	RoutineTriggerSource,
+import {
+	EMPTY_ROUTINE_FILTER,
+	type RoutineFormModel,
+	type RoutineTriggerSource,
 } from "@workspace/ui/components/routine-form"
 import type { RoutineRowModel } from "@workspace/ui/components/routine-row"
 
@@ -35,14 +36,46 @@ export const ROUTINES: RoutineRowModel[] = [
 ]
 
 export const TRIGGER_SOURCES: RoutineTriggerSource[] = [
-	{ id: "schedule", title: "On a schedule", kind: "schedule" },
-	{ id: "file-watch", title: "When a watched file changes", kind: "fileWatch" },
+	{
+		id: "schedule",
+		title: "On a schedule",
+		kind: "schedule",
+		payload: [
+			{ name: "occurrenceId", type: "string" },
+			{ name: "firedAt", type: "datetime" },
+		],
+	},
+	{
+		id: "file-watch",
+		title: "When a watched file changes",
+		kind: "fileWatch",
+		payload: [
+			{ name: "path", type: "string" },
+			{ name: "changedAt", type: "datetime" },
+			{ name: "isDirectory", type: "boolean" },
+		],
+	},
 	{
 		id: "local-webhook",
 		title: "When a local webhook is called",
 		kind: "localWebhook",
+		payload: [
+			{ name: "deliveryId", type: "string" },
+			{ name: "event", type: "string" },
+			{ name: "attempt", type: "number" },
+		],
 	},
-	{ id: "space-inbox", title: "When the space inbox fills", kind: "plain" },
+	{
+		id: "space-inbox",
+		title: "When the space inbox fills",
+		kind: "plain",
+		payload: [
+			{ name: "subject", type: "string" },
+			{ name: "unreadCount", type: "number" },
+			{ name: "isFlagged", type: "boolean" },
+			{ name: "receivedAt", type: "datetime" },
+		],
+	},
 ]
 
 export const SCHEDULED_FORM: RoutineFormModel = {
@@ -53,6 +86,7 @@ export const SCHEDULED_FORM: RoutineFormModel = {
 		triggerSourceId: "schedule",
 		expression: "0 8 * * *",
 		path: "",
+		filter: EMPTY_ROUTINE_FILTER,
 	},
 }
 
@@ -64,6 +98,7 @@ export const WATCHING_FORM: RoutineFormModel = {
 		triggerSourceId: "file-watch",
 		expression: "",
 		path: "/notes/CHANGELOG.md",
+		filter: EMPTY_ROUTINE_FILTER,
 	},
 }
 
@@ -75,6 +110,7 @@ export const CALLED_FORM: RoutineFormModel = {
 		triggerSourceId: "local-webhook",
 		expression: "",
 		path: "",
+		filter: EMPTY_ROUTINE_FILTER,
 	},
 	webhook: {
 		url: "http://127.0.0.1:45367/routines/call",
@@ -91,5 +127,20 @@ export const INBOX_FORM: RoutineFormModel = {
 		triggerSourceId: "space-inbox",
 		expression: "",
 		path: "",
+		filter: EMPTY_ROUTINE_FILTER,
+	},
+}
+
+export const FILTERED_FORM: RoutineFormModel = {
+	id: SOURCE_NAMED_BY_ID.id,
+	values: {
+		...INBOX_FORM.values,
+		filter: {
+			matchMode: "any",
+			rows: [
+				{ field: "subject", operator: "contains", value: "invoice" },
+				{ field: "unreadCount", operator: "gt", value: "10" },
+			],
+		},
 	},
 }

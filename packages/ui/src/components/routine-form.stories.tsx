@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { expect, fn, screen, spyOn } from "storybook/test"
+import { expect, fn, screen, spyOn, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -8,11 +8,14 @@ import {
 } from "@workspace/storybook/story-utils"
 import {
 	EMPTY_ROUTINE_VALUES,
+	type RoutineFilterRow,
 	RoutineForm,
+	type RoutineFormModel,
 	type RoutineFormProps,
 } from "@workspace/ui/components/routine-form"
 import {
 	CALLED_FORM,
+	FILTERED_FORM,
 	INBOX_FORM,
 	SCHEDULED_FORM,
 	TRIGGER_SOURCES,
@@ -334,5 +337,238 @@ export const KeyUnreadable = meta.story({
 			),
 		).toBeVisible()
 		await expect(canvas.getByDisplayValue("Deploy report")).toBeVisible()
+	},
+})
+
+const filtered = (rows: RoutineFilterRow[]): RoutineFormModel => ({
+	...INBOX_FORM,
+	values: { ...INBOX_FORM.values, filter: { matchMode: "all", rows } },
+})
+
+const PRESENCE_FILTER = filtered([
+	{ field: "receivedAt", operator: "exists", value: "" },
+])
+
+const BOOLEAN_FILTER = filtered([
+	{ field: "isFlagged", operator: "equals", value: "true" },
+])
+
+const OTHER_PATH_FILTER = filtered([
+	{ field: "sender.address", operator: "ends_with", value: "@example.com" },
+])
+
+const LONG_FILTER = filtered([
+	{
+		field: "delivery.attachments.first.originalFileName",
+		operator: "contains",
+		value: "quarterly-invoice-reconciliation-2026",
+	},
+	{ field: "unreadCount", operator: "gt", value: "10" },
+])
+
+export const FilterWithoutARow = meta.story({
+	args: INBOX_FORM,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A routine no row narrows: every event the trigger reports runs it. Check that the block says so in words rather than showing an empty list, and that the match mode is absent — one row is what makes the question of every or any worth asking. Pick `FilterOnTwoRows` for the same block once rows exist.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(
+			canvas.getByText("Every event runs this routine."),
+		).toBeVisible()
+		await expect(
+			canvas.queryByRole("combobox", { name: "Run when" }),
+		).not.toBeInTheDocument()
+		await expect(
+			canvas.getByRole("button", { name: "Add a row" }),
+		).toBeVisible()
+	},
+})
+
+export const FilterOnTwoRows = meta.story({
+	args: FILTERED_FORM,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A saved filter reopened: two rows in the order they were saved, each with the field, the operator and the value they were saved with, under one match mode for the whole list. Check that the rows carry their rank for a screen reader, that appending a row lands the focus on the field control of that row, that removing it hands the focus to the row that took its place, and that saving sends the rows as they stand.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const rowOne = within(canvas.getByRole("group", { name: "Row 1" }))
+		const rowTwo = within(canvas.getByRole("group", { name: "Row 2" }))
+
+		await expect(
+			canvas.getByRole("combobox", { name: "Run when" }),
+		).toHaveTextContent("Any row holds")
+		await expect(
+			rowOne.getByRole("combobox", { name: "Field" }),
+		).toHaveTextContent("subject")
+		await expect(
+			rowOne.getByRole("combobox", { name: "Operator" }),
+		).toHaveTextContent("contains")
+		await expect(rowOne.getByRole("textbox", { name: "Value" })).toHaveValue(
+			"invoice",
+		)
+		await expect(rowTwo.getByRole("textbox", { name: "Value" })).toHaveValue(
+			"10",
+		)
+
+		await userEvent.click(canvas.getByRole("button", { name: "Add a row" }))
+		const rowThree = within(canvas.getByRole("group", { name: "Row 3" }))
+		await expect(
+			rowThree.getByRole("combobox", { name: "Field" }),
+		).toHaveFocus()
+
+		await userEvent.click(
+			rowThree.getByRole("button", { name: "Remove the row on subject" }),
+		)
+		await expect(
+			within(canvas.getByRole("group", { name: "Row 2" })).getByRole(
+				"combobox",
+				{
+					name: "Field",
+				},
+			),
+		).toHaveFocus()
+
+		await userEvent.click(canvas.getByRole("button", { name: "Save routine" }))
+		await expect(args.onSave).toHaveBeenCalledWith(FILTERED_FORM.values)
+	},
+})
+
+export const FilterOnAPresentField = meta.story({
+	args: PRESENCE_FILTER,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A row whose operator asks nothing but presence. Check that no value control is drawn for it — an operator that takes no value must not leave a box the reader could fill and lose — and that removing the only row hands the focus back to the control that appends one.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const row = within(canvas.getByRole("group", { name: "Row 1" }))
+
+		await expect(
+			row.getByRole("combobox", { name: "Operator" }),
+		).toHaveTextContent("is present")
+		await expect(
+			row.queryByRole("textbox", { name: "Value" }),
+		).not.toBeInTheDocument()
+
+		await userEvent.click(
+			row.getByRole("button", { name: "Remove the row on receivedAt" }),
+		)
+		await expect(
+			canvas.getByRole("button", { name: "Add a row" }),
+		).toHaveFocus()
+	},
+})
+
+export const FilterOnABooleanField = meta.story({
+	args: BOOLEAN_FILTER,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A row on a field the source declares as a boolean. Check that the value is picked from a list holding true and false and nothing else, so no typed word can reach a field that takes neither, and that the operator list is the short one a boolean accepts.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const row = within(canvas.getByRole("group", { name: "Row 1" }))
+		const value = row.getByRole("combobox", { name: "Value" })
+
+		await expect(value).toHaveTextContent("True")
+		await userEvent.click(value)
+		await expect(await screen.findAllByRole("option")).toHaveLength(2)
+	},
+})
+
+export const FilterOnAnotherPath = meta.story({
+	args: OTHER_PATH_FILTER,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A row on a dotted path the source does not declare. Check that the field control reads as another path and brings a text control for the path itself, and that the operator list is the full one — nothing declares the type of that path, so nothing narrows what may be asked of it. Pick `FilterOnABooleanField` for the opposite case, a field whose declared type closes both lists.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const row = within(canvas.getByRole("group", { name: "Row 1" }))
+
+		await expect(
+			row.getByRole("combobox", { name: "Field" }),
+		).toHaveTextContent("Another path")
+		await expect(row.getByRole("textbox", { name: "Path" })).toHaveValue(
+			"sender.address",
+		)
+
+		await userEvent.click(row.getByRole("combobox", { name: "Operator" }))
+		await expect(await screen.findAllByRole("option")).toHaveLength(10)
+	},
+})
+
+export const FilterRefusedForItsOperator = meta.story({
+	args: {
+		...FILTERED_FORM,
+		refusal: { row: 1, operator: "gt", fieldType: "boolean" },
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The write came back refusing the second row: Rust is the only authority on what an operator may ask of a declared type. Check that the refusal marks the operator control of that row alone, that it names the operator and the type in a message tied to that control, and that the first row and everything above it still hold what the reader entered.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const refused = within(
+			canvas.getByRole("group", { name: "Row 2" }),
+		).getByRole("combobox", { name: "Operator" })
+		const message = canvas.getByText(
+			"is greater than does not fit a field declared as boolean.",
+		)
+
+		await expect(refused).toHaveAttribute("aria-invalid", "true")
+		await expect(refused.getAttribute("aria-describedby")).toContain(message.id)
+		await expect(
+			within(canvas.getByRole("group", { name: "Row 1" })).getByRole(
+				"combobox",
+				{
+					name: "Operator",
+				},
+			),
+		).not.toHaveAttribute("aria-invalid")
+		await expect(canvas.getByDisplayValue("invoice")).toBeVisible()
+	},
+})
+
+export const FilterAtThePanelWidth = meta.story({
+	args: LONG_FILTER,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The block at the width the panel opens at, holding a path and a value longer than the panel is wide. Check that the controls of a row stack instead of sharing a line, that none of them is cut off, and that nothing pushes the form into a horizontal scrollbar the reader would have to drag the panel wider to escape.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const block = slotIn(canvasElement, "routine-filter")
+
+		await expect(block.scrollWidth).toBeLessThanOrEqual(block.clientWidth)
+		for (const row of block.querySelectorAll<HTMLElement>(
+			"[data-slot='routine-filter-row']",
+		)) {
+			await expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth)
+		}
 	},
 })

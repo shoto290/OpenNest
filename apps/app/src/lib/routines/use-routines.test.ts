@@ -299,7 +299,7 @@ it("hands the panel a trigger source the lead does not declare", async () => {
 	)
 	await waitFor(() => expect(result.current.routines).toHaveLength(1))
 	expect(result.current.form.sources).toEqual([
-		{ id: "schedule", title: "Schedule", kind: "schedule" },
+		{ id: "schedule", title: "Schedule", kind: "schedule", payload: [] },
 	])
 
 	readKey.mockResolvedValueOnce(A_WEBHOOK_KEY)
@@ -311,6 +311,7 @@ it("hands the panel a trigger source the lead does not declare", async () => {
 		id: "local-webhook",
 		title: "local-webhook",
 		kind: "localWebhook",
+		payload: [],
 	})
 })
 

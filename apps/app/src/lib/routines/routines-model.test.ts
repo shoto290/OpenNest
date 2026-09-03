@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest"
 
 import type { Routine } from "./routine-contract"
-import { botIdsOf, toRoutineRows, toSourceTitles } from "./routines-model"
-import type { TriggerSource } from "./trigger-contract"
+import {
+	botIdsOf,
+	toFilter,
+	toFormFilter,
+	toRoutineRows,
+	toSourceTitles,
+} from "./routines-model"
+import type { Filter, PayloadField, TriggerSource } from "./trigger-contract"
 
 const routine = (over: Partial<Routine>): Routine => ({
 	id: "r-1",
@@ -79,5 +85,74 @@ describe("toRoutineRows", () => {
 				titles,
 			)[0].hasStoppedItself,
 		).toBe(false)
+	})
+})
+
+const INBOX_PAYLOAD: PayloadField[] = [
+	{ name: "subject", type: "string" },
+	{ name: "unreadCount", type: "number" },
+	{ name: "isFlagged", type: "boolean" },
+]
+
+const TWO_ROWS: Filter = {
+	matchMode: "any",
+	rows: [
+		{ field: "subject", operator: "contains", value: "invoice" },
+		{ field: "unreadCount", operator: "gt", value: 10 },
+	],
+}
+
+describe("a filter written from the form and read back into it", () => {
+	it("carries the same rows from the form to the routine and back", () => {
+		const entered = toFormFilter(TWO_ROWS)
+
+		expect(entered.rows).toEqual([
+			{ field: "subject", operator: "contains", value: "invoice" },
+			{ field: "unreadCount", operator: "gt", value: "10" },
+		])
+		expect(toFilter(entered, INBOX_PAYLOAD)).toEqual(TWO_ROWS)
+	})
+
+	it("writes each value as the type its field declares", () => {
+		const written = toFilter(
+			{
+				matchMode: "all",
+				rows: [
+					{ field: "isFlagged", operator: "equals", value: "true" },
+					{ field: "unreadCount", operator: "equals", value: "3" },
+					{ field: "subject", operator: "equals", value: "3" },
+				],
+			},
+			INBOX_PAYLOAD,
+		)
+
+		expect(written.rows.map((row) => row.value)).toEqual([true, 3, "3"])
+	})
+
+	it("writes a row whose operator takes no value without one", () => {
+		const written = toFilter(
+			{
+				matchMode: "all",
+				rows: [{ field: "subject", operator: "exists", value: "invoice" }],
+			},
+			INBOX_PAYLOAD,
+		)
+
+		expect(written.rows[0]).toEqual({ field: "subject", operator: "exists" })
+		expect(toFormFilter(written).rows[0]?.value).toBe("")
+	})
+
+	it("keeps a path the source does not declare as text", () => {
+		const rows = [
+			{
+				field: "sender.address",
+				operator: "ends_with" as const,
+				value: "@x.io",
+			},
+		]
+
+		expect(toFilter({ matchMode: "all", rows }, INBOX_PAYLOAD).rows).toEqual(
+			rows,
+		)
 	})
 })

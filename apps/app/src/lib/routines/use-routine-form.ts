@@ -11,6 +11,7 @@ import type { RoutinesPanelForm } from "@workspace/ui/components/routines-panel"
 
 import type { Routine } from "./routine-contract"
 import {
+	toFilter,
 	toFormRefusal,
 	toFormValues,
 	toTriggerConfig,
@@ -45,6 +46,7 @@ const sourcesOf = (
 		{
 			id: openSourceId,
 			title: openSourceId,
+			payload: [],
 			kind: triggerKindOf(openSourceId),
 		},
 	]
@@ -108,6 +110,15 @@ export const useRoutineForm = ({
 		[place, readKey],
 	)
 
+	const filterOf = useCallback(
+		(values: RoutineFormValues) =>
+			toFilter(
+				values.filter,
+				sources.find(({ id }) => id === values.triggerSourceId)?.payload ?? [],
+			),
+		[sources],
+	)
+
 	const create = useCallback(
 		(values: RoutineFormValues) =>
 			leadBotId
@@ -117,11 +128,11 @@ export const useRoutineForm = ({
 						title: values.title,
 						instruction: values.instruction,
 						triggerSourceId: values.triggerSourceId,
-						filter: { matchMode: "all", rows: [] },
+						filter: filterOf(values),
 						triggerConfig: toTriggerConfig(values),
 					})
 				: null,
-		[conversationId, leadBotId],
+		[conversationId, leadBotId, filterOf],
 	)
 
 	const edit = useCallback(
@@ -131,13 +142,13 @@ export const useRoutineForm = ({
 				? routinesTransport.update(id, {
 						title: values.title,
 						instruction: values.instruction,
-						filter: routine.filter,
+						filter: filterOf(values),
 						triggerConfig: toTriggerConfig(values),
 						isEnabled: routine.isEnabled,
 					})
 				: null
 		},
-		[held],
+		[held, filterOf],
 	)
 
 	const save = useCallback(

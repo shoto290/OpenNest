@@ -93,6 +93,30 @@ export const Empty = meta.story({
 	},
 })
 
+export const Error = meta.story({
+	args: {
+		error: "This model is not available on the plan this bot runs on.",
+		value: "claude-opus",
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The answer a write came back refusing. Reach for this over `Default` to check that the trigger reads invalid rather than only turning red, that the message is tied to it by `aria-describedby` so a screen reader hears it on the control, and that the answer the reader picked is still the one on screen. A hint and a refusal can be read together; the refusal never replaces the hint.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const trigger = canvas.getByRole("combobox")
+		const message = canvas.getByText(
+			"This model is not available on the plan this bot runs on.",
+		)
+
+		await expect(trigger).toHaveAttribute("aria-invalid", "true")
+		await expect(trigger.getAttribute("aria-describedby")).toContain(message.id)
+	},
+})
+
 export const WithHint = meta.story({
 	args: {
 		hint: "Left empty, this skill's turn runs on the model the bot runs on.",

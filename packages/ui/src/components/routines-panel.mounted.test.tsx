@@ -1,6 +1,12 @@
 // @vitest-environment happy-dom
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react"
+import {
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	within,
+} from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
@@ -9,6 +15,7 @@ import {
 } from "@workspace/ui/components/routine-form"
 import {
 	CALLED_FORM,
+	FILTERED_FORM,
 	ROUTINES,
 	SCHEDULED_FORM,
 	TRIGGER_SOURCES,
@@ -69,11 +76,10 @@ describe("RoutinesPanel", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Save routine" }))
 
 		expect(onSave).toHaveBeenCalledWith({
+			...NEW_SCHEDULE.values,
 			expression: "0 8 * * *",
 			instruction: "Write a short digest.",
-			path: "",
 			title: "Morning digest",
-			triggerSourceId: "schedule",
 		})
 	})
 
@@ -99,6 +105,34 @@ describe("RoutinesPanel", () => {
 		expect(held("Address")).toBe(CALLED_FORM.webhook?.url)
 		expect(held("Key")).toBe(CALLED_FORM.webhook?.key)
 		expect(held("Header name")).toBe(CALLED_FORM.webhook?.header)
+	})
+
+	it("marks the refused row and leaves the other rows as entered", () => {
+		panelHolding({
+			...FILTERED_FORM,
+			refusal: { row: 1, operator: "gt", fieldType: "boolean" },
+		})
+
+		const rowOf = (rank: number) =>
+			within(screen.getByRole("group", { name: `Row ${rank}` }))
+		const refused = rowOf(2).getByRole("combobox", { name: "Operator" })
+		const message = screen.getByText(
+			"is greater than does not fit a field declared as boolean.",
+		)
+
+		expect(refused.getAttribute("aria-invalid")).toBe("true")
+		expect(refused.getAttribute("aria-describedby")).toContain(message.id)
+		const heldValueOf = (rank: number) =>
+			(rowOf(rank).getByRole("textbox", { name: "Value" }) as HTMLInputElement)
+				.value
+
+		expect(
+			rowOf(1)
+				.getByRole("combobox", { name: "Operator" })
+				.getAttribute("aria-invalid"),
+		).toBeNull()
+		expect(heldValueOf(1)).toBe("invoice")
+		expect(heldValueOf(2)).toBe("10")
 	})
 
 	it("holds the values it was read with when the write is refused", () => {

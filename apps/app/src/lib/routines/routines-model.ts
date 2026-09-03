@@ -1,4 +1,6 @@
 import type {
+	RoutineFilterRow,
+	RoutineFilterValues,
 	RoutineFormRefusal,
 	RoutineFormValues,
 	RoutineTriggerKind,
@@ -7,8 +9,19 @@ import type {
 } from "@workspace/ui/components/routine-form"
 import type { RoutineRowModel } from "@workspace/ui/components/routine-row"
 
+import {
+	FIELD_TYPES,
+	FILTER_OPERATORS,
+	type FieldType,
+	OPERATOR_TAKES_VALUE,
+} from "./filter-vocabulary"
 import type { Routine, RoutineKey } from "./routine-contract"
-import type { TriggerSource } from "./trigger-contract"
+import type {
+	Filter,
+	FilterRow,
+	PayloadField,
+	TriggerSource,
+} from "./trigger-contract"
 
 export type SourceTitles = ReadonlyMap<string, string>
 
@@ -56,7 +69,61 @@ export const triggerKindOf = (triggerSourceId: string): RoutineTriggerKind =>
 export const toTriggerSources = (
 	declared: TriggerSource[],
 ): RoutineTriggerSource[] =>
-	declared.map(({ id, title }) => ({ id, title, kind: triggerKindOf(id) }))
+	declared.map(({ id, title, payload }) => ({
+		id,
+		title,
+		payload,
+		kind: triggerKindOf(id),
+	}))
+
+const typeOf = (fields: PayloadField[], field: string) =>
+	fields.find((declared) => declared.name === field)?.type
+
+const asNumber = (value: string) => {
+	const held = Number(value)
+	return value.trim() === "" || Number.isNaN(held) ? value : held
+}
+
+const written = (value: string, fieldType: FieldType | undefined) => {
+	if (fieldType === "number") {
+		return asNumber(value)
+	}
+
+	return fieldType === "boolean" ? value === "true" : value
+}
+
+const toFilterRow = (
+	row: RoutineFilterRow,
+	fields: PayloadField[],
+): FilterRow => {
+	const { field, operator } = row
+	return OPERATOR_TAKES_VALUE[operator]
+		? { field, operator, value: written(row.value, typeOf(fields, field)) }
+		: { field, operator }
+}
+
+export const toFilter = (
+	filter: RoutineFilterValues,
+	fields: PayloadField[],
+): Filter => ({
+	matchMode: filter.matchMode,
+	rows: filter.rows.map((row) => toFilterRow(row, fields)),
+})
+
+const toFormRow = ({
+	field,
+	operator,
+	value,
+}: FilterRow): RoutineFilterRow => ({
+	field,
+	operator,
+	value: value === undefined ? "" : String(value),
+})
+
+export const toFormFilter = (filter: Filter): RoutineFilterValues => ({
+	matchMode: filter.matchMode,
+	rows: filter.rows.map(toFormRow),
+})
 
 const textIn = (triggerConfig: unknown, field: string): string => {
 	if (typeof triggerConfig !== "object" || triggerConfig === null) {
@@ -73,6 +140,7 @@ export const toFormValues = (routine: Routine): RoutineFormValues => ({
 	triggerSourceId: routine.triggerSourceId,
 	expression: textIn(routine.triggerConfig, "expression"),
 	path: textIn(routine.triggerConfig, "path"),
+	filter: toFormFilter(routine.filter),
 })
 
 export const toTriggerConfig = (values: RoutineFormValues): unknown => {
@@ -89,15 +157,40 @@ const REFUSALS_BY_BLANK_FIELD: Record<string, RoutineFormRefusal> = {
 	instruction: "blankInstruction",
 }
 
-const refusalIn = (reason: unknown): { kind: string; field?: string } | null =>
+type RefusalReason = {
+	kind: string
+	field?: string
+	row?: number
+	operator?: string
+	fieldType?: string
+}
+
+const refusalIn = (reason: unknown): RefusalReason | null =>
 	typeof reason === "object" && reason !== null && "kind" in reason
-		? (reason as { kind: string; field?: string })
+		? (reason as RefusalReason)
 		: null
+
+const toOperatorRefusal = ({
+	row,
+	operator,
+	fieldType,
+}: RefusalReason): RoutineFormRefusal | null => {
+	const refusedOperator = FILTER_OPERATORS.find((held) => held === operator)
+	const refusedType = FIELD_TYPES.find((held) => held === fieldType)
+
+	return typeof row === "number" && refusedOperator && refusedType
+		? { row, operator: refusedOperator, fieldType: refusedType }
+		: null
+}
 
 export const toFormRefusal = (reason: unknown): RoutineFormRefusal | null => {
 	const refused = refusalIn(reason)
 	if (!refused) {
 		return null
+	}
+
+	if (refused.kind === "unsupportedOperator") {
+		return toOperatorRefusal(refused)
 	}
 
 	if (refused.kind === "unreadableExpression") {
