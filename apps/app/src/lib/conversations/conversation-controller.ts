@@ -844,8 +844,9 @@ export const createConversationController = (
 
 	const readCauses = async (conversationId: string) => {
 		try {
+			const reported = await readReportedRuns(conversationId)
 			reportedCauses = new Map([
-				...indexedByTurnId(await readReportedRuns(conversationId)),
+				...indexedByTurnId(reported),
 				...reportedCauses,
 			])
 		} catch {
