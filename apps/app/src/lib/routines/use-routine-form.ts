@@ -67,21 +67,31 @@ export const useRoutineForm = ({
 	}, [])
 
 	const revise = useCallback(
-		(on: number, change: (model: RoutineFormModel) => RoutineFormModel) =>
+		(
+			placement: number,
+			change: (model: RoutineFormModel) => RoutineFormModel,
+		) =>
 			setOpen((current) =>
-				current && on === placed.current ? change(current) : current,
+				current && placement === placed.current ? change(current) : current,
 			),
 		[],
 	)
 
 	const readKey = useCallback(
 		(routineId: string) => {
-			const on = placed.current
+			const placement = placed.current
 
 			void routinesTransport.key(routineId).then(
 				(carried) =>
-					revise(on, (model) => ({ ...model, webhook: toWebhook(carried) })),
-				() => revise(on, (model) => ({ ...model, hasFailedToReadKey: true })),
+					revise(placement, (model) => ({
+						...model,
+						webhook: toWebhook(carried),
+					})),
+				() =>
+					revise(placement, (model) => ({
+						...model,
+						hasFailedToReadKey: true,
+					})),
 			)
 		},
 		[revise],
@@ -135,9 +145,10 @@ export const useRoutineForm = ({
 				return
 			}
 
-			const on = placed.current
+			const placement = placed.current
+			const isStillOpen = () => placement === placed.current
 			const keepEntered = (refusal: RoutineFormRefusal | null) =>
-				revise(on, (model) => ({
+				revise(placement, (model) => ({
 					...model,
 					values,
 					refusal: refusal ?? undefined,
@@ -153,12 +164,12 @@ export const useRoutineForm = ({
 			void written.then(
 				(routine) => {
 					onWritten(routine)
-					if (on === placed.current) {
+					if (isStillOpen()) {
 						show(routine)
 					}
 				},
 				(reason) => {
-					const refusal = on === placed.current ? toFormRefusal(reason) : null
+					const refusal = isStillOpen() ? toFormRefusal(reason) : null
 					keepEntered(refusal)
 					if (!refusal) {
 						onWriteFailure()
