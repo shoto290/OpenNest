@@ -368,3 +368,68 @@ it("raises the write failure of a save on a routine that left the list", async (
 	expect(result.current.form.open?.values.title).toBe("Nightly report")
 	expect(update).not.toHaveBeenCalled()
 })
+
+it("leaves the panel on the list when a save resolves after the form was closed", async () => {
+	const result = await mountLeadRoutines([])
+	let settleSave = (_written: Routine) => {}
+	create.mockReturnValueOnce(
+		new Promise<Routine>((resolve) => {
+			settleSave = resolve
+		}),
+	)
+
+	act(() => {
+		result.current.form.onNew()
+	})
+	act(() => {
+		result.current.form.onSave(
+			entered({
+				title: ROUTINE.title,
+				instruction: ROUTINE.instruction,
+				triggerSourceId: "schedule",
+				expression: "0 * * * *",
+			}),
+		)
+	})
+	act(() => {
+		result.current.form.onClose()
+	})
+	await act(async () => {
+		settleSave(ROUTINE)
+	})
+
+	expect(result.current.form.open).toBeNull()
+	expect(result.current.routines).toHaveLength(1)
+})
+
+it("leaves the routine on the form when a refusal lands from another form", async () => {
+	const result = await mountLeadRoutines([ROUTINE])
+	let refuseSave = (_reason: unknown) => {}
+	create.mockReturnValueOnce(
+		new Promise<Routine>((_resolve, reject) => {
+			refuseSave = reject
+		}),
+	)
+
+	act(() => {
+		result.current.form.onNew()
+	})
+	act(() => {
+		result.current.form.onSave(
+			entered({ instruction: "Read it", triggerSourceId: "schedule" }),
+		)
+	})
+	act(() => {
+		result.current.form.onOpen(ROUTINE.id)
+	})
+	await act(async () => {
+		refuseSave({ kind: "blankField", field: "title" })
+	})
+
+	expect(result.current.form.open).toMatchObject({
+		id: ROUTINE.id,
+		values: { title: ROUTINE.title, instruction: ROUTINE.instruction },
+	})
+	expect(result.current.form.open?.refusal).toBeUndefined()
+	expect(result.current.failure).toBe("write")
+})

@@ -59,33 +59,42 @@ export const useRoutineForm = ({
 	onWriteFailure,
 }: RoutineFormWiring): RoutinesPanelForm => {
 	const [open, setOpen] = useState<RoutineFormModel | null>(null)
-	const lastRead = useRef(0)
+	const placed = useRef(0)
 
-	const readKey = useCallback((routineId: string) => {
-		lastRead.current += 1
-		const read = lastRead.current
-		const settle = (revise: (model: RoutineFormModel) => RoutineFormModel) =>
-			setOpen((current) =>
-				current && current.id === routineId && read === lastRead.current
-					? revise(current)
-					: current,
-			)
-
-		void routinesTransport.key(routineId).then(
-			(carried) =>
-				settle((model) => ({ ...model, webhook: toWebhook(carried) })),
-			() => settle((model) => ({ ...model, hasFailedToReadKey: true })),
-		)
+	const place = useCallback((model: RoutineFormModel | null) => {
+		placed.current += 1
+		setOpen(model)
 	}, [])
+
+	const revise = useCallback(
+		(on: number, change: (model: RoutineFormModel) => RoutineFormModel) =>
+			setOpen((current) =>
+				current && on === placed.current ? change(current) : current,
+			),
+		[],
+	)
+
+	const readKey = useCallback(
+		(routineId: string) => {
+			const on = placed.current
+
+			void routinesTransport.key(routineId).then(
+				(carried) =>
+					revise(on, (model) => ({ ...model, webhook: toWebhook(carried) })),
+				() => revise(on, (model) => ({ ...model, hasFailedToReadKey: true })),
+			)
+		},
+		[revise],
+	)
 
 	const show = useCallback(
 		(routine: Routine) => {
-			setOpen({ id: routine.id, values: toFormValues(routine) })
+			place({ id: routine.id, values: toFormValues(routine) })
 			if (isWebhook(routine)) {
 				readKey(routine.id)
 			}
 		},
-		[readKey],
+		[place, readKey],
 	)
 
 	const create = useCallback(
@@ -126,12 +135,13 @@ export const useRoutineForm = ({
 				return
 			}
 
+			const on = placed.current
 			const keepEntered = (refusal: RoutineFormRefusal | null) =>
-				setOpen((current) =>
-					current
-						? { ...current, values, refusal: refusal ?? undefined }
-						: current,
-				)
+				revise(on, (model) => ({
+					...model,
+					values,
+					refusal: refusal ?? undefined,
+				}))
 
 			const written = open.id === null ? create(values) : edit(open.id, values)
 			if (!written) {
@@ -143,10 +153,12 @@ export const useRoutineForm = ({
 			void written.then(
 				(routine) => {
 					onWritten(routine)
-					show(routine)
+					if (on === placed.current) {
+						show(routine)
+					}
 				},
 				(reason) => {
-					const refusal = toFormRefusal(reason)
+					const refusal = on === placed.current ? toFormRefusal(reason) : null
 					keepEntered(refusal)
 					if (!refusal) {
 						onWriteFailure()
@@ -154,7 +166,7 @@ export const useRoutineForm = ({
 				},
 			)
 		},
-		[open, create, edit, onWritten, onWriteFailure, show],
+		[open, create, edit, onWritten, onWriteFailure, revise, show],
 	)
 
 	const openRoutine = useCallback(
@@ -168,11 +180,11 @@ export const useRoutineForm = ({
 	)
 
 	const openNew = useCallback(
-		() => setOpen({ id: null, values: EMPTY_ROUTINE_VALUES }),
-		[],
+		() => place({ id: null, values: EMPTY_ROUTINE_VALUES }),
+		[place],
 	)
 
-	const close = useCallback(() => setOpen(null), [])
+	const close = useCallback(() => place(null), [place])
 
 	return useMemo(
 		() => ({
