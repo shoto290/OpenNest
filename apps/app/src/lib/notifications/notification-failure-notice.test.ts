@@ -88,11 +88,11 @@ it("shows the reader why clicking a notification stopped working", async () => {
 
 	await watchAlongside(notifications)
 
-	await waitFor(() => {
-		expect(noticesOnScreen()).toHaveLength(1)
+	const [notice] = await waitFor(() => {
+		const notices = noticesOnScreen()
+		expect(notices).toHaveLength(1)
+		return notices
 	})
-
-	const [notice] = noticesOnScreen()
 
 	expect(within(notice).getByText(CLICK_FAILURE_TITLE)).toBeTruthy()
 	expect(within(notice).getByText("no listener")).toBeTruthy()
