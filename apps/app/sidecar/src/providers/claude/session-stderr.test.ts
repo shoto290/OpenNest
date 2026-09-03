@@ -5,14 +5,15 @@ import { join } from "node:path"
 
 import { EXECUTABLE_OVERRIDE_ENV } from "./executable"
 import { openClaudeSession } from "./session"
-import { createStderrTail } from "./stderr-tail"
 
 import type { SessionFrame } from "../provider"
 
-const REFUSAL = "refusing to start: the credentials file is unreadable"
+const REFUSAL = "refusing to start: the sandbox runtime is not installed"
 
 const overridden = process.env[EXECUTABLE_OVERRIDE_ENV]
 let directory = ""
+
+const times = (text: string) => text.split(REFUSAL).length - 1
 
 beforeAll(() => {
 	directory = mkdtempSync(join(tmpdir(), "opennest-refusing-claude-"))
@@ -32,32 +33,26 @@ afterAll(() => {
 })
 
 describe("openClaudeSession", () => {
-	it("rejects and closes on what Claude Code wrote to standard error before it threw", async () => {
-		const frames: SessionFrame[] = []
+	it("names once what Claude Code refused with, in the rejection and in the closed frame", async () => {
+		let announce: (frame: SessionFrame) => void = () => {}
+		const closed = new Promise<SessionFrame>((resolve) => {
+			announce = resolve
+		})
+		const emit = (frame: SessionFrame) => {
+			if (frame.type === "closed") {
+				announce(frame)
+			}
+		}
+		let rejection = ""
 
-		await expect(
-			openClaudeSession({ cwd: directory, partialMessages: false }, (frame) => {
-				frames.push(frame)
-			}),
-		).rejects.toThrow(REFUSAL)
+		try {
+			await openClaudeSession({ cwd: directory, partialMessages: false }, emit)
+			throw new Error("the refusing executable opened a session")
+		} catch (error) {
+			rejection = error instanceof Error ? error.message : String(error)
+		}
 
-		const closed = frames.find((frame) => frame.type === "closed")
-
-		expect(closed).toBeDefined()
-		expect(String(closed?.detail)).toContain(REFUSAL)
-	})
-})
-
-describe("createStderrTail", () => {
-	it("keeps the last 4000 characters and drops the oldest", () => {
-		const tail = createStderrTail()
-
-		tail.append("x".repeat(3990))
-		tail.append(REFUSAL)
-
-		const kept = tail.kept()
-
-		expect(kept).toHaveLength(4000)
-		expect(kept.endsWith(REFUSAL)).toBe(true)
+		expect(times(rejection)).toBe(1)
+		expect(times(String((await closed).detail))).toBe(1)
 	})
 })

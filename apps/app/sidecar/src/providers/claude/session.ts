@@ -15,7 +15,6 @@ import { createPromptStream } from "./prompt-stream"
 import { securityFloor } from "./security-floor"
 import { type ResolvedServers, resolvedServers } from "./server-env"
 import { inheritedEnv } from "./session-env"
-import { createStderrTail } from "./stderr-tail"
 import { layerFor } from "./system-layer"
 
 import type {
@@ -32,9 +31,6 @@ const ENDED = "the agent ended"
 const DISABLE_AUTO_MEMORY = "CLAUDE_CODE_DISABLE_AUTO_MEMORY"
 export const CLASSIFY_ASK_USER_QUESTION =
 	"CLAUDE_CODE_AUTO_MODE_CLASSIFY_ASK_USER_QUESTION"
-
-const withStderr = (detail: string, kept: string): string =>
-	kept && !detail.includes(kept) ? `${detail}\n${kept}` : detail
 
 const described = (commands: SlashCommand[]): AgentCommand[] =>
 	commands.map(({ name, description }) => ({
@@ -123,6 +119,7 @@ export const buildOptions = (
 		settingSources: [],
 		strictMcpConfig: true,
 		pathToClaudeCodeExecutable: resolveExecutable(),
+		stderr: () => {},
 	}
 }
 
@@ -140,18 +137,14 @@ export const openClaudeSession = async (
 	for (const detail of resolved.rejections) {
 		emit({ type: "server_env_rejected", detail })
 	}
-	const stderr = createStderrTail()
 	const run = query({
 		prompt: prompts.stream,
-		options: {
-			...buildOptions(
-				request,
-				permissions.canUseTool,
-				botSettings.options,
-				resolved,
-			),
-			stderr: stderr.append,
-		},
+		options: buildOptions(
+			request,
+			permissions.canUseTool,
+			botSettings.options,
+			resolved,
+		),
 	})
 
 	let closing = false
@@ -163,7 +156,7 @@ export const openClaudeSession = async (
 			}
 			return ENDED
 		} catch (error) {
-			return withStderr(describeError(error), stderr.kept())
+			return describeError(error)
 		}
 	}
 
@@ -182,9 +175,7 @@ export const openClaudeSession = async (
 	const initialized = await Promise.race([
 		run.initializationResult(),
 		collapsed,
-	]).catch((error: unknown) => {
-		throw new Error(withStderr(describeError(error), stderr.kept()))
-	})
+	])
 
 	emit({ type: "commands", commands: described(initialized.commands) })
 
