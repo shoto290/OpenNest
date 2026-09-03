@@ -187,9 +187,7 @@ it("leaves the surface empty when a click reveals the window", async () => {
 	notifications.activate({ kind: "bot", id: "bot-one" })
 	raiseFailureNotice({ title: CONTROL_TITLE })
 
-	await waitFor(() => {
-		expect(screen.getAllByText(CONTROL_TITLE)).not.toHaveLength(0)
-	})
+	await screen.findAllByText(CONTROL_TITLE)
 
 	const notices = noticesOnScreen()
 
