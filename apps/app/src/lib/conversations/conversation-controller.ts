@@ -211,11 +211,6 @@ const promptWork = (pending: PendingPrompt): WorkingState => ({
 
 const NO_CAUSES: ReportedRunsByTurnId = new Map()
 
-const causesUnreadable = () => ({
-	title: i18n.t("chat:transcript.cause.unavailable.title"),
-	description: i18n.t("chat:transcript.cause.unavailable.description"),
-})
-
 const indexedByTurnId = (reported: ReportedRun[]): ReportedRunsByTurnId =>
 	new Map(reported.map((run) => [run.turnId, run]))
 
@@ -857,7 +852,10 @@ export const createConversationController = (
 			reportedCauses = indexedByTurnId(await readReportedRuns(conversationId))
 		} catch {
 			hasFailedToReadCauses = true
-			raiseFailureNotice(causesUnreadable())
+			raiseFailureNotice({
+				title: i18n.t("chat:transcript.cause.unavailable.title"),
+				description: i18n.t("chat:transcript.cause.unavailable.description"),
+			})
 		}
 		sync()
 	}

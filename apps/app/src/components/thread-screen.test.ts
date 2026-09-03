@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
-import { createElement, Fragment } from "react"
+import { createElement } from "react"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import { NoticeSurface } from "@workspace/ui/components/notice-surface"
@@ -63,8 +63,6 @@ const REPORT_TEXT = "Two tickets closed."
 const ROUTINE_TITLE = "Nightly report"
 
 const CAUSES_TITLE = "Routine reports could not be read"
-
-const NO_REPORTED_RUNS: ReportedRunsReader = async () => []
 
 const reportedRunsOf =
 	(turnId: string): ReportedRunsReader =>
@@ -308,7 +306,7 @@ const writeReport = async (
 
 const roomOf = async ({
 	names,
-	readReportedRuns = NO_REPORTED_RUNS,
+	readReportedRuns,
 	reportTurnId,
 }: RoomFixture): Promise<Room> => {
 	const store = createFakeTranscriptStore()
@@ -547,14 +545,8 @@ describe("ThreadScreen", () => {
 			reportTurnId: REPORT_TURN,
 			readReportedRuns: REFUSED_REPORTED_RUNS,
 		})
-		render(
-			createElement(
-				Fragment,
-				null,
-				createElement(NoticeSurface),
-				screenOf(room.thread),
-			),
-		)
+		render(createElement(NoticeSurface))
+		render(screenOf(room.thread))
 		await settle()
 
 		expect(screen.getByText(REPORT_TEXT)).toBeTruthy()
