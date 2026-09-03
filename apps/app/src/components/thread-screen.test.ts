@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
 
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
-import { createElement } from "react"
+import { createElement, Fragment } from "react"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
+import { NoticeSurface } from "@workspace/ui/components/notice-surface"
 import "@workspace/ui/lib/i18n"
 
 import { ThreadScreen } from "@/components/thread-screen"
@@ -31,6 +32,7 @@ import {
 	seatBots,
 } from "@/lib/conversations/transcript-fixtures"
 import { type FakeLayout, fakeLayout } from "@/lib/perf/fake-layout"
+import type { ReportedRunsReader } from "@/lib/routines/run-port"
 
 const CRASH: ChatError = {
 	id: "crashed-0",
@@ -53,6 +55,25 @@ const PINS_TITLE = "Pinned messages are out of date"
 const READ_TITLE = "Earlier messages not loaded"
 
 const SPACE = "personal"
+
+const REPORT_TURN = "t-report"
+
+const REPORT_TEXT = "Two tickets closed."
+
+const ROUTINE_TITLE = "Nightly report"
+
+const CAUSES_TITLE = "Routine reports could not be read"
+
+const NO_REPORTED_RUNS: ReportedRunsReader = async () => []
+
+const reportedRunsOf =
+	(turnId: string): ReportedRunsReader =>
+	async () => [
+		{ turnId, routineTitle: ROUTINE_TITLE, triggerSourceId: "schedule" },
+	]
+
+const REFUSED_REPORTED_RUNS: ReportedRunsReader = () =>
+	Promise.reject(new Error("refused"))
 
 const refusingOlderStore = (): TranscriptStore => {
 	const base = createFakeTranscriptStore()
@@ -259,7 +280,37 @@ type Room = {
 	send: (text: string) => Promise<void>
 }
 
-const roomOf = async (names: string[]): Promise<Room> => {
+type RoomFixture = {
+	names: string[]
+	readReportedRuns?: ReportedRunsReader
+	reportTurnId?: string
+}
+
+const writeReport = async (
+	store: TranscriptStore,
+	conversationId: string,
+	botId: string,
+	turnId: string,
+) => {
+	await store.startTurn({ id: turnId, conversationId, startedAt: 1 })
+	await store.openAssistantMessage({
+		id: `m-${turnId}`,
+		conversationId,
+		turnId,
+		authorBotId: botId,
+		repliedToMessageId: null,
+		createdAt: 1,
+	})
+	await store.appendText(`m-${turnId}`, REPORT_TEXT)
+	await store.finalizeMessage(`m-${turnId}`, "complete")
+	await store.completeTurn(turnId, 2)
+}
+
+const roomOf = async ({
+	names,
+	readReportedRuns = NO_REPORTED_RUNS,
+	reportTurnId,
+}: RoomFixture): Promise<Room> => {
 	const store = createFakeTranscriptStore()
 	const bots = await seatBots(store, SPACE, names)
 	const conversation = await store.createConversation({
@@ -268,8 +319,13 @@ const roomOf = async (names: string[]): Promise<Room> => {
 		title: "Walls",
 		botIds: bots.map((bot) => bot.id),
 	})
+	if (reportTurnId) {
+		await writeReport(store, conversation.id, bots[0].id, reportTurnId)
+	}
 	const driver = createScriptedDriver()
-	const runtimes = createConversationRuntimes(driver, store)
+	const runtimes = createConversationRuntimes(driver, store, {
+		readReportedRuns,
+	})
 	const controller = runtimes.runtimeFor(conversation.id)
 
 	return {
@@ -343,7 +399,7 @@ describe("ThreadScreen", () => {
 				},
 			}),
 		})
-		const room = await roomOf(["Ada"])
+		const room = await roomOf({ names: ["Ada"] })
 		const { rerender } = render(screenOf(thread))
 		await settle()
 		expect(left).toEqual([])
@@ -459,8 +515,55 @@ describe("ThreadScreen", () => {
 		expect(screen.queryByText(PINS_TITLE)).toBeNull()
 	})
 
+	it("names the routine on the turn its report opened", async () => {
+		const room = await roomOf({
+			names: ["Ada"],
+			reportTurnId: REPORT_TURN,
+			readReportedRuns: reportedRunsOf(REPORT_TURN),
+		})
+		render(screenOf(room.thread))
+		await settle()
+
+		expect(screen.getByText(REPORT_TEXT)).toBeTruthy()
+		expect(screen.getByText(ROUTINE_TITLE)).toBeTruthy()
+	})
+
+	it("leaves a turn outside the reported runs with no routine line", async () => {
+		const room = await roomOf({
+			names: ["Ada"],
+			reportTurnId: REPORT_TURN,
+			readReportedRuns: reportedRunsOf("t-elsewhere"),
+		})
+		render(screenOf(room.thread))
+		await settle()
+
+		expect(screen.getByText(REPORT_TEXT)).toBeTruthy()
+		expect(screen.queryByText(ROUTINE_TITLE)).toBeNull()
+	})
+
+	it("keeps the transcript and reports a failed read of the reported runs", async () => {
+		const room = await roomOf({
+			names: ["Ada"],
+			reportTurnId: REPORT_TURN,
+			readReportedRuns: REFUSED_REPORTED_RUNS,
+		})
+		render(
+			createElement(
+				Fragment,
+				null,
+				createElement(NoticeSurface),
+				screenOf(room.thread),
+			),
+		)
+		await settle()
+
+		expect(screen.getByText(REPORT_TEXT)).toBeTruthy()
+		expect(screen.queryByText(ROUTINE_TITLE)).toBeNull()
+		expect(screen.getAllByText(CAUSES_TITLE).length).toBeGreaterThan(0)
+	})
+
 	it("stops the bot whose working row carries the stop, and no other", async () => {
-		const room = await roomOf(["Ada", "Nyx"])
+		const room = await roomOf({ names: ["Ada", "Nyx"] })
 		render(screenOf(room.thread))
 		await settle()
 
@@ -475,7 +578,7 @@ describe("ThreadScreen", () => {
 	})
 
 	it("leaves no stop on the waiting row of a bot holding no seat", async () => {
-		const room = await roomOf(["Ada", "Nyx"])
+		const room = await roomOf({ names: ["Ada", "Nyx"] })
 		render(screenOf(room.thread))
 		await settle()
 
@@ -487,7 +590,7 @@ describe("ThreadScreen", () => {
 	})
 
 	it("carries the stop onto the run a speaking bot is writing", async () => {
-		const room = await roomOf(["Ada"])
+		const room = await roomOf({ names: ["Ada"] })
 		render(screenOf(room.thread))
 		await settle()
 
@@ -505,7 +608,7 @@ describe("ThreadScreen", () => {
 	})
 
 	it("holds a seated bot on its waiting row until it publishes a block", async () => {
-		const room = await roomOf(["Ada"])
+		const room = await roomOf({ names: ["Ada"] })
 		render(screenOf(room.thread))
 		await settle()
 
@@ -521,7 +624,7 @@ describe("ThreadScreen", () => {
 	})
 
 	it("keeps the working row of a seated bot that has published a block", async () => {
-		const room = await roomOf(["Ada"])
+		const room = await roomOf({ names: ["Ada"] })
 		render(screenOf(room.thread))
 		await settle()
 
@@ -542,7 +645,7 @@ describe("ThreadScreen", () => {
 	})
 
 	it("keeps the working row of a bot asking after it published a block", async () => {
-		const room = await roomOf(["Ada"])
+		const room = await roomOf({ names: ["Ada"] })
 		render(screenOf(room.thread))
 		await settle()
 
@@ -558,7 +661,7 @@ describe("ThreadScreen", () => {
 	})
 
 	it("draws one row for a speaking bot another speaker hands over to", async () => {
-		const room = await roomOf(["Ada", "Nyx"])
+		const room = await roomOf({ names: ["Ada", "Nyx"] })
 		render(screenOf(room.thread))
 		await settle()
 
@@ -575,7 +678,7 @@ describe("ThreadScreen", () => {
 	})
 
 	it("leaves no stop on the turn a bot has landed", async () => {
-		const room = await roomOf(["Ada"])
+		const room = await roomOf({ names: ["Ada"] })
 		render(screenOf(room.thread))
 		await settle()
 

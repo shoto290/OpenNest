@@ -71,6 +71,8 @@ export type ReportedRun = {
 	triggerSourceId: string
 }
 
+export type ReportedRunsByTurnId = ReadonlyMap<string, ReportedRun>
+
 export type TriggerEvent = {
 	routineId: string
 	source: TriggerSource

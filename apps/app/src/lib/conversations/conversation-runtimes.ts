@@ -1,5 +1,6 @@
 import {
 	type ConversationController,
+	type ConversationControllerOptions,
 	createConversationController,
 } from "./conversation-controller"
 import type { TranscriptStore } from "./store-port"
@@ -19,10 +20,15 @@ type HeldRuntime = {
 	stop: () => void
 }
 
+export type ConversationRuntimesOptions = Pick<
+	ConversationControllerOptions,
+	"onNamed" | "readReportedRuns"
+>
+
 export const createConversationRuntimes = (
 	driver: ChatDriver,
 	store: TranscriptStore,
-	onNamed?: (conversationId: string, title: string) => void,
+	options: ConversationRuntimesOptions = {},
 ): ConversationRuntimes => {
 	const runtimes = new Map<string, HeldRuntime>()
 	const listeners = new Set<() => void>()
@@ -38,7 +44,7 @@ export const createConversationRuntimes = (
 		if (held) {
 			return held.controller
 		}
-		const opened = createConversationController(driver, store, { onNamed })
+		const opened = createConversationController(driver, store, options)
 		opened.attach()
 		runtimes.set(conversationId, {
 			controller: opened,

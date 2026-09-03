@@ -145,6 +145,12 @@ const reported = (report: string): Partial<TurnEnded> => ({
 	structuredOutput: { outcome: "report", report },
 })
 
+const UNREPORTED_ENDINGS: [string, Partial<TurnEnded>][] = [
+	["on nothing", reported("   ")],
+	["cancelled", { outcome: "cancelled" }],
+	["failed", { outcome: "failed" }],
+]
+
 const CRASHED: TransportError = {
 	kind: "crashed",
 	code: 1,
@@ -294,10 +300,48 @@ describe("startRunDriver", () => {
 					outcome: "ok",
 					costUsd: 0.42,
 					modelUsage: { sonnet: 12 },
+					reportedTurnId: harness.state().messages[0].turnId,
 				},
 			},
 		])
 	})
+
+	it("marks the reported turn with its routine while the conversation is open", async () => {
+		await harness.openOnScreen()
+		harness.runs.request(harness.requested())
+		await settled()
+		await harness.endTurn(reported("Two tickets closed."))
+
+		const { turnId } = harness.state().messages[0]
+
+		expect(harness.state().reportedCauses.get(turnId)).toEqual({
+			turnId,
+			routineTitle: "Nightly report",
+			triggerSourceId: "schedule",
+		})
+	})
+
+	it("closes a reported run with the turn id of the published report", async () => {
+		await harness.openOnScreen()
+		harness.runs.request(harness.requested())
+		await settled()
+		await harness.endTurn(reported("Two tickets closed."))
+
+		expect(harness.runs.closings[0].closing.reportedTurnId).toBe(
+			harness.state().messages[0].turnId,
+		)
+	})
+
+	it.each(UNREPORTED_ENDINGS)(
+		"closes a run that ended %s with no turn id",
+		async (_ending, ended) => {
+			harness.runs.request(harness.requested())
+			await settled()
+			await harness.endTurn(ended)
+
+			expect(harness.runs.closings[0].closing.reportedTurnId).toBeUndefined()
+		},
+	)
 
 	it("settles the report in the store so a reload still holds it", async () => {
 		harness.runs.request(harness.requested())
@@ -519,7 +563,10 @@ describe("startRunDriver", () => {
 		await vi.advanceTimersByTimeAsync(RUN_DEADLINE_MS * 2)
 
 		expect(harness.runs.closings).toEqual([
-			{ runId: "run-1", closing: { outcome: "ok" } },
+			{
+				runId: "run-1",
+				closing: { outcome: "ok", reportedTurnId: expect.any(String) },
+			},
 		])
 		expect(harness.driver.cancelled).toEqual([])
 	})

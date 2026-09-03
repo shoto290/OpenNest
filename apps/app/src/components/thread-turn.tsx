@@ -5,6 +5,7 @@ import type { MessageAuthor } from "@workspace/ui/components/message"
 import type { QuotedMessage } from "@workspace/ui/components/message-quote"
 import {
 	AssistantTurn,
+	type TurnCause,
 	TurnGroup,
 	type TurnRun,
 	type TurnState,
@@ -28,6 +29,7 @@ type ThreadTurnProps = {
 	bare?: boolean
 	botId?: string
 	author?: MessageAuthor
+	cause?: TurnCause
 	avatarFace?: ThreadFace
 	asking?: ReactNode
 	quoted?: ReplyTarget
@@ -47,6 +49,7 @@ export const ThreadTurn = memo(function ThreadTurn({
 	bare,
 	botId,
 	author,
+	cause,
 	avatarFace,
 	asking,
 	quoted,
@@ -96,6 +99,7 @@ export const ThreadTurn = memo(function ThreadTurn({
 		<AssistantTurn
 			{...stop}
 			author={author}
+			cause={cause}
 			identity={avatarFace}
 			bare={bare}
 			botId={botId}

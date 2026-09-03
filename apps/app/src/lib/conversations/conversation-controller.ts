@@ -1,3 +1,6 @@
+import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
+import { i18n } from "@workspace/ui/lib/i18n"
+
 import { addresseesIn, toMentionTokens } from "./mentions"
 import { isNameless, leadOf, presentParticipants } from "./roster-conversations"
 import type { Conversation, MessagePin } from "./store-contract"
@@ -56,6 +59,12 @@ import {
 	withActivity,
 	workingFor,
 } from "../chat/working-kind"
+import { createReportedRunsReader } from "../routines/create-run-port"
+import type {
+	ReportedRun,
+	ReportedRunsByTurnId,
+} from "../routines/routine-contract"
+import type { ReportedRunsReader } from "../routines/run-port"
 
 export type RefusedMessage = {
 	id: string
@@ -72,6 +81,8 @@ export type RunReportDraft = {
 	botId: string
 	runtimeSessionId: string
 	text: string
+	routineTitle: string
+	triggerSourceId: string
 }
 
 export type SpeakingBot = {
@@ -92,6 +103,8 @@ export type ConversationState = {
 	refusedMessage: RefusedMessage | null
 	pendingPrompt: PendingPrompt | null
 	latestError: ChatError | null
+	reportedCauses: ReportedRunsByTurnId
+	hasFailedToReadCauses: boolean
 }
 
 export type ConversationController = {
@@ -104,7 +117,7 @@ export type ConversationController = {
 	leave: () => void
 	send: (text: string, repliedToMessageId?: string) => Promise<void>
 	sendAgain: (messageId: string) => Promise<void>
-	reportRun: (draft: RunReportDraft) => Promise<void>
+	reportRun: (draft: RunReportDraft) => Promise<string>
 	pin: (messageId: string, blockIndex: number) => Promise<void>
 	unpin: (messageId: string, blockIndex: number) => Promise<void>
 	pins: () => Promise<MessagePin[]>
@@ -120,6 +133,7 @@ export type ConversationControllerOptions = {
 	newId?: () => string
 	now?: () => number
 	onNamed?: (conversationId: string, title: string) => void
+	readReportedRuns?: ReportedRunsReader
 }
 
 type OpenTurn = {
@@ -183,7 +197,9 @@ const isSameState = (left: ConversationState, right: ConversationState) =>
 	isSamePair(left.loopingPair, right.loopingPair) &&
 	left.refusedMessage === right.refusedMessage &&
 	left.pendingPrompt === right.pendingPrompt &&
-	left.latestError === right.latestError
+	left.latestError === right.latestError &&
+	left.reportedCauses === right.reportedCauses &&
+	left.hasFailedToReadCauses === right.hasFailedToReadCauses
 
 const promptWork = (pending: PendingPrompt): WorkingState => ({
 	kind: "waiting",
@@ -192,6 +208,16 @@ const promptWork = (pending: PendingPrompt): WorkingState => ({
 			? pending.request.questions[0]?.header
 			: pending.request.title,
 })
+
+const NO_CAUSES: ReportedRunsByTurnId = new Map()
+
+const causesUnreadable = () => ({
+	title: i18n.t("chat:transcript.cause.unavailable.title"),
+	description: i18n.t("chat:transcript.cause.unavailable.description"),
+})
+
+const indexedByTurnId = (reported: ReportedRun[]): ReportedRunsByTurnId =>
+	new Map(reported.map((run) => [run.turnId, run]))
 
 const initialState: ConversationState = {
 	conversationId: null,
@@ -204,6 +230,8 @@ const initialState: ConversationState = {
 	refusedMessage: null,
 	pendingPrompt: null,
 	latestError: null,
+	reportedCauses: NO_CAUSES,
+	hasFailedToReadCauses: false,
 }
 
 export const createConversationController = (
@@ -213,6 +241,8 @@ export const createConversationController = (
 ): ConversationController => {
 	const newId = options.newId ?? (() => crypto.randomUUID())
 	const now = options.now ?? (() => Date.now())
+	const readReportedRuns =
+		options.readReportedRuns ?? createReportedRunsReader()
 	const transcript = createTranscriptController(store)
 	const enqueue = createQueue()
 
@@ -225,6 +255,8 @@ export const createConversationController = (
 	let asks = 0
 	const runs = new Map<string, RuntimeScope>()
 	let refused: RefusedMessage | null = null
+	let reportedCauses: ReportedRunsByTurnId = NO_CAUSES
+	let hasFailedToReadCauses = false
 	let latestError: ChatError | null = null
 	let errorCount = 0
 	let detach: Promise<() => void> | null = null
@@ -309,6 +341,8 @@ export const createConversationController = (
 			refusedMessage: refused,
 			pendingPrompt: oldestPrompt(),
 			latestError,
+			reportedCauses,
+			hasFailedToReadCauses,
 		})
 	}
 
@@ -814,11 +848,27 @@ export const createConversationController = (
 		await store.completeTurn(reported.turnId, now())
 	}
 
+	const rememberCause = (reported: ReportedRun) => {
+		reportedCauses = new Map(reportedCauses).set(reported.turnId, reported)
+	}
+
+	const readCauses = async (conversationId: string) => {
+		try {
+			reportedCauses = indexedByTurnId(await readReportedRuns(conversationId))
+		} catch {
+			hasFailedToReadCauses = true
+			raiseFailureNotice(causesUnreadable())
+		}
+		sync()
+	}
+
 	const reportRun = async ({
 		conversationId,
 		botId,
 		runtimeSessionId,
 		text,
+		routineTitle,
+		triggerSourceId,
 	}: RunReportDraft) => {
 		const reported: TranscriptMessage = {
 			id: newId(),
@@ -834,7 +884,9 @@ export const createConversationController = (
 			runtimeSessionId,
 		}
 		await enqueue(() => storeReport(reported))
+		rememberCause({ turnId: reported.turnId, routineTitle, triggerSourceId })
 		transcript.append(reported)
+		return reported.turnId
 	}
 
 	const recordAnswers = (
@@ -948,9 +1000,14 @@ export const createConversationController = (
 		queue = emptyQueue
 		activeTurn = null
 		refused = null
+		reportedCauses = NO_CAUSES
+		hasFailedToReadCauses = false
 		forgetFailure()
 		sync()
-		await enqueue(() => transcript.load(next.id)).catch(() => undefined)
+		await Promise.all([
+			enqueue(() => transcript.load(next.id)).catch(() => undefined),
+			readCauses(next.id),
+		])
 		sync()
 	}
 

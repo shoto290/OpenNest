@@ -19,6 +19,7 @@ import type {
 import type { ConversationRuntimes } from "../conversations/conversation-runtimes"
 import { presentParticipants } from "../conversations/roster-conversations"
 import type { Bot, Conversation } from "../conversations/store-contract"
+import type { ReportedRunsByTurnId } from "../routines/routine-contract"
 
 export type ThreadFace = RosterBot
 
@@ -89,9 +90,12 @@ export type ThreadFacts = {
 	rejectedPromptId: string | null
 	workingBotIds: (string | null)[]
 	loopingPair: [string, string] | null
+	causes: ReportedRunsByTurnId
 }
 
 const NO_WORKING_BOT_IDS: (string | null)[] = []
+
+const NO_CAUSES: ReportedRunsByTurnId = new Map()
 
 const questionIn = (prompt: PendingPrompt | null): QuestionRequest | null =>
 	prompt?.kind === "question" ? prompt.request : null
@@ -127,6 +131,7 @@ const botFactsOf = (thread: LoadedBotThread): ThreadFacts => {
 		rejectedPromptId: thread.state.rejectedPromptId,
 		workingBotIds: NO_WORKING_BOT_IDS,
 		loopingPair: null,
+		causes: NO_CAUSES,
 	}
 }
 
@@ -154,6 +159,7 @@ const conversationFactsOf = (
 		...thread.state.waitingBotIds,
 	],
 	loopingPair: thread.state.loopingPair,
+	causes: thread.state.reportedCauses,
 })
 
 export const factsOf = (thread: LoadedThread): ThreadFacts =>

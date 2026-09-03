@@ -19,6 +19,7 @@ import { isTerminalCompletion } from "../conversations/transcript-state"
 
 export type TranscriptRow = {
 	messageId: string
+	turnId: string
 	blockIndex: number
 	quotedMessageId: string | null
 	authorBotId: string | null
@@ -71,6 +72,7 @@ function toRow(
 	const { blockIndex = 0, ...rest } = fields
 	return {
 		messageId: message.id,
+		turnId: message.turnId,
 		blockIndex,
 		quotedMessageId:
 			message.role === "user" ? message.repliedToMessageId : null,
