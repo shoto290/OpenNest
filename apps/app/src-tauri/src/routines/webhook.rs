@@ -45,8 +45,8 @@ const TOO_LARGE: (StatusCode, &str) =
 const FLOODED: (StatusCode, &str) =
 	(StatusCode::TOO_MANY_REQUESTS, "the routine was called too often");
 
-const OVER_LONG_DELIVERY_ID: (StatusCode, &str) =
-	(StatusCode::BAD_REQUEST, "the delivery id carried more than 200 bytes");
+const REFUSED_DELIVERY_ID: (StatusCode, &str) =
+	(StatusCode::BAD_REQUEST, "the delivery id is unreadable or carried more than 200 bytes");
 
 const FAILED: (StatusCode, &str) = (StatusCode::INTERNAL_SERVER_ERROR, "the call was not carried");
 
@@ -139,7 +139,7 @@ impl<R: Runtime> Clone for Calls<R> {
 enum DeliveryId {
 	Carried(String),
 	Generated,
-	OverLong,
+	Refused,
 }
 
 fn route<R: Runtime>(calls: Calls<R>) -> Router {
@@ -158,7 +158,7 @@ async fn called<R: Runtime>(
 		return REFUSED;
 	}
 	let delivery_id = match delivery_id(&headers) {
-		DeliveryId::OverLong => return OVER_LONG_DELIVERY_ID,
+		DeliveryId::Refused => return REFUSED_DELIVERY_ID,
 		DeliveryId::Carried(held) => Some(held),
 		DeliveryId::Generated => None,
 	};
@@ -229,11 +229,14 @@ fn delivery_id(headers: &HeaderMap) -> DeliveryId {
 		return DeliveryId::Generated;
 	};
 	if value.len() > MAX_DELIVERY_ID_BYTES {
-		return DeliveryId::OverLong;
+		return DeliveryId::Refused;
 	}
-	match value.to_str().map(str::trim) {
-		Ok(held) if !held.is_empty() => DeliveryId::Carried(held.to_owned()),
-		_ => DeliveryId::Generated,
+	let Ok(held) = value.to_str() else {
+		return DeliveryId::Refused;
+	};
+	match held.trim() {
+		"" => DeliveryId::Generated,
+		held => DeliveryId::Carried(held.to_owned()),
 	}
 }
 
@@ -352,10 +355,17 @@ mod tests {
 		reaching("POST", PATH, Some("127.0.0.1"), key, body)
 	}
 
-	fn delivering(key: Option<&str>, delivery_id: &str, body: &str) -> String {
+	fn delivering(key: Option<&str>, delivery_id: &str, body: &str) -> Vec<u8> {
+		delivering_raw(key, delivery_id.as_bytes(), body)
+	}
+
+	fn delivering_raw(key: Option<&str>, delivery_id: &[u8], body: &str) -> Vec<u8> {
 		let request = calling(key, body);
 		let (head, sent) = request.split_once("\r\n\r\n").expect("the request carries a body");
-		format!("{head}\r\n{DELIVERY_ID_HEADER}: {delivery_id}\r\n\r\n{sent}")
+		let mut raw = format!("{head}\r\n{DELIVERY_ID_HEADER}: ").into_bytes();
+		raw.extend_from_slice(delivery_id);
+		raw.extend_from_slice(format!("\r\n\r\n{sent}").as_bytes());
+		raw
 	}
 
 	fn reaching(
@@ -380,9 +390,10 @@ mod tests {
 		request
 	}
 
-	async fn answered(address: SocketAddr, request: String) -> (u16, String) {
+	async fn answered(address: SocketAddr, request: impl Into<Vec<u8>>) -> (u16, String) {
+		let request = request.into();
 		let mut stream = TcpStream::connect(address).await.expect("the listener answers");
-		stream.write_all(request.as_bytes()).await.expect("the request lands");
+		stream.write_all(&request).await.expect("the request lands");
 		let mut answer = Vec::new();
 		stream.read_to_end(&mut answer).await.expect("the answer reads");
 		let answer = String::from_utf8_lossy(&answer).into_owned();
@@ -414,6 +425,12 @@ mod tests {
 		let state = app.state::<db::DatabaseState>();
 		let database = ready(&state).expect("the database opens");
 		counted(database, "SELECT count(*) FROM routine_runs").await
+	}
+
+	async fn dedupe_values_of(app: &App<MockRuntime>) -> i64 {
+		let state = app.state::<db::DatabaseState>();
+		let database = ready(&state).expect("the database opens");
+		counted(database, "SELECT count(*) FROM routine_dedupe_values").await
 	}
 
 	async fn no_row_was_written(app: &App<MockRuntime>) {
@@ -557,11 +574,17 @@ mod tests {
 			assert_eq!(answer, (ACCEPTED.0.as_u16(), ACCEPTED.1.to_owned()));
 		}
 		let carried_runs = runs_of(&app).await;
+		let carried_dedupe_values = dedupe_values_of(&app).await;
 
 		let flooded = answered(address, calling(Some(A_KEY), "{}")).await;
 
 		assert_eq!(flooded, (FLOODED.0.as_u16(), FLOODED.1.to_owned()));
-		assert_eq!(runs_of(&app).await, carried_runs, "the refused call wrote a row");
+		assert_eq!(runs_of(&app).await, carried_runs, "the refused call wrote a run");
+		assert_eq!(
+			dedupe_values_of(&app).await,
+			carried_dedupe_values,
+			"the refused call wrote a dedupe value"
+		);
 
 		clock.moved_by(WINDOW_MS);
 
@@ -650,7 +673,7 @@ mod tests {
 
 		for key in [Some(A_KEY), Some("no routine holds this"), None] {
 			let (status, message) = answered(address, delivering(key, &long, "{}")).await;
-			assert_eq!(status, OVER_LONG_DELIVERY_ID.0.as_u16());
+			assert_eq!(status, REFUSED_DELIVERY_ID.0.as_u16());
 			assert!(
 				message.contains(&MAX_DELIVERY_ID_BYTES.to_string()),
 				"the answer named no cap: {message}"
@@ -662,6 +685,21 @@ mod tests {
 				.await;
 		assert_eq!(answer, (ACCEPTED.0.as_u16(), ACCEPTED.1.to_owned()));
 		assert_eq!(runs_of(&app).await, 1);
+
+		webhook.stop();
+		cleaned(&app);
+	}
+
+	#[tokio::test]
+	async fn a_delivery_id_carrying_a_byte_that_is_not_utf8_is_refused_and_writes_no_row() {
+		let app = a_host("undecodable").await;
+		let webhook = start(app.handle().clone());
+		let request = delivering_raw(Some(A_KEY), &[b'd', 0xff, b'1'], "{}");
+
+		let answer = answered(address_of(&webhook), request).await;
+
+		assert_eq!(answer, (REFUSED_DELIVERY_ID.0.as_u16(), REFUSED_DELIVERY_ID.1.to_owned()));
+		no_row_was_written(&app).await;
 
 		webhook.stop();
 		cleaned(&app);
