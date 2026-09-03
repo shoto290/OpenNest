@@ -64,11 +64,14 @@ chrono = "0.4"
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
-# The one route on macOS that answers what became of a notification it showed:
-# `send_notification` reports the click back, which `tauri-plugin-notification`
-# cannot. Already in the tree under `notify-rust`, which the plugin shows through.
+# The route that answers what became of a notification when the executable runs outside a
+# .app bundle, where `UNUserNotificationCenter` has no bundle identifier to work from.
+# Already in the tree under `notify-rust`, which `tauri-plugin-notification` shows through.
 [target.'cfg(target_os = "macos")'.dependencies]
 mac-notification-sys = "0.6"
+# The route a signed .app bundle shows through: `UNUserNotificationCenter` is the only one
+# macOS reports a click back from once the app is installed. MIT OR Apache-2.0.
+mac-usernotifications = "0.3"
 # Already in the tree under `tao`; named here so the window controls are placed
 # from their measured frames at runtime rather than from a literal in the config.
 objc2 = "0.6"
