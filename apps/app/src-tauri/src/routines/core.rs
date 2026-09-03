@@ -1,5 +1,6 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use chrono::{DateTime, SecondsFormat, Utc};
 use serde_json::Value;
 
 use super::contract::{
@@ -35,6 +36,12 @@ impl Clock for SystemClock {
 
 pub trait RunSink {
 	fn requested(&self, event: RunRequested) -> Result<(), RoutineError>;
+}
+
+pub fn moment(at: i64) -> Result<String, RoutineError> {
+	DateTime::<Utc>::from_timestamp_millis(at)
+		.map(|instant| instant.to_rfc3339_opts(SecondsFormat::Millis, true))
+		.ok_or_else(|| RoutineError::Unexpected { detail: format!("{at} is not an instant") })
 }
 
 pub fn backoff_ms(consecutive_failures: u32) -> i64 {

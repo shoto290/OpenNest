@@ -37,6 +37,7 @@ export type RoutineEdit = {
 export type RoutineKey = {
 	key: string
 	header?: string
+	url?: string
 }
 
 export type RoutineRun = {

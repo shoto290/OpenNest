@@ -45,6 +45,10 @@ const SELECT_ROUTINES_OF_CONVERSATION: &str =
 	trigger_source_id, event_filter, trigger_config, is_enabled, consecutive_failures, created_at
 	FROM routines WHERE conversation_id = ?1 ORDER BY created_at, id";
 
+const SELECT_ROUTINE_ON_KEY: &str = "SELECT id, conversation_id, bot_id, title, instruction,
+	trigger_source_id, event_filter, trigger_config, is_enabled, consecutive_failures, created_at
+	FROM routines WHERE trigger_key = ?1 AND trigger_source_id = ?2";
+
 const SELECT_ENABLED_ON_SOURCE: &str = "SELECT id, conversation_id, bot_id, title, instruction,
 	trigger_source_id, event_filter, trigger_config, is_enabled, consecutive_failures, created_at,
 	last_occurrence_at
@@ -173,6 +177,21 @@ impl RoutinesRepository {
 			.access
 			.call(move |connection| {
 				Ok(connection.query_row(SELECT_ROUTINE, [&id], routine).optional()?)
+			})
+			.await?)
+	}
+
+	pub async fn keyed_on_source(
+		&self,
+		key: String,
+		trigger_source_id: String,
+	) -> Result<Option<Routine>, RoutineError> {
+		Ok(self
+			.access
+			.call(move |connection| {
+				Ok(connection
+					.query_row(SELECT_ROUTINE_ON_KEY, params![key, trigger_source_id], routine)
+					.optional()?)
 			})
 			.await?)
 	}

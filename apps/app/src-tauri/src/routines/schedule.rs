@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use chrono::{DateTime, Local, SecondsFormat, Utc};
+use chrono::{DateTime, Local, Utc};
 use croner::errors::CronError;
 use croner::Cron;
 use serde_json::{json, Value};
@@ -53,7 +53,7 @@ fn occurrence_id(routine_id: &str, at: i64) -> String {
 fn payload(routine_id: &str, expression: &str, at: i64) -> Result<Value, RoutineError> {
 	Ok(json!({
 		"occurrenceId": occurrence_id(routine_id, at),
-		"firedAt": moment(at)?,
+		"firedAt": core::moment(at)?,
 		"expression": expression,
 	}))
 }
@@ -84,10 +84,6 @@ pub async fn fire<S: RunSink>(
 
 fn wall_clock(at: i64) -> Result<DateTime<Local>, RoutineError> {
 	Ok(instant(at)?.with_timezone(&Local))
-}
-
-fn moment(at: i64) -> Result<String, RoutineError> {
-	Ok(instant(at)?.to_rfc3339_opts(SecondsFormat::Millis, true))
 }
 
 fn instant(at: i64) -> Result<DateTime<Utc>, RoutineError> {

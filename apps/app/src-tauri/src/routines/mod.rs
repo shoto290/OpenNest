@@ -6,3 +6,4 @@ pub mod schedule;
 pub mod sentinel;
 pub mod sources;
 pub mod watch;
+pub mod webhook;
