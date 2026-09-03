@@ -56,13 +56,13 @@ export const DIGEST_RUNS: RoutineRunModel[] = [
 	{
 		id: "run-digest-c",
 		outcome: "skipped",
-		reason: "hourlyCap",
+		reason: "hourly cap",
 		startedAt: RUNS_READ_AT - 32_400_000,
 	},
 	{
 		id: "run-digest-b",
 		outcome: "failed",
-		reason: "claude exited with status 1: unknown flag --resume-session",
+		reason: "the run's turn ended with no structured output",
 		startedAt: RUNS_READ_AT - 93_600_000,
 	},
 	{

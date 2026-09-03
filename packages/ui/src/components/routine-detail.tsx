@@ -62,7 +62,7 @@ type RoutineDetailProps = RoutineDetailModel & {
 const RUN_ROW_CLASS =
 	"flex flex-col gap-1 rounded-xl border border-border bg-muted/40 p-2.5"
 
-const SEPARATOR_CLASS = "before:me-1.5 before:content-['·']"
+const SEPARATOR_CLASS = "before:mx-1.5 before:content-['·']"
 
 type RunState = RoutineRunOutcome | "running"
 
@@ -291,7 +291,7 @@ const RoutineDetail = ({
 			</div>
 
 			<p
-				className="flex items-start gap-1.5 text-muted-foreground text-xs empty:hidden"
+				className="flex items-start gap-1.5 text-muted-foreground text-xs empty:absolute"
 				data-slot="routine-run-refusal"
 				role="status"
 			>

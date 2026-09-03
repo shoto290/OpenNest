@@ -244,8 +244,6 @@ const RoutinesPanelSurface = (props: RoutinesPanelListProps) => {
 		act()
 	}
 
-	const openRow = detail?.onOpen ?? form?.onOpen
-
 	const editOpenRoutine = () => {
 		const openId = detail?.open?.id
 		if (openId) {
@@ -303,8 +301,8 @@ const RoutinesPanelSurface = (props: RoutinesPanelListProps) => {
 					onEditRoutine={editOpenRoutine}
 					onNewRoutine={() => remember(EMPTY_OPENER, () => form?.onNew())}
 					onOpenRoutine={
-						openRow &&
-						((routineId) => remember(routineId, () => openRow(routineId)))
+						detail &&
+						((routineId) => remember(routineId, () => detail.onOpen(routineId)))
 					}
 				/>
 			</AnimatedSidebarContent>

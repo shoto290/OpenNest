@@ -27,8 +27,8 @@ const HOUR = 3_600_000
 const REASON_OF: Record<RoutineRunOutcome, string | undefined> = {
 	reported: undefined,
 	nothing: undefined,
-	skipped: "leaseHeld",
-	failed: "claude exited with status 1: unknown flag --resume-session",
+	skipped: "previous run still in progress",
+	failed: "the run's turn failed",
 }
 
 const OUTCOME_RUNS: RoutineRunModel[] = ROUTINE_RUN_OUTCOMES.map(
@@ -49,7 +49,7 @@ const LONG_TITLE =
 	"Read every changelog of every package this workspace depends on and summarise it"
 
 const LONG_REASON =
-	"claude exited with status 1: the session could not be resumed because the transcript file /Users/ada/Library/Application Support/opennest/sessions/2026-03-04.jsonl was written by another version"
+	"the run's session failed with spawnFailed: /Users/ada/.local/bin/claude exited before the first frame: error while loading shared libraries: libssl.so.3: cannot open shared object file"
 
 const meta = preview.meta({
 	title: "Conversation/Routines/RoutineDetail",
@@ -130,7 +130,9 @@ export const Outcomes = meta.story({
 			await expect(canvas.getByText(label)).toBeVisible()
 		}
 
-		await expect(canvas.getByText("leaseHeld")).toBeVisible()
+		await expect(
+			canvas.getByText("previous run still in progress"),
+		).toBeVisible()
 		await expect(slotsIn(canvasElement, "routine-run-reason")).toHaveLength(2)
 	},
 })

@@ -1,4 +1,8 @@
 import type {
+	RoutineRunModel,
+	RoutineRunOutcome,
+} from "@workspace/ui/components/routine-detail"
+import type {
 	RoutineFilterRow,
 	RoutineFilterValues,
 	RoutineFormRefusal,
@@ -15,7 +19,12 @@ import {
 	type FieldType,
 	OPERATOR_TAKES_VALUE,
 } from "./filter-vocabulary"
-import type { Routine, RoutineKey } from "./routine-contract"
+import type {
+	Routine,
+	RoutineKey,
+	RoutineRun,
+	RunOutcome,
+} from "./routine-contract"
 import type {
 	Filter,
 	FilterRow,
@@ -53,6 +62,21 @@ export const toRoutineRows = (
 			routine.triggerSourceId,
 		isEnabled: routine.isEnabled,
 		hasStoppedItself: !routine.isEnabled && routine.consecutiveFailures > 0,
+	}))
+
+const RUN_OUTCOME_NAMES: Record<RunOutcome, RoutineRunOutcome> = {
+	ok: "reported",
+	nothing: "nothing",
+	skipped: "skipped",
+	failed: "failed",
+}
+
+export const toRunModels = (runs: RoutineRun[]): RoutineRunModel[] =>
+	runs.map((run) => ({
+		id: run.id,
+		startedAt: run.startedAt,
+		outcome: run.outcome ? RUN_OUTCOME_NAMES[run.outcome] : null,
+		reason: run.reason ?? undefined,
 	}))
 
 const KINDS_BY_SOURCE_ID: Record<string, RoutineTriggerKind> = {
