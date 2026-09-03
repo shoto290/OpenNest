@@ -3,7 +3,8 @@ use std::net::{Ipv4Addr, SocketAddr, TcpListener as StandardListener};
 
 use axum::extract::rejection::StringRejection;
 use axum::extract::{DefaultBodyLimit, State};
-use axum::http::{HeaderMap, StatusCode};
+use axum::http::{header, HeaderMap, StatusCode};
+use axum::response::IntoResponse;
 use axum::routing::post;
 use axum::Router;
 use serde_json::{json, Value};
@@ -32,7 +33,12 @@ const ACCEPTED: (StatusCode, &str) = (StatusCode::ACCEPTED, "the routine was tol
 
 const REFUSED: (StatusCode, &str) = (StatusCode::NOT_FOUND, "no routine answers this call");
 
+const TOO_LARGE: (StatusCode, &str) =
+	(StatusCode::PAYLOAD_TOO_LARGE, "the call carried more than the cap");
+
 const FAILED: (StatusCode, &str) = (StatusCode::INTERNAL_SERVER_ERROR, "the call was not carried");
+
+const LOOPBACK_NAMES: [&str; 2] = ["127.0.0.1", "localhost"];
 
 pub struct Webhook {
 	address: Option<SocketAddr>,
@@ -113,8 +119,12 @@ async fn called<R: Runtime>(
 	headers: HeaderMap,
 	body: Result<String, StringRejection>,
 ) -> (StatusCode, &'static str) {
-	let Ok(body) = body else {
+	if !named_here(&headers) {
 		return REFUSED;
+	}
+	let body = match body {
+		Ok(body) => body,
+		Err(rejection) => return unread(rejection),
 	};
 	match carried(&app, &headers, body).await {
 		Ok(Some(_)) => ACCEPTED,
@@ -148,6 +158,21 @@ async fn carried<R: Runtime>(
 		payload: payload(body, SystemClock.now_ms())?,
 	};
 	core::on_trigger(database, &Announcer { app }, &SystemClock, event).await.map(Some)
+}
+
+fn unread(rejection: StringRejection) -> (StatusCode, &'static str) {
+	match rejection.into_response().status() {
+		StatusCode::PAYLOAD_TOO_LARGE => TOO_LARGE,
+		_ => REFUSED,
+	}
+}
+
+fn named_here(headers: &HeaderMap) -> bool {
+	let Some(host) = headers.get(header::HOST).and_then(|host| host.to_str().ok()) else {
+		return false;
+	};
+	let name = host.split(':').next().unwrap_or(host);
+	LOOPBACK_NAMES.contains(&name)
 }
 
 fn presented(headers: &HeaderMap) -> Option<String> {
@@ -241,11 +266,27 @@ mod tests {
 	}
 
 	fn calling(key: Option<&str>, body: &str) -> String {
+		hosted(Some("127.0.0.1"), key, body)
+	}
+
+	fn hosted(host: Option<&str>, key: Option<&str>, body: &str) -> String {
+		reaching("POST", PATH, host, key, body)
+	}
+
+	fn reaching(
+		method: &str,
+		path: &str,
+		host: Option<&str>,
+		key: Option<&str>,
+		body: &str,
+	) -> String {
 		let mut request = format!(
-			"POST {PATH} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\
-			 Content-Length: {}\r\n",
+			"{method} {path} HTTP/1.1\r\nConnection: close\r\nContent-Length: {}\r\n",
 			body.len()
 		);
+		if let Some(host) = host {
+			request.push_str(&format!("Host: {host}\r\n"));
+		}
 		if let Some(key) = key {
 			request.push_str(&format!("{HEADER}: {key}\r\n"));
 		}
@@ -271,6 +312,13 @@ mod tests {
 
 	fn refused() -> (u16, String) {
 		(REFUSED.0.as_u16(), REFUSED.1.to_owned())
+	}
+
+	async fn no_row_was_written(app: &App<MockRuntime>) {
+		let state = app.state::<db::DatabaseState>();
+		let database = ready(&state).expect("the database opens");
+		assert_eq!(counted(database, "SELECT count(*) FROM routine_runs").await, 0);
+		assert_eq!(counted(database, "SELECT count(*) FROM routine_dedupe_values").await, 0);
 	}
 
 	#[tokio::test]
@@ -318,27 +366,78 @@ mod tests {
 			assert_eq!(answered(address, request).await, refused());
 		}
 
-		let state = app.state::<db::DatabaseState>();
-		let database = ready(&state).expect("the database opens");
-		assert_eq!(counted(database, "SELECT count(*) FROM routine_runs").await, 0);
-		assert_eq!(counted(database, "SELECT count(*) FROM routine_dedupe_values").await, 0);
+		no_row_was_written(&app).await;
 
 		webhook.stop();
 		cleaned(&app);
 	}
 
 	#[tokio::test]
-	async fn a_body_longer_than_the_cap_is_refused_the_way_every_other_call_is() {
+	async fn a_body_longer_than_the_cap_is_answered_its_size_not_the_key_refusal() {
 		let app = a_host("capped").await;
 		let webhook = start(app.handle().clone());
 
 		let long = "a".repeat(MAX_BODY_BYTES + 1);
 		let answer = answered(address_of(&webhook), calling(Some(A_KEY), &long)).await;
 
-		assert_eq!(answer, refused());
-		let state = app.state::<db::DatabaseState>();
-		let database = ready(&state).expect("the database opens");
-		assert_eq!(counted(database, "SELECT count(*) FROM routine_runs").await, 0);
+		assert_eq!(answer, (TOO_LARGE.0.as_u16(), TOO_LARGE.1.to_owned()));
+		assert_ne!(answer, refused(), "a call refused for its size names its size");
+		no_row_was_written(&app).await;
+
+		webhook.stop();
+		cleaned(&app);
+	}
+
+	#[tokio::test]
+	async fn a_call_naming_another_host_or_naming_none_is_refused_and_reads_no_routine() {
+		let app = a_host("hosted").await;
+		let webhook = start(app.handle().clone());
+		let address = address_of(&webhook);
+
+		for request in [
+			hosted(Some("attacker.example"), Some(A_KEY), "{}"),
+			hosted(Some("127.0.0.1.attacker.example"), Some(A_KEY), "{}"),
+			hosted(None, Some(A_KEY), "{}"),
+		] {
+			assert_eq!(answered(address, request).await, refused());
+		}
+
+		no_row_was_written(&app).await;
+
+		webhook.stop();
+		cleaned(&app);
+	}
+
+	#[tokio::test]
+	async fn a_call_naming_the_loopback_with_or_without_the_bound_port_is_carried() {
+		let app = a_host("loopback").await;
+		let webhook = start(app.handle().clone());
+		let address = address_of(&webhook);
+
+		for host in ["localhost", "127.0.0.1", &format!("localhost:{}", address.port())] {
+			let answer = answered(address, hosted(Some(host), Some(A_KEY), "{}")).await;
+			assert_eq!(answer, (ACCEPTED.0.as_u16(), ACCEPTED.1.to_owned()), "{host} was refused");
+		}
+
+		webhook.stop();
+		cleaned(&app);
+	}
+
+	#[tokio::test]
+	async fn another_method_and_another_path_write_no_row() {
+		let app = a_host("elsewhere").await;
+		let webhook = start(app.handle().clone());
+		let address = address_of(&webhook);
+
+		for request in [
+			reaching("GET", PATH, Some("127.0.0.1"), Some(A_KEY), ""),
+			reaching("POST", "/elsewhere", Some("127.0.0.1"), Some(A_KEY), "{}"),
+		] {
+			let (status, _) = answered(address, request).await;
+			assert!(status >= 400, "the call was answered {status}");
+		}
+
+		no_row_was_written(&app).await;
 
 		webhook.stop();
 		cleaned(&app);

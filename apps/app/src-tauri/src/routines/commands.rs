@@ -187,10 +187,14 @@ pub async fn routine_key<R: Runtime>(
 	let held = routine_row(database, &id).await?;
 	let source = declared_source(&app, database, &held.bot_id, &held.trigger_source_id).await?;
 	let key = database.routines().key_of(id).await?;
-	Ok(RoutineKey { key, header: source.header, url: called_at(&app) })
+	let url = called_at(&app, &held.trigger_source_id);
+	Ok(RoutineKey { key, header: source.header, url })
 }
 
-fn called_at<R: Runtime>(app: &AppHandle<R>) -> Option<String> {
+fn called_at<R: Runtime>(app: &AppHandle<R>, trigger_source_id: &str) -> Option<String> {
+	if trigger_source_id != webhook::SOURCE_ID {
+		return None;
+	}
 	app.try_state::<webhook::Webhook>().and_then(|webhook| webhook.url())
 }
 
@@ -253,10 +257,48 @@ mod tests {
 		}
 	}
 
+	fn a_called_draft() -> RoutineDraft {
+		RoutineDraft {
+			trigger_source_id: webhook::SOURCE_ID.to_owned(),
+			trigger_config: json!({}),
+			..a_draft("0 * * * *")
+		}
+	}
+
 	fn cleaned(app: &App<MockRuntime>) {
 		if let Ok(dir) = app.path().app_data_dir() {
 			let _ = fs::remove_dir_all(&dir);
 		}
+	}
+
+	#[tokio::test]
+	async fn only_a_routine_the_local_route_fires_is_answered_the_url_it_is_called_on() {
+		let app = a_host("called-at").await;
+		app.manage(webhook::start(app.handle().clone()));
+		let called = routine_create(app.handle().clone(), app.state(), a_called_draft())
+			.await
+			.expect("the called routine is created");
+		let scheduled = routine_create(app.handle().clone(), app.state(), a_draft("0 * * * *"))
+			.await
+			.expect("the scheduled routine is created");
+
+		let answered = routine_key(app.handle().clone(), app.state(), called.id)
+			.await
+			.expect("the called routine answers its key");
+		let silent = routine_key(app.handle().clone(), app.state(), scheduled.id)
+			.await
+			.expect("the scheduled routine answers its key");
+
+		assert_eq!(
+			answered.url,
+			app.state::<webhook::Webhook>().url(),
+			"the answer names the address the listener bound"
+		);
+		assert!(answered.url.is_some_and(|url| url.starts_with("http://127.0.0.1:")));
+		assert_eq!(silent.url, None, "a scheduled routine is handed no address");
+		app.state::<webhook::Webhook>().stop();
+
+		cleaned(&app);
 	}
 
 	#[tokio::test]
