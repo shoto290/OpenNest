@@ -11,12 +11,12 @@ type ThreadRoutinesProps = {
 
 const ThreadRoutines = ({ conversationId, children }: ThreadRoutinesProps) => {
 	const [isOpen, setOpen] = useState(false)
-	const { routines, hasFailed, reload, setEnabled, remove } =
+	const { routines, failure, reload, setEnabled, remove } =
 		useRoutines(conversationId)
 
 	return (
 		<RoutinesPanel
-			hasFailed={hasFailed}
+			failure={failure}
 			isOpen={isOpen}
 			onDelete={remove}
 			onEnabledChange={setEnabled}

@@ -21,7 +21,10 @@ import {
 } from "@workspace/ui/components/motion/animated-sidebar"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
 import type { RoutineRowModel } from "@workspace/ui/components/routine-row"
-import { ROUTINES } from "@workspace/ui/components/routines.fixtures"
+import {
+	ROUTINES,
+	SOURCE_NAMED_BY_ID,
+} from "@workspace/ui/components/routines.fixtures"
 import {
 	RoutinesPanel,
 	type RoutinesPanelProps,
@@ -114,13 +117,13 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The routines of one conversation, on the trailing edge of its thread. It carries a sidebar provider of its own, so opening or resizing it says nothing to the workspace sidebar on the other side of the window, and it owns no shortcut — the control in the thread header is the only way in and out. Closed, it takes no room at all and the transcript spans the thread. The list is the whole surface: no routine at all gets an empty state rather than a bare list, and a read that failed gets the failure and a retry rather than a list that looks empty.",
+					"The routines of one conversation, on the trailing edge of its thread. It carries a sidebar provider of its own, so opening or resizing it says nothing to the workspace sidebar on the other side of the window, and it owns no shortcut — the control in the thread header is the only way in and out. Closed, it takes no room at all and the transcript spans the thread. The list is the whole surface: no routine at all gets an empty state rather than a bare list, a read that failed gets the failure and a retry rather than a list that looks empty, and a change that could not be written says so in its own words rather than borrowing the read's.",
 			},
 		},
 	},
 	args: {
 		children: THREAD,
-		hasFailed: false,
+		failure: null,
 		isOpen: true,
 		onDelete: fn(),
 		onEnabledChange: fn(),
@@ -137,7 +140,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"The panel open beside a live thread, one row per routine. Check that every row names its routine and the source that fires it, that the transcript keeps its own scroll while the panel stays put, and that flipping a switch reports the routine it belongs to.",
+					"The panel open beside a live thread, one row per routine. Check that every row names its routine and the source that fires it — including the routine whose source no read named, which falls back to the source id rather than leaving the line blank — that the transcript keeps its own scroll while the panel stays put, and that flipping a switch reports the routine it belongs to.",
 			},
 		},
 	},
@@ -148,6 +151,9 @@ export const Default = meta.story({
 			ROUTINES.length,
 		)
 		await expect(canvas.getByText("Every day at 08:00")).toBeVisible()
+		await expect(
+			canvas.getByText(SOURCE_NAMED_BY_ID.triggerSourceTitle),
+		).toBeVisible()
 
 		await userEvent.click(
 			canvas.getByRole("switch", { name: "Morning digest" }),
@@ -227,7 +233,7 @@ export const Empty = meta.story({
 		docs: {
 			description: {
 				story:
-					"A conversation nothing runs on yet. Check that the panel says so in a sentence a reader can act on, and that no list, however short, is drawn under it. Pick `Error` for the case where routines exist but could not be read.",
+					"A conversation nothing runs on yet. Check that the panel says so in a sentence a reader can act on, and that no list, however short, is drawn under it. Pick `ReadFailed` for the case where routines exist but could not be read.",
 			},
 		},
 	},
@@ -238,13 +244,13 @@ export const Empty = meta.story({
 	},
 })
 
-export const Error = meta.story({
-	args: { hasFailed: true, routines: NO_ROUTINES },
+export const ReadFailed = meta.story({
+	args: { failure: "read", routines: NO_ROUTINES },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The read failed. Check that the failure takes the place of the empty state rather than sitting beside it — a conversation whose routines could not be read has not lost them — and that the retry is the only thing asked of the reader.",
+					"The read failed. Check that the failure takes the place of the empty state rather than sitting beside it — a conversation whose routines could not be read has not lost them — and that the retry is the only thing asked of the reader. Pick `WriteFailed` for the failure that follows a change the reader asked for.",
 			},
 		},
 	},
@@ -255,6 +261,30 @@ export const Error = meta.story({
 
 		await userEvent.click(canvas.getByRole("button", { name: "Retry" }))
 		await expect(args.onRetry).toHaveBeenCalled()
+	},
+})
+
+export const WriteFailed = meta.story({
+	args: { failure: "write" },
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"A switch that could not be written. Check that the panel says a change failed rather than blaming a read that never happened, that the routines the app is holding stay on screen under it, and that the switch reads as it did before the attempt.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		await expect(
+			canvas.getByText("The routine could not be changed"),
+		).toBeVisible()
+		await expect(
+			canvas.queryByText("Routines could not be read"),
+		).not.toBeInTheDocument()
+		await expect(slotsIn(canvasElement, "routine-row")).toHaveLength(
+			ROUTINES.length,
+		)
 	},
 })
 

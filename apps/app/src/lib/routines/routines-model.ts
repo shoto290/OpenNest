@@ -31,7 +31,8 @@ export const toRoutineRows = (
 		id: routine.id,
 		title: routine.title,
 		triggerSourceTitle:
-			titles.get(sourceKeyOf(routine.botId, routine.triggerSourceId)) ?? null,
+			titles.get(sourceKeyOf(routine.botId, routine.triggerSourceId)) ??
+			routine.triggerSourceId,
 		isEnabled: routine.isEnabled,
 		hasStoppedItself: !routine.isEnabled && routine.consecutiveFailures > 0,
 	}))

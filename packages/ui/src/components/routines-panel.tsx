@@ -24,9 +24,11 @@ import {
 const ROUTINES_PANEL_ID = "routines-panel"
 const ROUTINES_PANEL_WIDTH = 320
 
+type RoutinesFailure = "read" | "write"
+
 type RoutinesPanelListProps = {
 	routines: RoutineRowModel[]
-	hasFailed: boolean
+	failure: RoutinesFailure | null
 	onRetry: () => void
 	onEnabledChange: (id: string, isEnabled: boolean) => void
 	onDelete: (id: string) => void | Promise<void>
@@ -40,24 +42,24 @@ type RoutinesPanelProps = RoutinesPanelListProps & {
 
 const RoutinesPanelBody = ({
 	routines,
-	hasFailed,
+	failure,
 	onRetry,
 	onEnabledChange,
 	onDelete,
 }: RoutinesPanelListProps) => {
 	const { t } = useTranslation("chat")
 
-	const failure = hasFailed ? (
+	const notice = failure ? (
 		<Notice
-			description={t("routines.failure.description")}
+			description={t(`routines.failure.${failure}.description`)}
 			retry={{ onRetry }}
-			title={t("routines.failure.title")}
+			title={t(`routines.failure.${failure}.title`)}
 		/>
 	) : null
 
 	if (routines.length === 0) {
 		return (
-			failure ?? (
+			notice ?? (
 				<EmptyStateShell
 					data-slot="routines-empty"
 					description={t("routines.empty.description")}
@@ -75,7 +77,7 @@ const RoutinesPanelBody = ({
 
 	return (
 		<>
-			{failure}
+			{notice}
 			<ul className="flex flex-col gap-2" data-slot="routines-list">
 				{routines.map((routine) => (
 					<RoutineRow
@@ -159,6 +161,7 @@ const RoutinesPanelTrigger = (props: AnimatedSidebarTriggerProps) => {
 
 export {
 	ROUTINES_PANEL_WIDTH,
+	type RoutinesFailure,
 	RoutinesPanel,
 	type RoutinesPanelProps,
 	RoutinesPanelTrigger,

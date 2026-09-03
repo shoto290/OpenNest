@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 
 import type { RoutineRowModel } from "@workspace/ui/components/routine-row"
+import type { RoutinesFailure } from "@workspace/ui/components/routines-panel"
 
 import type { Routine } from "./routine-contract"
 import {
@@ -17,39 +18,40 @@ const NO_TITLES: SourceTitles = new Map()
 
 export type ConversationRoutines = {
 	routines: RoutineRowModel[]
-	hasFailed: boolean
+	failure: RoutinesFailure | null
 	reload: () => void
 	setEnabled: (id: string, isEnabled: boolean) => void
 	remove: (id: string) => Promise<void>
 }
 
-const titlesOf = async (routines: Routine[]): Promise<SourceTitles> =>
-	toSourceTitles(
-		await Promise.all(
-			botIdsOf(routines).map(async (botId) => ({
-				botId,
-				sources: await triggerSourcesTransport.sources(botId),
-			})),
-		),
+const titlesOf = async (routines: Routine[]): Promise<SourceTitles> => {
+	const reads = await Promise.allSettled(
+		botIdsOf(routines).map(async (botId) => ({
+			botId,
+			sources: await triggerSourcesTransport.sources(botId),
+		})),
 	)
+
+	return toSourceTitles(
+		reads.flatMap((read) => (read.status === "fulfilled" ? [read.value] : [])),
+	)
+}
 
 export const useRoutines = (conversationId: string): ConversationRoutines => {
 	const [held, setHeld] = useState<Routine[]>(NO_ROUTINES)
 	const [titles, setTitles] = useState<SourceTitles>(NO_TITLES)
-	const [hasFailed, setFailed] = useState(false)
+	const [failure, setFailure] = useState<RoutinesFailure | null>(null)
 
-	const noteFailure = useCallback(() => setFailed(true), [])
+	const noteReadFailure = useCallback(() => setFailure("read"), [])
+	const noteWriteFailure = useCallback(() => setFailure("write"), [])
 
 	const reload = useCallback(() => {
-		void routinesTransport
-			.list(conversationId)
-			.then(async (listed) => {
-				setTitles(await titlesOf(listed))
-				setHeld(listed)
-				setFailed(false)
-			})
-			.catch(noteFailure)
-	}, [conversationId, noteFailure])
+		void routinesTransport.list(conversationId).then(async (listed) => {
+			setTitles(await titlesOf(listed))
+			setHeld(listed)
+			setFailure(null)
+		}, noteReadFailure)
+	}, [conversationId, noteReadFailure])
 
 	useEffect(reload, [reload])
 
@@ -72,29 +74,23 @@ export const useRoutines = (conversationId: string): ConversationRoutines => {
 					setHeld((rows) =>
 						rows.map((row) => (row.id === written.id ? written : row)),
 					)
-				}, noteFailure)
+				}, noteWriteFailure)
 		},
-		[held, noteFailure],
+		[held, noteWriteFailure],
 	)
 
 	const remove = useCallback(
 		(id: string) =>
-			routinesTransport.delete(id).then(
-				() => {
-					setHeld((rows) => rows.filter((row) => row.id !== id))
-				},
-				(failure: unknown) => {
-					noteFailure()
-					throw failure
-				},
-			),
-		[noteFailure],
+			routinesTransport.delete(id).then(() => {
+				setHeld((rows) => rows.filter((row) => row.id !== id))
+			}),
+		[],
 	)
 
 	const routines = useMemo(() => toRoutineRows(held, titles), [held, titles])
 
 	return useMemo(
-		() => ({ routines, hasFailed, reload, setEnabled, remove }),
-		[routines, hasFailed, reload, setEnabled, remove],
+		() => ({ routines, failure, reload, setEnabled, remove }),
+		[routines, failure, reload, setEnabled, remove],
 	)
 }

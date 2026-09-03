@@ -16,10 +16,10 @@ export const RELEASE_WATCH: RoutineRowModel = {
 	hasStoppedItself: true,
 }
 
-export const UNNAMED_SOURCE: RoutineRowModel = {
-	id: "routine-unnamed-source",
+export const SOURCE_NAMED_BY_ID: RoutineRowModel = {
+	id: "routine-nightly-cleanup",
 	title: "Nightly cleanup",
-	triggerSourceTitle: null,
+	triggerSourceTitle: "webhook",
 	isEnabled: true,
 	hasStoppedItself: false,
 }
@@ -27,5 +27,5 @@ export const UNNAMED_SOURCE: RoutineRowModel = {
 export const ROUTINES: RoutineRowModel[] = [
 	MORNING_DIGEST,
 	RELEASE_WATCH,
-	UNNAMED_SOURCE,
+	SOURCE_NAMED_BY_ID,
 ]

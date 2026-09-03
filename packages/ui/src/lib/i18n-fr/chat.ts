@@ -320,9 +320,16 @@ const chat = {
 				"Une routine fait travailler un bot de cette conversation toute seule, sur un horaire ou quand un fichier qu'elle surveille change.",
 		},
 		failure: {
-			title: "Les routines n'ont pas pu être lues",
-			description:
-				"Rien n'a été modifié. Réessayez pour lire les routines de cette conversation.",
+			read: {
+				title: "Les routines n'ont pas pu être lues",
+				description:
+					"Rien n'a été modifié. Réessayez pour lire les routines de cette conversation.",
+			},
+			write: {
+				title: "La routine n'a pas pu être modifiée",
+				description:
+					"La modification n'a pas été enregistrée. Relisez les routines pour voir où elles en sont.",
+			},
 		},
 	},
 } as const

@@ -12,7 +12,7 @@ import { Switch } from "@workspace/ui/components/switch"
 type RoutineRowModel = {
 	id: string
 	title: string
-	triggerSourceTitle: string | null
+	triggerSourceTitle: string
 	isEnabled: boolean
 	hasStoppedItself: boolean
 }
@@ -43,11 +43,9 @@ const RoutineRow = ({
 					{title}
 				</p>
 				<div className="flex min-w-0 items-center gap-1.5">
-					{triggerSourceTitle ? (
-						<span className="truncate text-muted-foreground text-xs">
-							{triggerSourceTitle}
-						</span>
-					) : null}
+					<span className="truncate text-muted-foreground text-xs">
+						{triggerSourceTitle}
+					</span>
 					{hasStoppedItself ? (
 						<Badge data-slot="routine-stopped" variant="destructive">
 							{t("routines.row.stopped")}

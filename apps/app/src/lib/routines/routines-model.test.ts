@@ -47,11 +47,11 @@ describe("toRoutineRows", () => {
 		)
 	})
 
-	it("leaves a source no plugin declares unnamed", () => {
+	it("names a source no read declared by its id", () => {
 		expect(
 			toRoutineRows([routine({ triggerSourceId: "webhook" })], titles)[0]
 				.triggerSourceTitle,
-		).toBeNull()
+		).toBe("webhook")
 	})
 
 	it("marks a disabled routine that ran out of attempts", () => {

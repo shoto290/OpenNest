@@ -312,9 +312,16 @@ const chat = {
 				"A routine runs a bot of this conversation on its own, on a schedule or when a file it watches changes.",
 		},
 		failure: {
-			title: "Routines could not be read",
-			description:
-				"Nothing was changed. Try again to read the routines of this conversation.",
+			read: {
+				title: "Routines could not be read",
+				description:
+					"Nothing was changed. Try again to read the routines of this conversation.",
+			},
+			write: {
+				title: "The routine could not be changed",
+				description:
+					"The change was not saved. Read the routines again to see where they stand.",
+			},
 		},
 	},
 } as const
