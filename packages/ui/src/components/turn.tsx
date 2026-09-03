@@ -22,6 +22,7 @@ import {
 	MessageAuthor,
 	MessageContent,
 	MessageFooter,
+	MessageHeader,
 } from "@workspace/ui/components/message"
 import {
 	MessageAction,
@@ -56,6 +57,14 @@ type UserTurnState = TurnState | "queued"
 type TurnRun = "single" | "first" | "middle" | "last"
 
 type InjectedTurnProps = { run?: TurnRun; carriesMark?: boolean }
+
+type TurnCause = { routineTitle: string; triggerSourceId: string }
+
+const TRIGGER_SOURCE_ICON: Record<string, Icon> = {
+	schedule: Icons.Calendar,
+	"file-watch": Icons.File,
+	"local-webhook": Icons.Web,
+}
 
 interface TurnGroupProps {
 	carriesMark?: boolean
@@ -93,6 +102,7 @@ type AssistantTurnProps = BotStopProps & {
 	fills?: boolean
 	botId?: string
 	author?: MessageAuthor
+	cause?: TurnCause
 	identity?: RosterBot
 	carriesMark?: boolean
 	className?: string
@@ -354,6 +364,37 @@ function UserTurn({
 	)
 }
 
+interface TurnRunHeaderProps {
+	author?: MessageAuthor
+	cause?: TurnCause
+	className?: string
+}
+
+const TurnRunHeader = ({ author, cause, className }: TurnRunHeaderProps) => {
+	const { t } = useTranslation("chat")
+
+	if (!cause) {
+		return author ? (
+			<MessageAuthor author={author} className={className} />
+		) : null
+	}
+
+	const TriggerIcon = TRIGGER_SOURCE_ICON[cause.triggerSourceId] ?? Icons.Bell
+
+	return (
+		<MessageHeader
+			data-slot="turn-cause"
+			className={cn("min-w-0 gap-1", className)}
+		>
+			<span className="sr-only">{t("transcript.cause.label")}</span>
+			<TriggerIcon aria-hidden="true" className="size-3 shrink-0" />
+			<span data-slot="turn-cause-title" className="truncate">
+				{cause.routineTitle}
+			</span>
+		</MessageHeader>
+	)
+}
+
 function AssistantTurn(props: AssistantTurnProps) {
 	const {
 		children,
@@ -369,6 +410,7 @@ function AssistantTurn(props: AssistantTurnProps) {
 		fills = false,
 		botId,
 		author,
+		cause,
 		identity,
 		carriesMark = false,
 		className,
@@ -412,9 +454,10 @@ function AssistantTurn(props: AssistantTurnProps) {
 				className="grid gap-x-2 gap-y-0"
 				style={{ gridTemplateColumns: `${TURN_AVATAR_SIZE}px 1fr` }}
 			>
-				{author && opensRun(run) ? (
-					<MessageAuthor
+				{opensRun(run) ? (
+					<TurnRunHeader
 						author={author}
+						cause={cause}
 						className={cn(
 							"col-start-2 row-start-1 pb-1",
 							bare ? undefined : MESSAGE_BUBBLE_INLINE_PADDING,
@@ -466,6 +509,7 @@ export {
 	AssistantTurn,
 	type AssistantTurnProps,
 	TURN_AVATAR_SIZE,
+	type TurnCause,
 	TurnGroup,
 	type TurnGroupProps,
 	type TurnRun,

@@ -3,6 +3,7 @@ import { expect, fireEvent, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
+	botIdentityAvatars,
 	slotIn,
 	slotsIn,
 	UPLOADED_AVATAR_IMAGE,
@@ -16,6 +17,7 @@ import { type RosterBot, RosterProvider } from "@workspace/ui/components/roster"
 import {
 	AssistantTurn,
 	TURN_AVATAR_SIZE,
+	type TurnCause,
 	TurnGroup,
 	type TurnState,
 	UserTurn,
@@ -1137,5 +1139,129 @@ export const StreamingStoppableIdentity = meta.story({
 			canvas.getByRole("button", { name: "Stop Skippy" }),
 		).toBeVisible()
 		await expect(slotsIn(canvasElement, "message-author")).toHaveLength(0)
+	},
+})
+
+const SCHEDULED_CAUSE: TurnCause = {
+	routineTitle: "Morning release digest",
+	triggerSourceId: "schedule",
+}
+
+const UNNAMED_CAUSE: TurnCause = {
+	routineTitle: "Inbox sweep",
+	triggerSourceId: "matrix-poll",
+}
+
+const LONG_CAUSE: TurnCause = {
+	routineTitle:
+		"Morning release digest, then the migration checklist, then everything the night left open",
+	triggerSourceId: "file-watch",
+}
+
+const REPORT =
+	"Three pull requests landed overnight and the migration is green on a fresh database."
+
+export const ReportedByRoutine = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A run a routine opened. The row is an ordinary bot turn, and the line above the bubble names the routine that produced it instead of the bot that wrote it: the icon says what fired it — a clock face for a schedule — and it is quieter than a name line, because who wrote the words is already the avatar\u2019s job. Only the run that carries a cause loses its name line; the run under it is untouched. Check that the gutter avatar and the stop are exactly the ones the row always had, and that a screen reader hears the line as a routine report before it hears the title.",
+			},
+		},
+	},
+	render: () => (
+		<div className="mx-auto flex max-w-2xl flex-col gap-6">
+			<AssistantTurn
+				author={LEAD}
+				cause={SCHEDULED_CAUSE}
+				copyText={REPORT}
+				onStop={stopTurn}
+				state="streaming"
+				stoppable
+			>
+				{REPORT}
+			</AssistantTurn>
+			<AssistantTurn author={SECOND} copyText={ANSWER}>
+				{ANSWER}
+			</AssistantTurn>
+		</div>
+	),
+	play: async ({ canvas, canvasElement }) => {
+		const cause = slotIn(canvasElement, "turn-cause")
+
+		await expect(cause).toHaveTextContent("Routine report")
+		await expect(slotIn(cause, "turn-cause-title")).toHaveTextContent(
+			SCHEDULED_CAUSE.routineTitle,
+		)
+		await expect(cause.querySelector(".lucide-calendar")).toHaveAttribute(
+			"aria-hidden",
+			"true",
+		)
+
+		const named = slotsIn(canvasElement, "message-author")
+
+		await expect(named).toHaveLength(1)
+		await expect(named[0]).toHaveTextContent(SECOND.name)
+		await expect(
+			canvas.getByRole("button", { name: `Stop ${LEAD.name}` }),
+		).toBeVisible()
+		await expect(botIdentityAvatars(canvasElement)).toHaveLength(2)
+	},
+})
+
+export const ReportedByUnnamedTrigger = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A routine fired by a trigger this design system names no icon for — any plugin may declare its own, so an unknown id is the ordinary case and never an error. The line falls back to a bell and writes the routine title exactly as it was handed over. Check that the row reads the same as the scheduled one, one icon apart.",
+			},
+		},
+	},
+	render: () => (
+		<div className="mx-auto flex max-w-2xl flex-col gap-6">
+			<AssistantTurn author={LEAD} cause={UNNAMED_CAUSE} copyText={REPORT}>
+				{REPORT}
+			</AssistantTurn>
+		</div>
+	),
+	play: async ({ canvasElement }) => {
+		const cause = slotIn(canvasElement, "turn-cause")
+
+		await expect(cause.querySelector(".lucide-bell")).toBeVisible()
+		await expect(slotIn(cause, "turn-cause-title")).toHaveTextContent(
+			UNNAMED_CAUSE.routineTitle,
+		)
+		await expect(slotsIn(canvasElement, "message-author")).toHaveLength(0)
+	},
+})
+
+export const ReportedByLongTitle = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A routine whose title outruns the width the transcript gives it. The line stays a single line and truncates, so the row above the bubble never grows a second line and never pushes the icon off it. Check the icon holds its size while the title alone gives way.",
+			},
+		},
+	},
+	render: () => (
+		<div className="flex max-w-xs flex-col gap-6">
+			<AssistantTurn author={LEAD} cause={LONG_CAUSE} copyText={REPORT}>
+				{REPORT}
+			</AssistantTurn>
+		</div>
+	),
+	play: async ({ canvasElement }) => {
+		const cause = slotIn(canvasElement, "turn-cause")
+		const title = slotIn(cause, "turn-cause-title")
+		const icon = cause.querySelector<HTMLElement>(".lucide-file-text")
+
+		if (!icon) throw new globalThis.Error("The line drew no trigger icon")
+
+		await expect(title.scrollWidth).toBeGreaterThan(title.clientWidth)
+		await expect(title.getBoundingClientRect().height).toBeLessThan(24)
+		await expect(icon.getBoundingClientRect().width).toBeCloseTo(12, 0)
 	},
 })
