@@ -278,7 +278,7 @@ export const Error = meta.story({
 		docs: {
 			description: {
 				story:
-					"The runs could not be read. Check that the failure takes the place of the history rather than passing for an empty one, that it blames the read of the runs and not the read of the routines, and that a retry pressed from the keyboard stays mounted, focused and busy while it runs — a second press starts no second read, and a control that unmounts under the reader sends the next Tab back to the top of the document. Pick `Empty` for the routine that really has no run.",
+					"The runs could not be read, with nothing read before it. Check that the failure takes the place of the history rather than passing for an empty one, that it blames the read of the runs and not the read of the routines, and that a retry pressed from the keyboard stays mounted, focused and busy while it runs — a second press starts no second read, and a control that unmounts under the reader sends the next Tab back to the top of the document. Pick `Empty` for the routine that really has no run, and `ErrorOverHistory` for the read that failed over runs already on screen.",
 			},
 		},
 	},
@@ -298,6 +298,26 @@ export const Error = meta.story({
 
 		await userEvent.keyboard("{Enter}")
 		await expect(args.onRetryRuns).toHaveBeenCalledTimes(1)
+	},
+})
+
+export const ErrorOverHistory = meta.story({
+	args: { hasFailedToReadRuns: true },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A read that failed over a history already on screen — the state Run now lands in, since it fires a read the reader never asked for. Check that the notice sits above the rows the way the routines panel puts its own failure above the list, that the runs and their aggregate are left exactly as they were read, and that a retry is offered without the reader losing what they were reading. Pick `Error` for the failure with nothing behind it.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		await expect(canvas.getByText("The runs could not be read")).toBeVisible()
+		await expect(slotsIn(canvasElement, "routine-run")).toHaveLength(
+			DIGEST_RUNS.length,
+		)
+		await expect(slotIn(canvasElement, "routine-runs-aggregate")).toBeVisible()
+		await expect(canvas.getByRole("button", { name: "Retry" })).toBeVisible()
 	},
 })
 

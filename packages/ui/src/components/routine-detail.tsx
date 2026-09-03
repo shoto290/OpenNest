@@ -143,18 +143,20 @@ const RunHistory = ({
 }: RunHistoryProps) => {
 	const { t, i18n } = useTranslation("chat")
 
-	if (hasFailedToReadRuns) {
-		return (
-			<Notice
-				description={t("routines.detail.history.failure.description")}
-				retry={{ onRetry: onRetryRuns, isBusy: isReadingRuns }}
-				title={t("routines.detail.history.failure.title")}
-			/>
-		)
-	}
+	const notice = hasFailedToReadRuns ? (
+		<Notice
+			description={t("routines.detail.history.failure.description")}
+			retry={{ onRetry: onRetryRuns, isBusy: isReadingRuns }}
+			title={t("routines.detail.history.failure.title")}
+		/>
+	) : null
 
 	const newestFirst = [...runs].sort((a, b) => b.startedAt - a.startedAt)
 	const latest = newestFirst[0]
+
+	if (!latest && notice) {
+		return notice
+	}
 
 	if (!latest && isReadingRuns) {
 		return (
@@ -194,6 +196,7 @@ const RunHistory = ({
 
 	return (
 		<>
+			{notice}
 			<p
 				className="flex flex-wrap items-baseline text-muted-foreground text-xs tabular-nums"
 				data-slot="routine-runs-aggregate"
