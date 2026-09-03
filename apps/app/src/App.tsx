@@ -62,6 +62,7 @@ import { useCollapsedSections } from "@/lib/sections/use-collapsed-sections"
 import { useSections } from "@/lib/sections/use-sections"
 import { useSidebarActions } from "@/lib/sidebar/use-sidebar-actions"
 import { toSpaceSettingsValue } from "@/lib/spaces/space-settings"
+import { useSpaceEntry } from "@/lib/spaces/use-space-entry"
 import { useSpacePlugin } from "@/lib/spaces/use-space-plugin"
 import { useSpaces } from "@/lib/spaces/use-spaces"
 import { useTheme } from "@/lib/theme/use-theme"
@@ -143,6 +144,7 @@ export function App() {
 		chat: chat.controller,
 		runtimes: conversationRuntimes,
 		roster: roster.controller,
+		spaces: spaces.controller,
 		user: user.controller,
 	})
 
@@ -221,19 +223,11 @@ export function App() {
 		})
 	}, [roster.controller, spaces.controller, user.controller, spaceIds])
 
-	useEffect(() => {
-		if (!selectedSpaceId) {
-			return
-		}
-		void user.controller.setLastSpace(selectedSpaceId)
-		roster.controller.enter({
-			spaceId: selectedSpaceId,
-			lastRowId: lastBotIn(
-				user.controller.getState().preferences,
-				selectedSpaceId,
-			),
-		})
-	}, [roster.controller, user.controller, selectedSpaceId])
+	useSpaceEntry({
+		roster: roster.controller,
+		user: user.controller,
+		selectedSpaceId,
+	})
 
 	useEffect(() => {
 		void user.controller.load()

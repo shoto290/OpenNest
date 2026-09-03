@@ -22,6 +22,8 @@ const OTHER_BOT = { kind: "bot", id: "bot-two" } as const
 
 const ROOM = { kind: "conversation", id: "room-one" } as const
 
+const SPACE = "space-one"
+
 const ALL_ON: NotificationSourceSwitches = {
 	notifyOnQuestion: true,
 	notifyOnPermission: true,
@@ -125,6 +127,14 @@ const createFakeRoster = (
 
 	return {
 		getState: () => state,
+		spaceOfBot: (botId: string) =>
+			state.bots.some((bot) => bot.id === botId) ? SPACE : undefined,
+		spaceOfConversation: (conversationId: string) =>
+			state.conversations.some(
+				(conversation) => conversation.id === conversationId,
+			)
+				? SPACE
+				: undefined,
 		select: vi.fn(),
 		selectConversation: vi.fn(),
 		hold: (held: { id: string; name: string }[]) => {
@@ -155,6 +165,7 @@ type Harness = {
 	chat: ReturnType<typeof createFakeChat>
 	runtimes: ReturnType<typeof createFakeRuntimes>
 	roster: ReturnType<typeof createFakeRoster>
+	spaces: { select: ReturnType<typeof vi.fn> }
 	notifications: FakeNotificationPort
 	windowFocus: ReturnType<typeof createFakeWindowFocus>
 	playChime: ReturnType<typeof vi.fn>
@@ -169,6 +180,7 @@ const start = async (
 	const chat = createFakeChat()
 	const runtimes = createFakeRuntimes()
 	const roster = createFakeRoster(bots, conversations)
+	const spaces = { select: vi.fn() }
 	const notifications = createFakeNotificationPort()
 	const windowFocus = createFakeWindowFocus()
 	const playChime = vi.fn()
@@ -177,6 +189,7 @@ const start = async (
 		chat,
 		runtimes,
 		roster,
+		spaces,
 		notifications,
 		switches: () => ALL_ON,
 		hasFocus: () => false,
@@ -187,7 +200,16 @@ const start = async (
 	})
 	await Promise.resolve()
 
-	return { chat, runtimes, roster, notifications, windowFocus, playChime, stop }
+	return {
+		chat,
+		runtimes,
+		roster,
+		spaces,
+		notifications,
+		windowFocus,
+		playChime,
+		stop,
+	}
 }
 
 const seed = (harness: Harness, botId: string) => {

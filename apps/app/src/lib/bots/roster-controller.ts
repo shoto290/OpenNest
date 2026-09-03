@@ -64,6 +64,7 @@ export type RosterController = {
 	load: (opening: RosterOpening) => Promise<void>
 	reload: () => Promise<void>
 	spaceOfBot: (botId: string) => string | undefined
+	spaceOfConversation: (conversationId: string) => string | undefined
 	enter: (entry: RosterEntry) => void
 	select: (id: string) => void
 	selectConversation: (id: string) => void
@@ -248,6 +249,13 @@ export const createRosterController = (
 	const spaceOfBot = (botId: string) =>
 		Object.keys(state.rosters).find((spaceId) =>
 			rosterIn(state.rosters, spaceId).some((bot) => bot.id === botId),
+		)
+
+	const spaceOfConversation = (conversationId: string) =>
+		Object.keys(state.conversationRosters).find((spaceId) =>
+			rosterIn(state.conversationRosters, spaceId).some(
+				(conversation) => conversation.id === conversationId,
+			),
 		)
 
 	const landOn = (
@@ -510,6 +518,8 @@ export const createRosterController = (
 		reload,
 
 		spaceOfBot,
+
+		spaceOfConversation,
 
 		enter: ({ spaceId, lastRowId }: RosterEntry) => {
 			const bots = rosterIn(state.rosters, spaceId)

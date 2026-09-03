@@ -35,8 +35,14 @@ type RuntimeSource = {
 
 type RosterSource = {
 	getState: () => { bots: NotifiedBot[]; conversations: Conversation[] }
+	spaceOfBot: (botId: string) => string | undefined
+	spaceOfConversation: (conversationId: string) => string | undefined
 	select: (botId: string) => void
 	selectConversation: (conversationId: string) => void
+}
+
+type SpacesSource = {
+	select: (spaceId: string) => void
 }
 
 export type NotificationSourceSwitches = NotificationSwitches &
@@ -46,6 +52,7 @@ export type NotificationSourceOptions = {
 	chat: ChatSource
 	runtimes: RuntimeSource
 	roster: RosterSource
+	spaces: SpacesSource
 	notifications: NotificationPort
 	switches: () => NotificationSourceSwitches
 	hasFocus: () => boolean
@@ -74,6 +81,7 @@ export const startNotificationSource = ({
 	chat,
 	runtimes,
 	roster,
+	spaces,
 	notifications,
 	switches,
 	hasFocus,
@@ -187,18 +195,20 @@ export const startNotificationSource = ({
 	const activate = ({ kind, id }: NotificationTarget) => {
 		raiseWindow()
 
-		const { bots, conversations } = roster.getState()
+		const spaceId =
+			kind === "bot" ? roster.spaceOfBot(id) : roster.spaceOfConversation(id)
 
-		if (kind === "bot" && bots.some((bot) => bot.id === id)) {
-			roster.select(id)
+		if (!spaceId) {
+			return
 		}
 
-		if (
-			kind === "conversation" &&
-			conversations.some((conversation) => conversation.id === id)
-		) {
+		if (kind === "bot") {
+			roster.select(id)
+		} else {
 			roster.selectConversation(id)
 		}
+
+		spaces.select(spaceId)
 	}
 
 	const stopChat = chat.subscribe(compare)
