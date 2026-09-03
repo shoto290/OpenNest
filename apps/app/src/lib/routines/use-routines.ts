@@ -42,16 +42,16 @@ export const useRoutines = (conversationId: string): ConversationRoutines => {
 	const [titles, setTitles] = useState<SourceTitles>(NO_TITLES)
 	const [failure, setFailure] = useState<RoutinesFailure | null>(null)
 
-	const noteReadFailure = useCallback(() => setFailure("read"), [])
-	const noteWriteFailure = useCallback(() => setFailure("write"), [])
-
 	const reload = useCallback(() => {
-		void routinesTransport.list(conversationId).then(async (listed) => {
-			setTitles(await titlesOf(listed))
-			setHeld(listed)
-			setFailure(null)
-		}, noteReadFailure)
-	}, [conversationId, noteReadFailure])
+		void routinesTransport.list(conversationId).then(
+			async (listed) => {
+				setTitles(await titlesOf(listed))
+				setHeld(listed)
+				setFailure(null)
+			},
+			() => setFailure("read"),
+		)
+	}, [conversationId])
 
 	useEffect(reload, [reload])
 
@@ -70,13 +70,16 @@ export const useRoutines = (conversationId: string): ConversationRoutines => {
 					triggerConfig: routine.triggerConfig,
 					isEnabled,
 				})
-				.then((written) => {
-					setHeld((rows) =>
-						rows.map((row) => (row.id === written.id ? written : row)),
-					)
-				}, noteWriteFailure)
+				.then(
+					(written) => {
+						setHeld((rows) =>
+							rows.map((row) => (row.id === written.id ? written : row)),
+						)
+					},
+					() => setFailure("write"),
+				)
 		},
-		[held, noteWriteFailure],
+		[held],
 	)
 
 	const remove = useCallback(
