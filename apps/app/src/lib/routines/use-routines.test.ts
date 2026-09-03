@@ -234,31 +234,20 @@ it("marks the key as unreadable when its read rejects", async () => {
 
 it("marks the title of a form refused for a blank title", async () => {
 	const result = await mountLeadRoutines([])
+	const blankTitled = entered({ ...A_SCHEDULE_FORM, title: "" })
 	create.mockRejectedValueOnce({ kind: "blankField", field: "title" })
 
 	act(() => {
 		result.current.form.onNew()
 	})
 	await act(async () => {
-		result.current.form.onSave(
-			entered({
-				instruction: ROUTINE.instruction,
-				triggerSourceId: "schedule",
-				expression: "0 * * * *",
-			}),
-		)
+		result.current.form.onSave(blankTitled)
 	})
 
 	await waitFor(() =>
 		expect(result.current.form.open?.refusal).toBe("blankTitle"),
 	)
-	expect(result.current.form.open?.values).toEqual(
-		entered({
-			instruction: ROUTINE.instruction,
-			triggerSourceId: "schedule",
-			expression: "0 * * * *",
-		}),
-	)
+	expect(result.current.form.open?.values).toEqual(blankTitled)
 	expect(result.current.failure).toBeNull()
 })
 
@@ -389,14 +378,7 @@ it("leaves the panel on the list when a save resolves after the form was closed"
 		result.current.form.onNew()
 	})
 	act(() => {
-		result.current.form.onSave(
-			entered({
-				title: ROUTINE.title,
-				instruction: ROUTINE.instruction,
-				triggerSourceId: "schedule",
-				expression: "0 * * * *",
-			}),
-		)
+		result.current.form.onSave(entered(A_SCHEDULE_FORM))
 	})
 	act(() => {
 		result.current.form.onClose()
