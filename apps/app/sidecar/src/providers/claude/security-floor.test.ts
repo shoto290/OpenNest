@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs"
 import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
 
-import { securityFloor } from "./security-floor"
+import { type FloorScope, securityFloor } from "./security-floor"
 
 const APP_DATA = "/app-data/opennest"
 
@@ -16,6 +16,7 @@ const PLUGIN_PATHS = [BOT_PATH, SYSTEM_PATH, USER_PATH, SPACE_PATH]
 const WRITABLE_PATHS = [BOT_PATH, USER_PATH, SPACE_PATH]
 
 const WINDOWS_HOME = "C:\\Users\\alice"
+const WINDOWS_APP_DATA = "C:\\data\\opennest"
 
 const home = (path: string): string => join(homedir(), path)
 
@@ -41,12 +42,13 @@ const floorIn = (appDataDir: string, conversationId: string) =>
 const denyOf = (pluginPaths: string[] = []): string[] =>
 	floor(pluginPaths).permissions?.deny ?? []
 
-const onWindows = (): string[] =>
+const onWindows = (scope: Partial<FloorScope> = {}): string[] =>
 	securityFloor({
 		home: WINDOWS_HOME,
 		platform: "win32",
 		pluginPaths: [],
 		writablePaths: [],
+		...scope,
 	}).permissions?.deny ?? []
 
 const filesystemOf = (
@@ -320,6 +322,46 @@ describe("securityFloor", () => {
 		expect(deny).toContain("Read(//c/Users/alice/.claude/.credentials.json)")
 		expect(deny).toContain("Read(//**/.env)")
 		expect(deny).toContain("Edit(//c/Users/alice/.zshrc)")
+	})
+
+	it("anchors the data directory rules of a Windows session", () => {
+		const deny = onWindows({ appDataDir: WINDOWS_APP_DATA })
+
+		expect(deny).toContain("Read(//c/data/opennest/conversations.sqlite3)")
+		expect(deny).toContain("Read(//c/data/opennest/attachments/**)")
+	})
+
+	it("reads a Windows home directory written with forward slashes the same", () => {
+		expect(onWindows({ home: "C:/Users/alice" })).toEqual(onWindows())
+	})
+
+	describe("over a Windows data directory laid down under the process directory", () => {
+		let previousDirectory: string
+		let root: string
+
+		beforeEach(() => {
+			previousDirectory = process.cwd()
+			root = mkdtempSync(join(tmpdir(), "security-floor-windows-"))
+			process.chdir(root)
+			for (const bundle of ["bots/plugins/b1", "bots/plugins/b2"]) {
+				mkdirSync(join(WINDOWS_APP_DATA, bundle), { recursive: true })
+			}
+		})
+
+		afterEach(() => {
+			process.chdir(previousDirectory)
+			rmSync(root, { recursive: true, force: true })
+		})
+
+		it("anchors the rule of a bundle the Windows session does not own", () => {
+			const deny = onWindows({
+				appDataDir: WINDOWS_APP_DATA,
+				pluginPaths: [join(WINDOWS_APP_DATA, "bots/plugins/b1")],
+			})
+
+			expect(deny).toContain("Read(//c/data/opennest/bots/plugins/b2/**)")
+			expect(deny).not.toContain("Read(//c/data/opennest/bots/plugins/b1/**)")
+		})
 	})
 
 	it("holds the rest of the floor when no data directory is named", () => {
