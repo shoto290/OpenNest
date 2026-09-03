@@ -13,6 +13,9 @@ import {
 import { routinesTransport } from "./routines-transport"
 import { triggerSourcesTransport } from "./trigger-sources-transport"
 
+const withoutWriteFailure = (current: RoutinesFailure | null) =>
+	current === "write" ? null : current
+
 const NO_ROUTINES: Routine[] = []
 const NO_TITLES: SourceTitles = new Map()
 
@@ -75,7 +78,7 @@ export const useRoutines = (conversationId: string): ConversationRoutines => {
 						setHeld((rows) =>
 							rows.map((row) => (row.id === written.id ? written : row)),
 						)
-						setFailure((current) => (current === "write" ? null : current))
+						setFailure(withoutWriteFailure)
 					},
 					() => setFailure("write"),
 				)
@@ -87,7 +90,7 @@ export const useRoutines = (conversationId: string): ConversationRoutines => {
 		(id: string) =>
 			routinesTransport.delete(id).then(() => {
 				setHeld((rows) => rows.filter((row) => row.id !== id))
-				setFailure((current) => (current === "write" ? null : current))
+				setFailure(withoutWriteFailure)
 			}),
 		[],
 	)
