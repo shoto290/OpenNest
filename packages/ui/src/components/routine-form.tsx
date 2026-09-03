@@ -262,8 +262,6 @@ const WebhookBlock = (props: WebhookBlockProps) => {
 
 const OTHER_PATH = "__other_path__"
 
-const NO_FIELDS: RoutinePayloadField[] = []
-
 const typeOf = (fields: RoutinePayloadField[], field: string) =>
 	fields.find((declared) => declared.name === field)?.type
 
@@ -766,7 +764,7 @@ const RoutineForm = ({
 				/>
 			) : null}
 			<FilterBlock
-				fields={source?.payload ?? NO_FIELDS}
+				fields={source?.payload ?? []}
 				key={entered.triggerSourceId}
 				filter={entered.filter}
 				marksMissingValues={marksMissingValues}
