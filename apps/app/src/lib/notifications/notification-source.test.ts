@@ -537,6 +537,14 @@ describe("startNotificationSource on a conversation", () => {
 	})
 })
 
+const REFUSAL = "no notification centre"
+
+const aRefusedSend = (): FakeNotificationPort => {
+	const notifications = createFakeNotificationPort()
+	notifications.send = () => Promise.reject(new Error(REFUSAL))
+	return notifications
+}
+
 describe("startNotificationSource when a subscription breaks", () => {
 	it("raises a notice when the click subscription is refused", async () => {
 		const notifications = createFakeNotificationPort()
@@ -562,11 +570,7 @@ describe("startNotificationSource when a subscription breaks", () => {
 	})
 
 	it("raises a notice when the host refuses to show a notification", async () => {
-		const notifications = createFakeNotificationPort()
-		notifications.send = () =>
-			Promise.reject(new Error("no notification centre"))
-
-		const harness = await start({ notifications })
+		const harness = await start({ notifications: aRefusedSend() })
 		seed(harness, "bot-one")
 
 		harness.chat.publish("bot-one", { question: question("q-1") })
@@ -574,16 +578,12 @@ describe("startNotificationSource when a subscription breaks", () => {
 
 		expect(harness.reportFailure).toHaveBeenCalledWith({
 			title: "A notification could not be shown",
-			description: "no notification centre",
+			description: REFUSAL,
 		})
 	})
 
 	it("raises one notice however many notifications the host refuses", async () => {
-		const notifications = createFakeNotificationPort()
-		notifications.send = () =>
-			Promise.reject(new Error("no notification centre"))
-
-		const harness = await start({ notifications })
+		const harness = await start({ notifications: aRefusedSend() })
 		seed(harness, "bot-one")
 
 		harness.chat.publish("bot-one", { question: question("q-1") })

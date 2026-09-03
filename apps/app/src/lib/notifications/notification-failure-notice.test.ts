@@ -19,7 +19,7 @@ import { initialChatState } from "../chat/chat-state"
 const CLICK_FAILURE_TITLE =
 	"Clicking a notification will no longer open its conversation"
 
-const ALL_ON = {
+const SWITCHES = {
 	notifyOnQuestion: true,
 	notifyOnPermission: true,
 	notifyOnFinishedTurn: true,
@@ -47,13 +47,13 @@ const emptyRoster = {
 const watchAlongside = async (notifications: NotificationPort) => {
 	render(createElement(NoticeSurface))
 
-	const stop = startNotificationSource({
+	startNotificationSource({
 		chat: idleChat,
 		runtimes: idleRuntimes,
 		roster: emptyRoster,
 		spaces: { select: () => undefined },
 		notifications,
-		switches: () => ALL_ON,
+		switches: () => SWITCHES,
 		hasFocus: () => false,
 		watchFocus: async () => () => undefined,
 		raiseWindow: () => undefined,
@@ -61,8 +61,6 @@ const watchAlongside = async (notifications: NotificationPort) => {
 		reportFailure: raiseFailureNotice,
 	})
 	await Promise.resolve()
-
-	return stop
 }
 
 afterEach(() => {
