@@ -333,9 +333,7 @@ const retyped = (
 	row: RoutineFilterRow,
 	field: string,
 ): RoutineFilterRow =>
-	typeOf(fields, field)
-		? naming(fields, row, field)
-		: { field, operator: row.operator, value: row.value }
+	typeOf(fields, field) ? naming(fields, row, field) : { ...row, field }
 
 const isSameRow = (row: RoutineFilterRow, held: RoutineFilterRow) =>
 	row.field === held.field &&

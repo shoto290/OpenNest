@@ -947,3 +947,43 @@ export const FilterOperatorTakenBackOnAnUndescribedSource = meta.story({
 		)
 	},
 })
+
+export const FilterPathRenamedOnAnUndescribedSource = meta.story({
+	args: UNDESCRIBED_FORM,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The free path of a row read as a number, renamed to another path no field declares, then its value edited. Renaming a path is not the reader saying the row is something else: check that the value control still takes a number after the rename, that the operator the row was read with is still the one on screen, and that the saved row carries the new path with that operator and a number. Pick `FilterMovedToAnotherPath` for the rename that lands on a declared field, where the declared type takes over.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const row = () => within(canvas.getByRole("group", { name: "Row 1" }))
+
+		await userEvent.type(row().getByRole("textbox", { name: "Path" }), "s")
+		await expect(
+			row().getByRole("combobox", { name: "Operator" }),
+		).toHaveTextContent("is greater than")
+
+		const value = row().getByRole("spinbutton", { name: "Value" })
+		await userEvent.clear(value)
+		await userEvent.type(value, "7")
+		await userEvent.click(canvas.getByRole("button", { name: "Save routine" }))
+
+		await expect(args.onSave).toHaveBeenCalledWith({
+			...UNDESCRIBED_FORM.values,
+			filter: {
+				matchMode: "all",
+				rows: [
+					{
+						...UNDESCRIBED_FORM.values.filter.rows[0],
+						field: "unreadCounts",
+						value: "7",
+					},
+					UNDESCRIBED_FORM.values.filter.rows[1],
+				],
+			},
+		})
+	},
+})

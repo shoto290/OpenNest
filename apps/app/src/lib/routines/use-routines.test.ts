@@ -692,3 +692,22 @@ it("writes an edited value in the type the row was read with", async () => {
 		{ field: "subject", operator: "contains", value: "invoice" },
 	])
 })
+
+it("writes a renamed path in the type the row was read with", async () => {
+	const result = await mountOwnedRoutine([TWO_ROW_ROUTINE], declaringNothing)
+
+	await savedRows(result, TWO_ROW_ROUTINE, [
+		{
+			...READ_ROWS[0],
+			field: "unreadCounts",
+			value: "7",
+			readAs: { operator: "gt", fieldType: "number" },
+		},
+		READ_ROWS[1],
+	])
+
+	expect(writtenRows()).toEqual([
+		{ field: "unreadCounts", operator: "gt", value: 7 },
+		{ field: "subject", operator: "contains", value: "invoice" },
+	])
+})
