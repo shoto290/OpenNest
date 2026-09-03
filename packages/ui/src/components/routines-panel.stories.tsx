@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { expect, fn, waitFor } from "storybook/test"
+import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -20,10 +20,20 @@ import {
 	AnimatedSidebarTrigger,
 } from "@workspace/ui/components/motion/animated-sidebar"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
+import {
+	EMPTY_ROUTINE_VALUES,
+	type RoutineFormModel,
+} from "@workspace/ui/components/routine-form"
 import type { RoutineRowModel } from "@workspace/ui/components/routine-row"
 import {
+	INBOX_FORM,
+	MORNING_DIGEST,
+	RELEASE_WATCH,
 	ROUTINES,
+	SCHEDULED_FORM,
 	SOURCE_NAMED_BY_ID,
+	TRIGGER_SOURCES,
+	WATCHING_FORM,
 } from "@workspace/ui/components/routines.fixtures"
 import {
 	RoutinesPanel,
@@ -47,9 +57,23 @@ const THREAD = (
 	</ThreadLayout>
 )
 
-const PanelHost = ({ isOpen, routines, ...props }: RoutinesPanelProps) => {
+const FORMS: Record<string, RoutineFormModel> = {
+	[MORNING_DIGEST.id]: SCHEDULED_FORM,
+	[RELEASE_WATCH.id]: WATCHING_FORM,
+	[SOURCE_NAMED_BY_ID.id]: INBOX_FORM,
+}
+
+const PanelHost = ({
+	isOpen,
+	routines,
+	form,
+	...props
+}: RoutinesPanelProps) => {
 	const [open, setOpen] = useState(isOpen)
 	const [held, setHeld] = useState(routines)
+	const [shown, setShown] = useState<RoutineFormModel | null>(
+		form?.open ?? null,
+	)
 
 	const answer = (id: string, isEnabled: boolean) =>
 		setHeld((rows) =>
@@ -67,6 +91,28 @@ const PanelHost = ({ isOpen, routines, ...props }: RoutinesPanelProps) => {
 	return (
 		<RoutinesPanel
 			{...props}
+			form={
+				form && {
+					...form,
+					onClose: () => {
+						form.onClose()
+						setShown(null)
+					},
+					onNew: () => {
+						form.onNew()
+						setShown({ id: null, values: EMPTY_ROUTINE_VALUES })
+					},
+					onOpen: (routineId) => {
+						form.onOpen(routineId)
+						setShown(FORMS[routineId] ?? null)
+					},
+					onSave: (values) => {
+						form.onSave(values)
+						setShown(null)
+					},
+					open: shown,
+				}
+			}
 			isOpen={open}
 			onDelete={(id) => {
 				props.onDelete(id)
@@ -124,6 +170,15 @@ const meta = preview.meta({
 	args: {
 		children: THREAD,
 		failure: null,
+		form: {
+			canCreate: true,
+			onClose: fn(),
+			onNew: fn(),
+			onOpen: fn(),
+			onSave: fn(),
+			open: null,
+			sources: TRIGGER_SOURCES,
+		},
 		isOpen: true,
 		onDelete: fn(),
 		onEnabledChange: fn(),
@@ -233,14 +288,18 @@ export const Empty = meta.story({
 		docs: {
 			description: {
 				story:
-					"A conversation nothing runs on yet. Check that the panel says so in a sentence a reader can act on, and that no list, however short, is drawn under it. Pick `ReadFailed` for the case where routines exist but could not be read.",
+					"A conversation nothing runs on yet. Check that the panel says so in a sentence a reader can act on, that the way to write the first routine is offered in the empty state itself rather than only in the header, and that no list, however short, is drawn under it. Pick `ReadFailed` for the case where routines exist but could not be read.",
 			},
 		},
 	},
-	play: async ({ canvas, canvasElement }) => {
+	play: async ({ canvas, canvasElement, userEvent }) => {
 		await expect(canvas.getByText("No routine yet")).toBeVisible()
 		await expect(slotsIn(canvasElement, "routines-list")).toHaveLength(0)
 		await expect(slotsIn(canvasElement, "routine-row")).toHaveLength(0)
+
+		const empty = within(slotIn(canvasElement, "routines-empty"))
+		await userEvent.click(empty.getByRole("button", { name: "New routine" }))
+		await expect(slotIn(canvasElement, "routine-form")).toBeVisible()
 	},
 })
 
@@ -285,6 +344,101 @@ export const WriteFailed = meta.story({
 		await expect(slotsIn(canvasElement, "routine-row")).toHaveLength(
 			ROUTINES.length,
 		)
+	},
+})
+
+export const Creating = meta.story({
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"The new routine action of the header, from the list to the empty form and back. Check that the form takes the place of the list inside the panel rather than opening a dialog over the thread, that the keyboard lands in the form when it opens, and that leaving hands focus back to the action that opened it with the list where it was. Pick `Editing` for the same form filled from a row.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		await userEvent.click(canvas.getByRole("button", { name: "New routine" }))
+		await expect(args.form?.onNew).toHaveBeenCalled()
+
+		const form = canvas.getByRole("form", { name: "New routine" })
+		await waitFor(() => expect(form).toHaveFocus(), FRAME_POLL)
+		await expect(slotsIn(canvasElement, "routine-row")).toHaveLength(0)
+		await expect(canvas.queryByRole("dialog")).not.toBeInTheDocument()
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Back to the routines" }),
+		)
+		await expect(slotsIn(canvasElement, "routine-row")).toHaveLength(
+			ROUTINES.length,
+		)
+		await waitFor(
+			() =>
+				expect(
+					canvas.getByRole("button", { name: "New routine" }),
+				).toHaveFocus(),
+			FRAME_POLL,
+		)
+	},
+})
+
+export const Editing = meta.story({
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"A row picked from the list. Check that the form opens filled with that routine — its title, its instruction, the expression it was read with — that its trigger reads as text rather than a list, and that leaving returns focus to the row that opened it rather than to the header.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		await userEvent.click(canvas.getByText("Morning digest"))
+		await expect(args.form?.onOpen).toHaveBeenCalledWith(MORNING_DIGEST.id)
+
+		await expect(canvas.getByDisplayValue("Morning digest")).toBeVisible()
+		await expect(canvas.getByDisplayValue("0 8 * * *")).toBeVisible()
+		await expect(canvas.getByDisplayValue("On a schedule")).toHaveAttribute(
+			"readonly",
+		)
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Back to the routines" }),
+		)
+		const row = slotsIn(canvasElement, "routine-row")[0]
+		await waitFor(
+			() => expect(row?.querySelector("button[data-opens]")).toHaveFocus(),
+			FRAME_POLL,
+		)
+	},
+})
+
+export const WithoutSeatedLead = meta.story({
+	args: {
+		form: {
+			canCreate: false,
+			onClose: fn(),
+			onNew: fn(),
+			onOpen: fn(),
+			onSave: fn(),
+			open: null,
+			sources: TRIGGER_SOURCES,
+		},
+	},
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"A conversation with no lead bot seated: a routine written here would have nobody to run it. Check that the new routine action is left out of the header and of the empty state rather than shown and refused on save, and that the routines already written stay readable and editable.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(
+			canvas.queryByRole("button", { name: "New routine" }),
+		).not.toBeInTheDocument()
+		await expect(canvas.getByText("Morning digest")).toBeVisible()
 	},
 })
 
