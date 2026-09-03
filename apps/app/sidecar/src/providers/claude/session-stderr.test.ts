@@ -32,14 +32,14 @@ afterAll(() => {
 })
 
 describe("openClaudeSession", () => {
-	it("closes on what Claude Code wrote to standard error before it threw", async () => {
+	it("rejects and closes on what Claude Code wrote to standard error before it threw", async () => {
 		const frames: SessionFrame[] = []
 
 		await expect(
 			openClaudeSession({ cwd: directory, partialMessages: false }, (frame) => {
 				frames.push(frame)
 			}),
-		).rejects.toThrow()
+		).rejects.toThrow(REFUSAL)
 
 		const closed = frames.find((frame) => frame.type === "closed")
 

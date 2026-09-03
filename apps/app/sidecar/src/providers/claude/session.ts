@@ -182,7 +182,9 @@ export const openClaudeSession = async (
 	const initialized = await Promise.race([
 		run.initializationResult(),
 		collapsed,
-	])
+	]).catch((error: unknown) => {
+		throw new Error(withStderr(describeError(error), stderr.kept()))
+	})
 
 	emit({ type: "commands", commands: described(initialized.commands) })
 

@@ -10,6 +10,7 @@ use serde_json::Value;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::{mpsc, oneshot, Mutex};
+use tokio::task::JoinHandle;
 
 use super::contract::TransportError;
 use super::protocol::{self, Catalogue, Checked, Ready, Titled, ToolCatalogue};
@@ -32,6 +33,8 @@ pub const SHUTDOWN_GRACE: Duration = Duration::from_secs(3);
 const TERMINATE_GRACE: Duration = Duration::from_millis(500);
 
 const STDERR_TAIL_BYTES: usize = 4000;
+
+const STDERR_DRAIN_GRACE: Duration = Duration::from_millis(500);
 
 const STARTUP_EXIT: &str = "the sidecar exited during startup";
 
@@ -143,7 +146,7 @@ impl Sidecar {
 		let gone = Arc::new(AtomicBool::new(false));
 		tokio::spawn(write_loop(stdin, stdin_rx));
 		let kept_stderr = StderrTail::default();
-		tokio::spawn(keep_stderr(stderr, kept_stderr.clone()));
+		let stderr_reader = tokio::spawn(keep_stderr(stderr, kept_stderr.clone()));
 		tokio::spawn(read_loop(
 			stdout,
 			routes.clone(),
@@ -160,7 +163,7 @@ impl Sidecar {
 				let code = reap(&child, pid).await;
 				return Err(TransportError::Crashed {
 					code,
-					detail: Some(kept_stderr.kept().unwrap_or_else(|| STARTUP_EXIT.to_owned())),
+					detail: Some(startup_detail(kept_stderr, stderr_reader).await),
 				});
 			}
 			Err(_) => {
@@ -427,6 +430,13 @@ impl StderrTail {
 	}
 }
 
+async fn startup_detail(kept: StderrTail, reader: JoinHandle<()>) -> String {
+	if tokio::time::timeout(STDERR_DRAIN_GRACE, reader).await.is_err() {
+		eprintln!("the sidecar left its stderr open past the drain grace");
+	}
+	kept.kept().unwrap_or_else(|| STARTUP_EXIT.to_owned())
+}
+
 async fn keep_stderr(mut stderr: tokio::process::ChildStderr, tail: StderrTail) {
 	let mut chunk = [0u8; 4096];
 	while let Ok(read) = stderr.read(&mut chunk).await {
@@ -522,6 +532,29 @@ mod tests {
 	#[test]
 	fn a_sidecar_that_wrote_nothing_keeps_nothing() {
 		assert!(StderrTail::default().kept().is_none());
+	}
+
+	#[tokio::test]
+	async fn the_startup_detail_waits_for_what_the_reader_kept() {
+		let kept = StderrTail::default();
+		let writing = kept.clone();
+		let reader = tokio::spawn(async move {
+			tokio::task::yield_now().await;
+			writing.push(b"refusing to start: the port is taken\n");
+		});
+
+		let detail = startup_detail(kept, reader).await;
+
+		assert_eq!(detail, "refusing to start: the port is taken");
+	}
+
+	#[tokio::test]
+	async fn a_startup_the_reader_saw_nothing_of_still_says_when_it_failed() {
+		let reader = tokio::spawn(async {});
+
+		let detail = startup_detail(StderrTail::default(), reader).await;
+
+		assert_eq!(detail, STARTUP_EXIT);
 	}
 
 	#[test]

@@ -453,6 +453,27 @@ describe("ThreadScreen", () => {
 		).toBeTruthy()
 
 		unmount()
+		const withoutCode: ChatError = {
+			id: "crashed-2",
+			error: { kind: "crashed", code: null, detail: refusal },
+		}
+		const { unmount: unmountUnknown } = render(
+			screenOf(
+				threadOf({
+					id: "bot-1",
+					name: "Nyx",
+					said: "hi",
+					errors: [withoutCode],
+				}),
+			),
+		)
+		await settle()
+
+		expect(
+			screen.getByText(`Claude Code exited (code unknown). ${refusal}`),
+		).toBeTruthy()
+
+		unmountUnknown()
 		render(
 			screenOf(
 				threadOf({ id: "bot-1", name: "Nyx", said: "hi", errors: [CRASH] }),
