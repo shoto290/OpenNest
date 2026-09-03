@@ -390,6 +390,18 @@ describe("startNotificationSource", () => {
 		expect(harness.spaces.select).toHaveBeenCalledWith("space-one")
 	})
 
+	it("opens the bot the click carries even when the reveal throws on the spot", async () => {
+		const raiseWindow = vi.fn((): Promise<void> => {
+			throw new Error("window is gone")
+		})
+		const harness = await start({ raiseWindow })
+
+		harness.notifications.activate(BOT)
+
+		expect(harness.roster.select).toHaveBeenCalledWith("bot-one")
+		expect(harness.spaces.select).toHaveBeenCalledWith("space-one")
+	})
+
 	it("shows the window and leaves the selection alone for a bot that is gone", async () => {
 		const raiseWindow = vi.fn(async () => undefined)
 		const harness = await start({ raiseWindow })

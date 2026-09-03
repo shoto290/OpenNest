@@ -29,6 +29,10 @@ const REVEAL_FAILURE_TITLE = "The window could not be brought to the front"
 
 const failingReveal = () => Promise.reject(new Error("window is gone"))
 
+const throwingReveal = (): Promise<void> => {
+	throw new Error("window is gone")
+}
+
 const SWITCHES = {
 	notifyOnQuestion: true,
 	notifyOnPermission: true,
@@ -150,4 +154,36 @@ it("reports a reveal failure once however many notifications are clicked", async
 	await waitFor(() => {
 		expect(noticesOnScreen()).toHaveLength(1)
 	})
+})
+
+it("shows the reader why a reveal that threw on the spot stayed behind", async () => {
+	const notifications = createFakeNotificationPort()
+
+	await watchAlongside({
+		notifications,
+		raiseWindow: throwingReveal,
+	})
+
+	notifications.activate({ kind: "bot", id: "bot-one" })
+	notifications.activate({ kind: "conversation", id: "room-one" })
+
+	const [notice] = await waitFor(() => {
+		const notices = noticesOnScreen()
+		expect(notices).toHaveLength(1)
+		return notices
+	})
+
+	expect(within(notice).getByText(REVEAL_FAILURE_TITLE)).toBeTruthy()
+	expect(within(notice).getByText("window is gone")).toBeTruthy()
+})
+
+it("leaves the surface empty when a click reveals the window", async () => {
+	const notifications = createFakeNotificationPort()
+
+	await watchAlongside({ notifications })
+
+	notifications.activate({ kind: "bot", id: "bot-one" })
+	await Promise.resolve()
+
+	expect(noticesOnScreen()).toEqual([])
 })

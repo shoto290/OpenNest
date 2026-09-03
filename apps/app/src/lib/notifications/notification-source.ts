@@ -220,8 +220,16 @@ export const startNotificationSource = ({
 		}
 	}
 
+	const windowRaised = (): Promise<void> => {
+		try {
+			return raiseWindow()
+		} catch (reason) {
+			return Promise.reject(reason)
+		}
+	}
+
 	const activate = ({ kind, id }: NotificationTarget) => {
-		void raiseWindow().catch(failWith("reveal"))
+		void windowRaised().catch(failWith("reveal"))
 
 		const spaceId =
 			kind === "bot" ? roster.spaceOfBot(id) : roster.spaceOfConversation(id)
