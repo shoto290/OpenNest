@@ -60,9 +60,10 @@ import {
 	workingFor,
 } from "../chat/working-kind"
 import { createReportedRunsReader } from "../routines/create-run-port"
-import type {
-	ReportedRun,
-	ReportedRunsByTurnId,
+import {
+	NO_REPORTED_RUNS,
+	type ReportedRun,
+	type ReportedRunsByTurnId,
 } from "../routines/routine-contract"
 import type { ReportedRunsReader } from "../routines/run-port"
 
@@ -207,8 +208,6 @@ const promptWork = (pending: PendingPrompt): WorkingState => ({
 			: pending.request.title,
 })
 
-const NO_CAUSES: ReportedRunsByTurnId = new Map()
-
 const indexedByTurnId = (reported: ReportedRun[]): ReportedRunsByTurnId =>
 	new Map(reported.map((run) => [run.turnId, run]))
 
@@ -223,7 +222,7 @@ const initialState: ConversationState = {
 	refusedMessage: null,
 	pendingPrompt: null,
 	latestError: null,
-	reportedCauses: NO_CAUSES,
+	reportedCauses: NO_REPORTED_RUNS,
 }
 
 export const createConversationController = (
@@ -247,7 +246,7 @@ export const createConversationController = (
 	let asks = 0
 	const runs = new Map<string, RuntimeScope>()
 	let refused: RefusedMessage | null = null
-	let reportedCauses: ReportedRunsByTurnId = NO_CAUSES
+	let reportedCauses: ReportedRunsByTurnId = NO_REPORTED_RUNS
 	let latestError: ChatError | null = null
 	let errorCount = 0
 	let detach: Promise<() => void> | null = null
@@ -996,7 +995,7 @@ export const createConversationController = (
 		queue = emptyQueue
 		activeTurn = null
 		refused = null
-		reportedCauses = NO_CAUSES
+		reportedCauses = NO_REPORTED_RUNS
 		forgetFailure()
 		sync()
 		await Promise.all([

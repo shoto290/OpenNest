@@ -16,7 +16,10 @@ import type {
 	TranscriptRole,
 } from "../conversations/transcript-contract"
 import { isTerminalCompletion } from "../conversations/transcript-state"
-import type { ReportedRunsByTurnId } from "../routines/routine-contract"
+import {
+	NO_REPORTED_RUNS,
+	type ReportedRunsByTurnId,
+} from "../routines/routine-contract"
 
 export type TranscriptRow = {
 	messageId: string
@@ -129,9 +132,7 @@ export function toTranscriptRows(
 	})
 }
 
-const NO_CAUSES: ReportedRunsByTurnId = new Map()
-
-const partsCause = (
+const isPartedByCause = (
 	previous: TranscriptRow,
 	row: TranscriptRow,
 	causes: ReportedRunsByTurnId,
@@ -141,7 +142,7 @@ const partsCause = (
 
 export function toRuns(
 	rows: TranscriptRow[],
-	causes: ReportedRunsByTurnId = NO_CAUSES,
+	causes: ReportedRunsByTurnId = NO_REPORTED_RUNS,
 ): TranscriptRow[][] {
 	const runs: TranscriptRow[][] = []
 	for (const row of rows) {
@@ -153,7 +154,7 @@ export function toRuns(
 			previous.role === row.role &&
 			previous.authorBotId === row.authorBotId &&
 			row.timestamp - previous.timestamp <= RUN_GAP_MS &&
-			!partsCause(previous, row, causes)
+			!isPartedByCause(previous, row, causes)
 		) {
 			current.push(row)
 		} else {
