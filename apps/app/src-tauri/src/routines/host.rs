@@ -38,7 +38,7 @@ impl<R: Runtime> RoutineHost<R> {
 	}
 
 	pub async fn answer(&self, request: Value) -> HostAnswer {
-		self.served(request).await.map_err(as_value)
+		self.served(request).await.map_err(refused)
 	}
 
 	async fn served(&self, request: Value) -> Result<Value, RoutineError> {
@@ -48,28 +48,27 @@ impl<R: Runtime> RoutineHost<R> {
 		self.refuse_a_solo_thread(database).await?;
 		match operation {
 			Operation::List => {
-				let _: Listed = read_payload(payload)?;
-				as_value_of(routine_list(self.state()?, self.conversation_id.clone()).await?)
+				let _: Listed = read(payload)?;
+				answered(routine_list(self.state()?, self.conversation_id.clone()).await?)
 			}
 			Operation::Create => {
-				let asked: Created = read_payload(payload)?;
-				as_value_of(
-					routine_create(self.app.clone(), self.state()?, self.draft(asked)).await?,
-				)
+				let asked: Created = read(payload)?;
+				let draft = self.draft(asked);
+				answered(routine_create(self.app.clone(), self.state()?, draft).await?)
 			}
 			Operation::Update => {
-				let asked: Edited = read_payload(payload)?;
+				let asked: Edited = read(payload)?;
 				self.refuse_a_routine_it_does_not_own(database, &asked.id).await?;
 				let id = asked.id.clone();
-				as_value_of(routine_update(self.app.clone(), self.state()?, id, edit(asked)).await?)
+				answered(routine_update(self.app.clone(), self.state()?, id, edit(asked)).await?)
 			}
 			Operation::RunNow => {
-				let asked: Named = read_payload(payload)?;
+				let asked: Named = read(payload)?;
 				self.refuse_a_routine_it_does_not_own(database, &asked.id).await?;
-				as_value_of(routine_run_now(self.app.clone(), self.state()?, asked.id).await?)
+				answered(routine_run_now(self.app.clone(), self.state()?, asked.id).await?)
 			}
 			Operation::Delete => {
-				let asked: Named = read_payload(payload)?;
+				let asked: Named = read(payload)?;
 				self.refuse_a_routine_it_does_not_own(database, &asked.id).await?;
 				routine_delete(self.app.clone(), self.state()?, asked.id).await?;
 				Ok(Value::Null)
@@ -205,21 +204,17 @@ fn every_event() -> Filter {
 	Filter { match_mode: FilterMatchMode::All, rows: Vec::new() }
 }
 
-fn read(request: Value) -> Result<Asked, RoutineError> {
-	read_payload(request)
-}
-
-fn read_payload<T: serde::de::DeserializeOwned>(payload: Value) -> Result<T, RoutineError> {
+fn read<T: serde::de::DeserializeOwned>(payload: Value) -> Result<T, RoutineError> {
 	serde_json::from_value(payload)
 		.map_err(|error| RoutineError::UnreadableRequest { detail: error.to_string() })
 }
 
-fn as_value_of<T: Serialize>(answer: T) -> Result<Value, RoutineError> {
+fn answered<T: Serialize>(answer: T) -> Result<Value, RoutineError> {
 	serde_json::to_value(answer)
 		.map_err(|error| RoutineError::Unexpected { detail: error.to_string() })
 }
 
-fn as_value(error: RoutineError) -> Value {
+fn refused(error: RoutineError) -> Value {
 	serde_json::to_value(&error).unwrap_or_else(
 		|failure| serde_json::json!({ "kind": "unexpected", "detail": failure.to_string() }),
 	)
@@ -236,6 +231,7 @@ mod tests {
 	use tauri::{App, Listener as _, Manager as _};
 
 	use super::super::commands::CHANGED_EVENT;
+	use super::super::contract::Routine;
 	use super::*;
 	use crate::bundles;
 
@@ -326,7 +322,7 @@ mod tests {
 		app: &App<MockRuntime>,
 		conversation_id: &str,
 		bot_id: &str,
-	) -> super::super::contract::Routine {
+	) -> Routine {
 		routine_create(
 			app.handle().clone(),
 			app.state(),
@@ -347,7 +343,7 @@ mod tests {
 	async fn listed(
 		app: &App<MockRuntime>,
 		conversation_id: &str,
-	) -> Vec<super::super::contract::Routine> {
+	) -> Vec<Routine> {
 		routine_list(app.state(), conversation_id.to_owned()).await.expect("the routines read")
 	}
 
