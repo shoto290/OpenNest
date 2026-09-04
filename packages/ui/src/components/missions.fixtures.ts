@@ -143,6 +143,37 @@ export const MISSION_EVENTS: MissionEventModel[] = [
 	},
 ]
 
+export const AUTHORED_MISSION_EVENTS: MissionEventModel[] = [
+	{
+		id: "event-authored-note",
+		kind: "note",
+		source: "claude-code",
+		createdAt: minutesBefore(24),
+		text: "Read the Rust contract and mirrored every kind and every state before touching a pixel.",
+	},
+	{
+		id: "event-authored-agent-asked",
+		kind: "agent_asked",
+		source: "claude-code",
+		createdAt: minutesBefore(18),
+		text: "Which field of the payload names the ticket this mission answers?",
+	},
+	{
+		id: "event-authored-answered",
+		kind: "answered",
+		source: "ada.martin",
+		createdAt: minutesBefore(11),
+		text: "None of them yet. Read the ticket off the mission, not off the payload.",
+	},
+	{
+		id: "event-authored-escalated",
+		kind: "escalated",
+		source: "claude-code",
+		createdAt: minutesBefore(3),
+		text: "The run needs a human to say whether the mirror file should be resolved here or on the other branch.",
+	},
+]
+
 export const WAITING_MISSION_CARD: MissionCardModel = {
 	id: "mission-ope-30",
 	bot: MISSION_BOT,

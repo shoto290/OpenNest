@@ -1,5 +1,7 @@
 import { useTranslation } from "react-i18next"
 
+import { BotTitleBadge } from "@workspace/ui/components/badge"
+import { MessageHeader } from "@workspace/ui/components/message"
 import {
 	MessageBubble,
 	MessageBubbleContent,
@@ -14,13 +16,26 @@ type MissionFeedProps = {
 	className?: string
 }
 
-type MissionMachineLineProps = {
+type MissionEventProps = {
 	event: MissionEventModel
 	now: number
 }
 
-const MissionMachineLine = ({ event, now }: MissionMachineLineProps) => {
-	const { t, i18n } = useTranslation("chat")
+const MissionEventTime = ({ event, now }: MissionEventProps) => {
+	const { i18n } = useTranslation("chat")
+
+	return (
+		<time
+			className="ms-auto shrink-0 tabular-nums"
+			dateTime={new Date(event.createdAt).toISOString()}
+		>
+			{toRelativeTime(event.createdAt, i18n.language, now)}
+		</time>
+	)
+}
+
+const MissionMachineLine = ({ event, now }: MissionEventProps) => {
+	const { t } = useTranslation("chat")
 
 	return (
 		<p
@@ -33,13 +48,33 @@ const MissionMachineLine = ({ event, now }: MissionMachineLineProps) => {
 			<span className="min-w-0 flex-1 truncate">
 				{t(`missions.event.${event.kind}`)}
 			</span>
-			<time
-				className="shrink-0 tabular-nums"
-				dateTime={new Date(event.createdAt).toISOString()}
-			>
-				{toRelativeTime(event.createdAt, i18n.language, now)}
-			</time>
+			<MissionEventTime event={event} now={now} />
 		</p>
+	)
+}
+
+const MissionAuthoredEvent = ({ event, now }: MissionEventProps) => {
+	const { t } = useTranslation("chat")
+
+	return (
+		<div
+			className="flex w-full min-w-0 flex-col gap-1"
+			data-slot="mission-authored-event"
+		>
+			<MessageHeader className="min-w-0 flex-wrap">
+				<span className="max-w-32 truncate font-medium text-foreground/80">
+					{event.source}
+				</span>
+				<BotTitleBadge
+					className="max-w-40"
+					title={t(`missions.event.${event.kind}`)}
+				/>
+				<MissionEventTime event={event} now={now} />
+			</MessageHeader>
+			<MessageBubble variant="soft">
+				<MessageBubbleContent>{event.text}</MessageBubbleContent>
+			</MessageBubble>
+		</div>
 	)
 }
 
@@ -53,9 +88,7 @@ const MissionFeed = ({ events, now, className }: MissionFeedProps) => (
 				{event.text === undefined ? (
 					<MissionMachineLine event={event} now={now} />
 				) : (
-					<MessageBubble variant="soft">
-						<MessageBubbleContent>{event.text}</MessageBubbleContent>
-					</MessageBubble>
+					<MissionAuthoredEvent event={event} now={now} />
 				)}
 			</li>
 		))}

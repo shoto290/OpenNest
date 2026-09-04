@@ -5,6 +5,7 @@ import { listExhaustively, slotsIn } from "@workspace/storybook/story-utils"
 import type { MissionEventKind } from "@workspace/ui/components/mission"
 import { MissionFeed } from "@workspace/ui/components/mission-feed"
 import {
+	AUTHORED_MISSION_EVENTS,
 	MISSION_EVENTS,
 	MISSION_NOW,
 } from "@workspace/ui/components/missions.fixtures"
@@ -31,7 +32,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Everything a mission recorded, in the order it happened. An event whose payload holds a text string speaks, and gets the soft bubble the transcript already uses; every other event is a machine line, kept to one line so the feed stays scannable however much a bot writes into a payload. Reach for it inside `MissionThread`; on its own it is useful to compare the two forms an event can take.",
+					"Everything a mission recorded, in the order it happened. An event whose payload holds a text string speaks, and reads as an authored event: the source that wrote it, the kind it is, the time it landed, and the soft bubble the transcript already uses. Every other event is a machine line, kept to one line so the feed stays scannable however much a bot writes into a payload. Reach for it inside `MissionThread`; on its own it is useful to compare the two forms an event can take.",
 			},
 		},
 	},
@@ -48,9 +49,31 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"A mission that ran, asked, escalated and closed. Check that the two events carrying text are the only bubbles and that every other event is a muted single line reading source, wording and time. Pick `EventKinds` to read the wording of all eight kinds at once.",
+					"A mission that ran, asked, escalated and closed. Check that the two events carrying text are the only bubbles, that each of them is named and dated above its bubble, and that every other event is a muted single line reading source, wording and time. Pick `AuthoredEvents` to compare four spoken events in a row, `EventKinds` to read the wording of all eight kinds at once.",
 			},
 		},
+	},
+})
+
+export const AuthoredEvents = meta.story({
+	args: { events: AUTHORED_MISSION_EVENTS },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A note, a question to the agent, an answer and an escalation, one after the other. Check that each bubble is readable as its own event rather than as more of the last one: the source names who wrote it, the badge names which kind it is, and the time sits on the same right edge the machine lines use. The answer comes from a person and the other three from the agent, and the only thing that says so is the name, so read the four names before the four fills. Pick `Default` for the mix of spoken and silent events.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const authored = slotsIn(canvasElement, "mission-authored-event")
+
+		await expect(authored).toHaveLength(AUTHORED_MISSION_EVENTS.length)
+		await expect(slotsIn(canvasElement, "mission-machine-line")).toHaveLength(0)
+
+		for (const [rank, event] of AUTHORED_MISSION_EVENTS.entries()) {
+			await expect(authored[rank]).toHaveTextContent(event.source)
+		}
 	},
 })
 
