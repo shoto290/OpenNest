@@ -12,8 +12,8 @@ use crate::missions::contract::{
 	MissionEvent, MissionEventKind, MissionState, Ticket,
 };
 
-pub const MAX_MISSIONS_PER_READ: u32 = 200;
-pub const MAX_EVENTS_PER_MISSION: u32 = 500;
+const MAX_MISSIONS_PER_READ: u32 = 200;
+const MAX_EVENTS_PER_MISSION: u32 = 500;
 
 impl ToSql for MissionEventKind {
 	fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
