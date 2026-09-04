@@ -1,29 +1,23 @@
 import type { BotBadge } from "@workspace/ui/components/badge"
 import type { BotIdentityAvatarProps } from "@workspace/ui/components/bot-identity-avatar"
 
-const MISSION_EVENT_KINDS = [
-	"opened",
-	"note",
-	"agent_asked",
-	"answered",
-	"escalated",
-	"ready",
-	"failed",
-	"closed",
-] as const
+type MissionEventKind =
+	| "opened"
+	| "note"
+	| "agent_asked"
+	| "answered"
+	| "escalated"
+	| "ready"
+	| "failed"
+	| "closed"
 
-type MissionEventKind = (typeof MISSION_EVENT_KINDS)[number]
-
-const MISSION_STATES = [
-	"working",
-	"waiting_bot",
-	"waiting_human",
-	"ready_to_merge",
-	"failed",
-	"done",
-] as const
-
-type MissionState = (typeof MISSION_STATES)[number]
+type MissionState =
+	| "working"
+	| "waiting_bot"
+	| "waiting_human"
+	| "ready_to_merge"
+	| "failed"
+	| "done"
 
 const MISSION_AVATAR_SIZE = 32
 
@@ -50,8 +44,6 @@ const missionBadgeFor = (state: MissionState): BotBadge | undefined =>
 
 export {
 	MISSION_AVATAR_SIZE,
-	MISSION_EVENT_KINDS,
-	MISSION_STATES,
 	type MissionBot,
 	type MissionEventKind,
 	type MissionEventModel,

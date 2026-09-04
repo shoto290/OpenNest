@@ -90,9 +90,6 @@ export const MISSION_TICKET: MissionTicket = {
 
 export const MISSION_TOOLS = ["Repository", "Terminal", "Web search"]
 
-export const MISSION_OBJECTIVE =
-	"Ship the mission thread and the card that summarises it in the conversation it came from."
-
 export const MISSION_EVENTS: MissionEventModel[] = [
 	{
 		id: "event-opened",
@@ -149,7 +146,8 @@ export const MISSION_EVENTS: MissionEventModel[] = [
 export const WAITING_MISSION_CARD: MissionCardModel = {
 	id: "mission-ope-30",
 	bot: MISSION_BOT,
-	objective: MISSION_OBJECTIVE,
+	objective:
+		"Ship the mission thread and the card that summarises it in the conversation it came from.",
 	ticket: MISSION_TICKET,
 	state: "waiting_human",
 	isClosed: false,

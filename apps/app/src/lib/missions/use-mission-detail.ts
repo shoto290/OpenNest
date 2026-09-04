@@ -28,13 +28,12 @@ export const useMissionDetail = (missionId: string): MissionDetailRead => {
 	const readMission = useCallback(() => {
 		reads.current += 1
 		const ticket = reads.current
-		const isCurrent = () => ticket === reads.current
 
 		setReading(true)
 
 		void missionsTransport.detail(missionId).then(
 			(detail) => {
-				if (!isCurrent()) return
+				if (ticket !== reads.current) return
 				setRead({
 					mission: detail.mission,
 					events: toMissionEventModels(detail.events),
@@ -44,7 +43,7 @@ export const useMissionDetail = (missionId: string): MissionDetailRead => {
 				setFailedToRead(false)
 			},
 			() => {
-				if (!isCurrent()) return
+				if (ticket !== reads.current) return
 				setReading(false)
 				setFailedToRead(true)
 			},
