@@ -129,7 +129,15 @@ fn normalised(watch: MissionWatch) -> MissionWatch {
 fn refused_watch(watch: &MissionWatch) -> Result<(), MissionError> {
 	refuse_blank("branch", &watch.branch)?;
 	refuse_blank("repository", &watch.repository)?;
-	match watch.repository.split('/').collect::<Vec<_>>().as_slice() {
+	refuse_unnamed(&watch.repository)?;
+	match watch.workspace_path.as_deref() {
+		Some(workspace) => hook::checkout(workspace).map(|_| ()),
+		None => Ok(()),
+	}
+}
+
+fn refuse_unnamed(repository: &str) -> Result<(), MissionError> {
+	match repository.split('/').collect::<Vec<_>>().as_slice() {
 		[owner, name] if !owner.is_empty() && !name.is_empty() => Ok(()),
 		_ => Err(MissionError::Undeliverable {
 			detail: "a repository is named owner then slash then name".to_owned(),
@@ -333,6 +341,13 @@ mod tests {
 		path
 	}
 
+	fn a_checkout(name: &str) -> std::path::PathBuf {
+		let path = a_workspace(name);
+		fs::write(path.join(".git"), "gitdir: /elsewhere/.git/worktrees/one")
+			.expect("the git file lands");
+		path
+	}
+
 	fn a_watch(branch: &str, workspace: Option<&std::path::Path>) -> MissionWatch {
 		MissionWatch {
 			branch: branch.to_owned(),
@@ -345,7 +360,7 @@ mod tests {
 	async fn arming_a_mission_answers_where_the_hook_calls_and_installs_it_in_the_workspace() {
 		let app = a_host("watched").await;
 		app.manage(crate::routines::webhook::start(app.handle().clone()));
-		let workspace = a_workspace("watched");
+		let workspace = a_checkout("watched");
 		let opened = mission_open(app.handle().clone(), app.state(), a_draft("c1", "b1", "Fix it"))
 			.await
 			.expect("the mission opens");
@@ -436,6 +451,41 @@ mod tests {
 		if let Some(webhook) = app.try_state::<crate::routines::webhook::Webhook>() {
 			webhook.stop();
 		}
+		cleaned(&app);
+	}
+
+	#[tokio::test]
+	async fn arming_on_a_workspace_that_is_no_git_checkout_writes_nothing_and_arms_nothing() {
+		let app = a_host("no-git").await;
+		app.manage(crate::routines::webhook::start(app.handle().clone()));
+		let workspace = a_workspace("no-git");
+		let opened = mission_open(app.handle().clone(), app.state(), a_draft("c1", "b1", "Fix it"))
+			.await
+			.expect("the mission opens");
+
+		let refused = mission_watch(
+			app.handle().clone(),
+			app.state(),
+			opened.id.clone(),
+			a_watch("feature/ope-42", Some(&workspace)),
+		)
+		.await
+		.expect_err("the workspace that is no git checkout is refused");
+
+		assert!(matches!(refused, MissionError::Undeliverable { .. }), "got {refused:?}");
+		assert!(!workspace.join(".claude").exists(), "the refused workspace was written in");
+		let watched = ready(&app.state::<db::DatabaseState>())
+			.expect("the database opens")
+			.missions()
+			.watched()
+			.await
+			.expect("the watched missions read");
+		assert!(watched.is_empty(), "got {watched:?}");
+
+		if let Some(webhook) = app.try_state::<crate::routines::webhook::Webhook>() {
+			webhook.stop();
+		}
+		fs::remove_dir_all(&workspace).expect("cleanup");
 		cleaned(&app);
 	}
 
