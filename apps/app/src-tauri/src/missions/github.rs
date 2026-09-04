@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::time::Duration;
 
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, ETAG, IF_NONE_MATCH, USER_AGENT};
@@ -57,17 +56,16 @@ async fn polling<R: Runtime>(app: AppHandle<R>, base: String, mut halted: signal
 		Ok(database) => database,
 		Err(failure) => return eprintln!("no mission is watched on github: {failure:?}"),
 	};
-	let reach = match Reach::new(base) {
+	let reach = match Reach::bearing(base, token()) {
 		Ok(reach) => reach,
 		Err(failure) => return eprintln!("no mission is watched on github: {failure}"),
 	};
-	let clock: Arc<dyn Clock> = Arc::new(SystemClock);
 	let mut kept = Kept::default();
 	let mut ticker = tokio::time::interval(TICK);
 	loop {
 		tokio::select! {
 			_ = halted.changed() => return,
-			_ = ticker.tick() => pass(&reach, database, &mut kept, clock.as_ref()).await,
+			_ = ticker.tick() => pass(&reach, database, &mut kept, &SystemClock).await,
 		}
 	}
 }
@@ -79,10 +77,6 @@ pub(crate) struct Reach {
 }
 
 impl Reach {
-	pub(crate) fn new(base: String) -> Result<Self, String> {
-		Self::bearing(base, token())
-	}
-
 	pub(crate) fn bearing(base: String, token: Option<String>) -> Result<Self, String> {
 		installed_tls_provider();
 		let client = Client::builder()
@@ -99,10 +93,7 @@ impl Reach {
 			request = request.bearer_auth(token);
 		}
 		if let Some(etag) = etag {
-			request = match HeaderValue::from_str(etag) {
-				Ok(value) => request.header(IF_NONE_MATCH, value),
-				Err(_) => request,
-			};
+			request = request.header(IF_NONE_MATCH, etag);
 		}
 		request.send().await.map_err(|error| Failure::Unreached(error.to_string()))
 	}
@@ -221,8 +212,13 @@ struct Fingerprint {
 }
 
 impl Fingerprint {
-	fn held(stored: &str) -> Option<Self> {
-		serde_json::from_str(stored).ok()
+	fn held(stored: &str) -> Result<Option<Self>, Failure> {
+		if stored.is_empty() {
+			return Ok(None);
+		}
+		serde_json::from_str(stored)
+			.map(Some)
+			.map_err(|error| Failure::Unreadable(format!("a fingerprint it kept: {error}")))
 	}
 
 	fn of(pull: &Pull, checks: Checks) -> Self {
@@ -281,7 +277,7 @@ async fn seen(
 	let Some(pull) = pulls.into_iter().next() else {
 		return Ok(());
 	};
-	let held = Fingerprint::held(&mission.fingerprint);
+	let held = Fingerprint::held(&mission.fingerprint)?;
 	let checks = match asks_for_checks(held.as_ref(), &pull) {
 		false => kept_checks(held.as_ref()),
 		true => match reach.checks(&mission.repository, &pull.head.sha).await? {
@@ -322,18 +318,8 @@ fn appended(held: Option<&Fingerprint>, fresh: &Fingerprint, pull: &Pull) -> Vec
 			json!({ "pullRequest": fresh.number, "url": pull.html_url }),
 		));
 	}
-	if held.is_none_or(|held| held.checks != fresh.checks) {
-		match fresh.checks {
-			Checks::Passed => {
-				entries
-					.push(entry(MissionEventKind::Ready, json!({ "pullRequest": fresh.number })));
-			}
-			Checks::Failed => {
-				entries
-					.push(entry(MissionEventKind::Failed, json!({ "pullRequest": fresh.number })));
-			}
-			Checks::None | Checks::Pending => {}
-		}
+	if let Some(kind) = moved_checks(held, fresh) {
+		entries.push(entry(kind, json!({ "pullRequest": fresh.number })));
 	}
 	if fresh.merged && held.is_none_or(|held| !held.merged) {
 		entries.push(entry(
@@ -345,6 +331,17 @@ fn appended(held: Option<&Fingerprint>, fresh: &Fingerprint, pull: &Pull) -> Vec
 		));
 	}
 	entries
+}
+
+fn moved_checks(held: Option<&Fingerprint>, fresh: &Fingerprint) -> Option<MissionEventKind> {
+	if held.is_some_and(|held| held.checks == fresh.checks) {
+		return None;
+	}
+	match fresh.checks {
+		Checks::Passed => Some(MissionEventKind::Ready),
+		Checks::Failed => Some(MissionEventKind::Failed),
+		Checks::None | Checks::Pending => None,
+	}
 }
 
 fn entry(kind: MissionEventKind, payload: serde_json::Value) -> MissionEntry {
@@ -435,6 +432,7 @@ mod tests {
 	use std::net::{Ipv4Addr, SocketAddr};
 	use std::path::PathBuf;
 	use std::sync::atomic::{AtomicI64, Ordering};
+	use std::sync::Arc;
 
 	use axum::extract::State as Extracted;
 	use axum::response::{IntoResponse, Response as Answered};
@@ -489,7 +487,6 @@ mod tests {
 		bearing: bool,
 	}
 
-	#[derive(Default)]
 	struct Answers {
 		pulls: Value,
 		checks: Value,
@@ -552,7 +549,7 @@ mod tests {
 		}
 
 		fn reach(&self) -> Reach {
-			Reach::new(self.base.clone()).expect("the client builds")
+			Reach::bearing(self.base.clone(), None).expect("the client builds")
 		}
 	}
 
