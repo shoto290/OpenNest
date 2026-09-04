@@ -5,6 +5,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use opennest_app::bundles;
 use opennest_app::commands::invoke_handler;
 use opennest_app::db;
+use opennest_app::environment::contract::{EnvOwner, ResolvedEnv};
+use opennest_app::environment::store;
 use serde_json::{json, Value};
 use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime, INVOKE_KEY};
 use tauri::webview::InvokeRequest;
@@ -1978,9 +1980,10 @@ fn a_duplicated_bot_carries_the_bundle_and_none_of_the_transcript() {
 		Some(theirs.to_owned()),
 		"a hook the reader gave the source did not come over"
 	);
-	assert!(
-		!bundle.join(".learned.md").exists(),
-		"what the source remembered was copied into a bot that has been told nothing"
+	assert_eq!(
+		std::fs::read_to_string(bundle.join(".learned.md")).ok(),
+		Some("What the source remembered\n".to_owned()),
+		"what the source remembered did not come over"
 	);
 
 	let root = bundles::root(app.handle()).expect("the bundle root");
@@ -2126,6 +2129,270 @@ fn a_duplicate_into_a_space_that_is_gone_leaves_every_bot_and_every_bundle_alone
 		std::fs::read_dir(root.join("plugins")).map(|entries| entries.count()).unwrap_or_default(),
 		1,
 		"a bundle was left behind by a copy that was refused"
+	);
+}
+
+fn a_bot_scope(bot_id: &str, space_id: &str) -> Value {
+	json!({ "kind": "bot", "id": bot_id, "spaceId": space_id })
+}
+
+fn titles_of(window: &WebviewWindow<MockRuntime>, bot_id: &str) -> Vec<Value> {
+	call(window, "conversation_bot_history", json!({ "botId": bot_id }))
+		.expect("the history")
+		.as_array()
+		.expect("a list of writes")
+		.iter()
+		.map(|entry| entry["title"].clone())
+		.collect()
+}
+
+fn an_owner(bot_id: &str, space_id: &str) -> EnvOwner {
+	EnvOwner::Bot { id: bot_id.to_owned(), space_id: space_id.to_owned() }
+}
+
+fn env_of(app: &App<MockRuntime>, bot_id: &str, space_id: &str) -> ResolvedEnv {
+	let root = store::root(app.handle()).expect("the environment root");
+	store::resolve(&root, &an_owner(bot_id, space_id)).expect("the store reads")
+}
+
+fn names_under(root: &Path, kind: &str) -> Vec<String> {
+	let mut named: Vec<String> = std::fs::read_dir(root.join(kind))
+		.into_iter()
+		.flatten()
+		.flatten()
+		.map(|entry| entry.file_name().to_string_lossy().into_owned())
+		.collect();
+	named.sort();
+	named
+}
+
+#[test]
+fn a_duplicate_carries_the_history_the_learned_block_and_the_environment_of_its_own_scopes() {
+	let home = Home::new();
+	let app = home.app();
+	let window = window(&app);
+
+	let held = a_space(&window, "Home");
+	let away = a_space(&window, "Away");
+	let source_id = a_bot_in(&window, &held, "Nyx");
+
+	call(
+		&window,
+		"conversation_set_bot_memory",
+		json!({ "id": source_id, "memory": "Nyx bakes on Sundays." }),
+	)
+	.expect("the memory is written");
+	call(
+		&window,
+		"conversation_create_bot_skill",
+		json!({
+			"botId": source_id,
+			"draft": {
+				"name": "Baking Bread",
+				"description": "How to bake.",
+				"body": "Bake at 220 degrees.",
+			},
+		}),
+	)
+	.expect("the skill is written");
+	let clock =
+		json!({ "command": "clock-mcp", "args": ["--stdio"], "env": { "TOKEN": "${TOKEN}" } });
+	call(
+		&window,
+		"conversation_set_bot_mcp_server",
+		json!({ "botId": source_id, "name": "clock", "config": clock }),
+	)
+	.expect("the server is written");
+	call(
+		&window,
+		"env_set",
+		json!({ "scope": a_bot_scope(&source_id, &held), "name": "TOKEN", "value": "figs" }),
+	)
+	.expect("the bot keeps the value the server reads");
+	call(
+		&window,
+		"env_set",
+		json!({
+			"scope": { "kind": "server", "name": "clock", "owner": a_bot_scope(&source_id, &held) },
+			"name": "CLOCK_TOKEN",
+			"value": "ticks",
+		}),
+	)
+	.expect("the server scope keeps its value");
+	call(
+		&window,
+		"env_set",
+		json!({ "scope": { "kind": "space", "id": held }, "name": "SHARED", "value": "space" }),
+	)
+	.expect("the space keeps its value");
+
+	let source_titles = titles_of(&window, &source_id);
+	let source_servers = json_at(&bundle_of(&app, &source_id).join(".mcp.json"));
+	let source_env = env_of(&app, &source_id, &held);
+	let before = call(&window, "conversation_bots", json!({ "spaceId": held })).expect("the bots");
+	assert!(source_titles.len() > 1, "the source carries a single write in its history");
+
+	let duplicate =
+		call(&window, "conversation_duplicate_bot", json!({ "botId": source_id, "spaceId": away }))
+			.expect("the bot is duplicated");
+	let duplicate_id = duplicate["id"].as_str().expect("the duplicate holds an id").to_owned();
+
+	let titles = titles_of(&window, &duplicate_id);
+	assert!(titles.len() > source_titles.len(), "the copy wrote nothing of its own");
+	assert_eq!(
+		&titles[titles.len() - source_titles.len()..],
+		source_titles.as_slice(),
+		"the history of the source did not come over"
+	);
+	assert_eq!(duplicate["memory"], json!("Nyx bakes on Sundays."));
+	assert_eq!(
+		json_at(&bundle_of(&app, &duplicate_id).join(".mcp.json")),
+		source_servers,
+		"the servers the source declares did not come over"
+	);
+	let carried = env_of(&app, &duplicate_id, &away);
+	assert_eq!(carried.base.get("TOKEN").map(String::as_str), Some("figs"));
+	assert_eq!(carried.per_server["clock"].get("CLOCK_TOKEN").map(String::as_str), Some("ticks"));
+	assert_eq!(carried.base.get("SHARED"), None, "the copy took a value it only inherited");
+
+	assert_eq!(call(&window, "conversation_bots", json!({ "spaceId": held })), Ok(before));
+	assert_eq!(titles_of(&window, &source_id), source_titles, "the source lost its history");
+	assert_eq!(
+		json_at(&bundle_of(&app, &source_id).join(".mcp.json")),
+		source_servers,
+		"the source lost the servers it declares"
+	);
+	assert_eq!(env_of(&app, &source_id, &held), source_env, "the source lost its environment");
+}
+
+#[test]
+fn a_duplicate_carries_the_memory_the_source_row_holds_when_its_bundle_carries_no_block() {
+	let home = Home::new();
+	let app = home.app();
+	let window = window(&app);
+
+	let held = a_space(&window, "Home");
+	let source_id = a_bot_in(&window, &held, "Nyx");
+	call(
+		&window,
+		"conversation_set_bot_memory",
+		json!({ "id": source_id, "memory": "Nyx bakes on Sundays." }),
+	)
+	.expect("the memory is written");
+	let root = bundles::root(app.handle()).expect("the bundle root");
+	let agent = bundles::agent_file(&root, &source_id).expect("the agent file");
+	std::fs::write(
+		&agent,
+		format!("---\nname: agent\nmetadata:\n  opennestBotId: \"{source_id}\"\n---\n\nAnswer briefly.\n"),
+	)
+	.expect("the block is taken out of the bundle");
+
+	let duplicate = call(&window, "conversation_duplicate_bot", json!({ "botId": source_id }))
+		.expect("the bot is duplicated");
+
+	assert_eq!(duplicate["memory"], json!("Nyx bakes on Sundays."));
+}
+
+fn pins_in(window: &WebviewWindow<MockRuntime>, space_id: &str, except: &str) -> Vec<Value> {
+	let mut taken: Vec<Value> = call(window, "conversation_bots", json!({ "spaceId": space_id }))
+		.expect("the bots")
+		.as_array()
+		.expect("a list")
+		.iter()
+		.filter(|bot| bot["id"] != json!(except))
+		.map(|bot| bot["pinPosition"].clone())
+		.filter(|pin| !pin.is_null())
+		.collect();
+	taken.extend(
+		call(window, "section_list", json!({ "spaceId": space_id }))
+			.expect("the sections")
+			.as_array()
+			.expect("a list")
+			.iter()
+			.map(|section| section["position"].clone()),
+	);
+	taken
+}
+
+#[test]
+fn a_duplicate_of_a_pinned_bot_takes_a_place_of_its_own_and_none_when_it_lands_elsewhere() {
+	let home = Home::new();
+	let app = home.app();
+	let window = window(&app);
+
+	let held = a_space(&window, "Home");
+	let away = a_space(&window, "Away");
+	let source_id = a_bot_in(&window, &held, "Nyx");
+	let neighbour_id = a_bot_in(&window, &held, "Ada");
+	let section = call(&window, "section_create", json!({ "spaceId": held, "name": "Kitchen" }))
+		.expect("the section is created")["id"]
+		.as_str()
+		.expect("the section holds an id")
+		.to_owned();
+	call(&window, "bot_move_to_section", json!({ "botId": neighbour_id, "sectionId": section }))
+		.expect("the neighbour is pinned");
+	call(&window, "bot_move_to_section", json!({ "botId": source_id, "sectionId": section }))
+		.expect("the source is pinned");
+
+	let duplicate = call(&window, "conversation_duplicate_bot", json!({ "botId": source_id }))
+		.expect("the bot is duplicated");
+	let duplicate_id = duplicate["id"].as_str().expect("the duplicate holds an id").to_owned();
+
+	assert_eq!(duplicate["sectionId"], json!(section));
+	assert!(duplicate["pinPosition"].is_i64(), "the copy of a pinned bot is not pinned");
+	assert!(
+		!pins_in(&window, &held, &duplicate_id).contains(&duplicate["pinPosition"]),
+		"the copy took a place another row of the space already holds"
+	);
+
+	let elsewhere =
+		call(&window, "conversation_duplicate_bot", json!({ "botId": source_id, "spaceId": away }))
+			.expect("the bot is duplicated");
+
+	assert_eq!(elsewhere["sectionId"], Value::Null);
+	assert_eq!(elsewhere["pinPosition"], Value::Null);
+}
+
+#[test]
+fn a_copy_that_fails_leaves_no_row_no_bundle_and_no_environment_under_the_new_id() {
+	let home = Home::new();
+	let app = home.app();
+	let window = window(&app);
+
+	let held = a_space(&window, "Home");
+	let source_id = a_bot_in(&window, &held, "Nyx");
+	call(
+		&window,
+		"env_set",
+		json!({ "scope": a_bot_scope(&source_id, &held), "name": "TOKEN", "value": "figs" }),
+	)
+	.expect("the bot keeps its value");
+	let bundle_root = bundles::root(app.handle()).expect("the bundle root");
+	let env_root = store::root(app.handle()).expect("the environment root");
+	let agent = bundles::agent_file(&bundle_root, &source_id).expect("the agent file");
+	std::fs::write(
+		&agent,
+		format!("---\nthis names no key\nmetadata:\n  opennestBotId: \"{source_id}\"\n---\n\nAnswer briefly.\n"),
+	)
+	.expect("the agent file is broken");
+	let before = call(&window, "conversation_bots", json!({})).expect("the bots");
+
+	let refusal = call(&window, "conversation_duplicate_bot", json!({ "botId": source_id }))
+		.expect_err("a copy of a bundle that cannot be written was taken");
+
+	assert_eq!(refusal["kind"], json!("unwritableBundle"));
+	assert_eq!(call(&window, "conversation_bots", json!({})), Ok(before));
+	assert_eq!(
+		names_under(&bundle_root, "plugins").len(),
+		1,
+		"a bundle was left behind by a copy that failed"
+	);
+	assert_eq!(names_under(&env_root, "bot"), vec![source_id.clone()]);
+	assert_eq!(names_under(&env_root.join("server"), "bot"), Vec::<String>::new());
+	assert_eq!(
+		env_of(&app, &source_id, &held).base.get("TOKEN").map(String::as_str),
+		Some("figs"),
+		"the source lost its environment"
 	);
 }
 

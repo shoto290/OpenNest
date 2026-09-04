@@ -6,6 +6,7 @@ use crate::avatars;
 use crate::bundles;
 use crate::db::repositories::{conversations, messages, runtime_context};
 use crate::db::DatabaseError;
+use crate::environment::contract::EnvError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -751,6 +752,8 @@ pub enum TranscriptStoreError {
 	RejectedAvatarImage { reason: AvatarRejection },
 	#[serde(rename_all = "camelCase")]
 	UnwritableBundle { detail: String },
+	#[serde(rename_all = "camelCase")]
+	UnwritableEnvironment { failure: EnvError },
 	#[serde(rename_all = "camelCase")]
 	SystemSkill { id: String },
 	#[serde(rename_all = "camelCase")]

@@ -335,6 +335,10 @@ impl ConversationsRepository {
 		self.call_mut(move |connection| Ok(set_memory(connection, &id, &memory))).await?
 	}
 
+	pub async fn pin_bot(&self, id: String) -> Result<Bot, ConversationError> {
+		self.call_mut(move |connection| Ok(pinned_bot(connection, &id))).await?
+	}
+
 	pub async fn adopt_instructions(
 		&self,
 		id: String,
@@ -985,6 +989,21 @@ fn set_memory(
 	let transaction = write_transaction(connection)?;
 	let written =
 		transaction.execute("UPDATE bots SET memory = ?2 WHERE id = ?1", params![id, memory])?;
+	refuse_if_untouched(written, id)?;
+	let stored = transaction.query_row(SELECT_BOT, [id], bot)?;
+	transaction.commit()?;
+	Ok(stored)
+}
+
+fn pinned_bot(connection: &mut Connection, id: &str) -> Result<Bot, ConversationError> {
+	let transaction = write_transaction(connection)?;
+	let home: Option<String> = transaction
+		.query_row("SELECT space_id FROM bots WHERE id = ?1", [id], |row| row.get(0))
+		.optional()?;
+	let home = home.ok_or_else(|| ConversationError::UnknownBot { id: id.to_owned() })?;
+	let pin = sections::next_pin(&transaction, &home)?;
+	let written =
+		transaction.execute("UPDATE bots SET pin_position = ?2 WHERE id = ?1", params![id, pin])?;
 	refuse_if_untouched(written, id)?;
 	let stored = transaction.query_row(SELECT_BOT, [id], bot)?;
 	transaction.commit()?;
