@@ -116,7 +116,7 @@ const botMissionDotVariants = cva("size-1.5 rounded-full", {
 			waiting: "bg-bot-badge-attention",
 			failed: "bg-bot-badge-failed",
 			ready: "bg-bot-badge-done",
-			working: "bg-muted-foreground",
+			working: "bg-muted-foreground/40",
 		},
 	},
 })

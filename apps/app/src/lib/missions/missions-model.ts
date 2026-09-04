@@ -101,18 +101,10 @@ export const missionsByBot = (board: MissionOnBoard[]): MissionsByBot => {
 export const withMissions = <Row extends AppSidebarBot>(
 	rows: Row[],
 	missions: MissionsByBot,
-): Row[] => {
-	const carried = rows.map((row) =>
+): Row[] =>
+	rows.map((row) =>
 		missions[row.id] ? { ...row, mission: missions[row.id] } : row,
 	)
-	const isRaised = (row: Row) =>
-		missions[row.id]?.state === "waiting" && row.pinPosition == null
-
-	return [
-		...carried.filter(isRaised),
-		...carried.filter((row) => !isRaised(row)),
-	]
-}
 
 export const missionRingBadges = (
 	rowsBySpaceId: Record<string, AppSidebarBot[]>,

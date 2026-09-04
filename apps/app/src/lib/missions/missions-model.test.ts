@@ -222,29 +222,6 @@ describe("withMissions", () => {
 	it("leaves a row without a mission exactly as it reads", () => {
 		expect(withMissions([held], {})).toEqual([held])
 	})
-
-	it("raises a row waiting for a human above the rest", () => {
-		const rows = [row({ id: "b-2" }), row({ id: "b-1" }), row({ id: "b-3" })]
-
-		expect(
-			withMissions(rows, { "b-1": { state: "waiting", count: 1 } }).map(
-				(carried) => carried.id,
-			),
-		).toEqual(["b-1", "b-2", "b-3"])
-	})
-
-	it("leaves a pinned row where it is", () => {
-		const rows = [
-			row({ id: "b-2", pinPosition: 0 }),
-			row({ id: "b-1", pinPosition: 1 }),
-		]
-
-		expect(
-			withMissions(rows, { "b-1": { state: "waiting", count: 1 } }).map(
-				(carried) => carried.id,
-			),
-		).toEqual(["b-2", "b-1"])
-	})
 })
 
 describe("missionRingBadges", () => {

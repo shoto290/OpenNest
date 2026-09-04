@@ -170,6 +170,17 @@ const chipStateIn = (row: HTMLElement) => chipIn(row)?.dataset.state
 
 const dotIn = (row: HTMLElement) => slotIn(row, "bot-mission-dot")
 
+const LOOSE_MISSION_ROSTER: AppSidebarBot[] = [
+	{ ...ROSTER[1], lastActivityAt: 3, timestamp: "now" },
+	{ ...ROSTER[4], lastActivityAt: 2, timestamp: "5m" },
+	{
+		...ROSTER[0],
+		lastActivityAt: 1,
+		timestamp: "Tue",
+		mission: { state: "waiting", count: 1 },
+	},
+]
+
 const IDENTITY_BLOTS: BotAvatarBlot[] = [
 	"red",
 	"yellow",
@@ -357,6 +368,15 @@ const expectAlignedRows = async (rows: HTMLElement[]) => {
 
 const colorOf = (row: HTMLElement, slot: string) =>
 	getComputedStyle(slotIn(row, slot)).color
+
+const tokenBackground = (scope: HTMLElement, value: string) => {
+	const probe = document.createElement("div")
+	probe.style.backgroundColor = value
+	scope.append(probe)
+	const color = getComputedStyle(probe).backgroundColor
+	probe.remove()
+	return color
+}
 
 const tokenColor = (scope: HTMLElement, token: string) => {
 	const probe = document.createElement("div")
@@ -978,12 +998,16 @@ export const MissionChips = meta.story({
 		)
 		await expect(chipIn(rows[3])).toHaveAccessibleName("1 mission, working")
 
-		const muted = tokenColor(canvasElement, "--muted-foreground")
 		const dotColours = rows
 			.slice(0, 4)
 			.map((row) => getComputedStyle(dotIn(row)).backgroundColor)
 		await expect(uniqueCount(dotColours)).toBe(4)
-		await expect(dotColours[3]).toBe(muted)
+		await expect(dotColours[3]).toBe(
+			tokenBackground(
+				canvasElement,
+				"color-mix(in oklab, var(--muted-foreground) 40%, transparent)",
+			),
+		)
 		for (const row of rows.slice(0, 4)) {
 			await expect(getComputedStyle(dotIn(row)).animationName).toBe("none")
 		}
@@ -999,6 +1023,31 @@ export const MissionChips = meta.story({
 			"09:24",
 		)
 		await expectAlignedRows(rows)
+	},
+})
+
+export const MissionChipRaised = meta.story({
+	args: { bots: LOOSE_MISSION_ROSTER, selectedBotId: "beacon" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Three loose bots ordered by their last word, where the one carrying a mission that waits on the reader is also the one that spoke longest ago. Check it renders first anyway: a mission that cannot move without a person outranks a room that is merely fresh, so the reader finds what is blocked at the top of the list rather than hunting for a pill down it. Check the two rows below keep the order the zone already sorts them into, and that nothing about the raised row changes shape — same height, same columns, same trailing edge. Only the loose zone moves: a pinned row and a row inside a section stay exactly where the reader put them. Pick `MissionChips` for the pill alone, `Roster` for the same list with no mission in it.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const rows = rowsIn(canvasElement)
+
+		await expect(
+			rows.map((row) => slotIn(row, "roster-row-name").textContent),
+		).toEqual(["Atlas", "Beacon", "Ember"])
+		await expect(chipStateIn(rows[0])).toBe("waiting")
+		await expect(slotIn(rows[0], "roster-row-timestamp")).toHaveTextContent(
+			"Tue",
+		)
+		await expectAlignedRows(rows)
+		await expect(uniqueCount(rowHeights(rows))).toBe(1)
 	},
 })
 

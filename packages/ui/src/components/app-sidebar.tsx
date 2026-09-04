@@ -1254,6 +1254,14 @@ const activityOf = ({ bot, conversation }: PinnedEntry) =>
 const byMostRecent = (one: PinnedEntry, other: PinnedEntry) =>
 	activityOf(other) - activityOf(one)
 
+const isWaitingOnReader = ({ bot }: PinnedEntry) =>
+	bot?.mission?.state === "waiting"
+
+const waitingFirst = (entries: PinnedEntry[]) => [
+	...entries.filter(isWaitingOnReader),
+	...entries.filter((entry) => !isWaitingOnReader(entry)),
+]
+
 const toPin = ({ id, sectionId }: PinnedEntry): RosterPin => ({ id, sectionId })
 
 const botEntry = (
@@ -1618,12 +1626,14 @@ const BotRoster = ({
 		held: AppSidebarBot[],
 	) =>
 		menuOf(
-			[
-				...heldConversations.map((conversation) =>
-					conversationEntry(conversation),
-				),
-				...held.map((bot) => botEntry(bot)),
-			].toSorted(byMostRecent),
+			waitingFirst(
+				[
+					...heldConversations.map((conversation) =>
+						conversationEntry(conversation),
+					),
+					...held.map((bot) => botEntry(bot)),
+				].toSorted(byMostRecent),
+			),
 			false,
 		)
 
