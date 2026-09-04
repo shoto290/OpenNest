@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-import { DELEGATE_TOOL } from "./delegate"
+import { DELEGATE_TOOL } from "./opennest-server"
 import { createPermissionGate } from "./permissions"
 
 import type { SessionFrame } from "../provider"

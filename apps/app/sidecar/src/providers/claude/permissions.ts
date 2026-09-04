@@ -1,7 +1,7 @@
 import type { CanUseTool } from "@anthropic-ai/claude-agent-sdk"
 
 import { type BundleScope, isBundleWrite } from "./bundle-writes"
-import { DELEGATE_TOOL } from "./delegate"
+import { DELEGATE_TOOL } from "./opennest-server"
 
 import type { EmitFrame, PermissionDecision } from "../provider"
 

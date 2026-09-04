@@ -8,8 +8,8 @@ import {
 
 import { readBotSettings, type SettingsOptions } from "./bot-settings"
 import type { BundleScope } from "./bundle-writes"
-import { delegateServer } from "./delegate"
 import { resolveExecutable } from "./executable"
+import { opennestServer } from "./opennest-server"
 import { createPermissionGate } from "./permissions"
 import { createPromptStream } from "./prompt-stream"
 import { securityFloor } from "./security-floor"
@@ -93,7 +93,11 @@ export const buildOptions = (
 					agent: request.agent,
 					mcpServers: {
 						...resolved.servers,
-						...delegateServer({ cwd: request.cwd, managedSettings }),
+						...opennestServer({
+							cwd: request.cwd,
+							managedSettings,
+							session: request.session,
+						}),
 					},
 				}
 			: {}),

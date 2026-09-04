@@ -14,12 +14,15 @@ const MANIFEST: &str = ".claude-plugin/plugin.json";
 
 const LEARN: &str = "skills/learn/SKILL.md";
 
+const ROUTINES: &str = "skills/routines/SKILL.md";
+
 const TRIGGERS: &str = ".triggers.json";
 
-const FILES: [(&str, &[u8]); 6] = [
+const FILES: [(&str, &[u8]); 7] = [
 	(MANIFEST, include_bytes!("../../plugins/opennest/.claude-plugin/plugin.json")),
 	(TRIGGERS, include_bytes!("../../plugins/opennest/.triggers.json")),
 	(LEARN, include_bytes!("../../plugins/opennest/skills/learn/SKILL.md")),
+	(ROUTINES, include_bytes!("../../plugins/opennest/skills/routines/SKILL.md")),
 	(
 		"skills/learn/references/skills.md",
 		include_bytes!("../../plugins/opennest/skills/learn/references/skills.md"),
@@ -119,6 +122,22 @@ mod tests {
 		assert!(text.contains("preload: true"), "got {text}");
 		assert!(text.contains(MEMORY_OPEN), "got {text}");
 		assert!(text.contains(MEMORY_CLOSE), "got {text}");
+	}
+
+	#[test]
+	fn the_routines_skill_is_preloaded_and_says_when_to_ask_before_it_writes() {
+		let text = String::from_utf8_lossy(embedded(ROUTINES));
+
+		assert!(text.contains("preload: true"), "got {text}");
+		for said in [
+			"List first.",
+			"wait for their yes",
+			"never a cron expression",
+			"Routines panel",
+			"works there exactly as anywhere else",
+		] {
+			assert!(text.contains(said), "{said} is missing");
+		}
 	}
 
 	#[test]

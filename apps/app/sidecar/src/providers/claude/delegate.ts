@@ -1,8 +1,7 @@
 import {
-	createSdkMcpServer,
-	type Options,
 	query,
 	type SDKMessage,
+	type SdkMcpToolDefinition,
 	type Settings,
 	tool,
 } from "@anthropic-ai/claude-agent-sdk"
@@ -11,11 +10,7 @@ import { z } from "zod"
 import { resolveExecutable } from "./executable"
 import { createPromptStream } from "./prompt-stream"
 
-const TOOL_NAME = "delegate"
-
-export const DELEGATE_SERVER = "opennest"
-
-export const DELEGATE_TOOL = `mcp__${DELEGATE_SERVER}__${TOOL_NAME}`
+export const DELEGATE_TOOL_NAME = "delegate"
 
 const READ_ONLY_TOOLS = ["Read", "Glob", "Grep", "WebFetch", "WebSearch"]
 
@@ -34,7 +29,7 @@ const ENDED = "the run ended before reporting"
 
 const failed = (cause: string) => `The delegated run gave no report: ${cause}.`
 
-type DelegateScope = {
+export type DelegateScope = {
 	cwd: string
 	managedSettings: Settings
 }
@@ -79,25 +74,19 @@ const delegated = async (
 	}
 }
 
-export const delegateServer = (
+export const delegateTool = (
 	scope: DelegateScope,
-): NonNullable<Options["mcpServers"]> => ({
-	[DELEGATE_SERVER]: createSdkMcpServer({
-		name: DELEGATE_SERVER,
-		tools: [
-			tool(
-				TOOL_NAME,
-				DESCRIPTION,
-				{ instructions: z.string().describe(INSTRUCTIONS) },
-				async ({ instructions }) => ({
-					content: [
-						{
-							type: "text" as const,
-							text: await delegated(instructions, scope),
-						},
-					],
-				}),
-			),
-		],
-	}),
-})
+): SdkMcpToolDefinition<{ instructions: z.ZodString }> =>
+	tool(
+		DELEGATE_TOOL_NAME,
+		DESCRIPTION,
+		{ instructions: z.string().describe(INSTRUCTIONS) },
+		async ({ instructions }) => ({
+			content: [
+				{
+					type: "text" as const,
+					text: await delegated(instructions, scope),
+				},
+			],
+		}),
+	)

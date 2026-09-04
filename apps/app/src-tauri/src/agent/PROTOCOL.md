@@ -227,13 +227,16 @@ A `host_request` never reaches the translator: it raises no `AgentEvent`, it end
 no turn, and it does not promote a session to `Running`.
 
 `subtype` names who serves the request. `routine` is served by
-`routines::host::RoutineHost`, over the five operations `list`, `create`,
-`update`, `runNow` and `delete`:
+`routines::host::RoutineHost`, over the six operations `list`, `triggerSources`,
+`create`, `update`, `runNow` and `delete`, which the sidecar exposes to the agent
+as the tools of the `opennest` MCP server:
 
 - the conversation and the bot come from the scope the session was opened with,
   never from the payload — a payload naming a field its operation does not
   declare is refused, that field named, and nothing is written;
 - `list` answers every routine of that conversation, whatever bot owns one;
+- `triggerSources` answers the sources that bot may be triggered by, each with
+  the fields its events carry;
 - `update`, `runNow` and `delete` refuse a routine of another conversation or of
   another bot, that routine named;
 - every conversation is served the same way, a bot's own solo thread included:

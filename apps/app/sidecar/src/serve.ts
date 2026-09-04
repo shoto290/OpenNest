@@ -39,6 +39,7 @@ type Command = {
 }
 
 export const sessionRequest = (command: Command): SessionRequest => ({
+	session: command.session,
 	cwd: command.cwd ?? process.cwd(),
 	resume: command.resume,
 	pluginPath: command.pluginPath,

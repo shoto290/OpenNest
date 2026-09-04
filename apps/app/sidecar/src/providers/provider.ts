@@ -12,6 +12,7 @@ export type ServerEnv = {
 }
 
 export type SessionRequest = {
+	session?: string
 	cwd: string
 	resume?: string
 	pluginPath?: string
