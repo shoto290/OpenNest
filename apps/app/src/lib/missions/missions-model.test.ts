@@ -224,6 +224,28 @@ describe("withMissions", () => {
 	})
 })
 
+const MISSION_STATES: MissionState[] = [
+	"working",
+	"waiting_bot",
+	"waiting_human",
+	"ready_to_merge",
+	"failed",
+	"done",
+]
+
+describe("mission badges", () => {
+	it("says the same thing on a roster ring as on a panel row", () => {
+		for (const state of MISSION_STATES) {
+			const chip = missionsByBot([onBoard({ state })])["b-1"]
+			const ring = chip
+				? missionRingBadges({ work: [row({ mission: chip })] }).work[0].badge
+				: undefined
+
+			expect(ring ?? null).toBe(toMissionRows([mission({ state })])[0].badge)
+		}
+	})
+})
+
 describe("missionRingBadges", () => {
 	const ringOf = (mission?: AppSidebarBot["mission"]) =>
 		missionRingBadges({ work: [row({ mission })] }).work[0].badge

@@ -72,11 +72,13 @@ const MOST_URGENT_FIRST: BotMissionState[] = [
 	"working",
 ]
 
-const RING_BADGE_OF: Partial<Record<BotMissionState, BotBadge>> = {
-	waiting: "attention",
-	failed: "failed",
-	ready: "done",
-}
+const RING_BADGE_OF: Partial<Record<BotMissionState, BotBadge>> =
+	Object.fromEntries(
+		Object.entries(CHIP_STATE_OF).flatMap(([state, chip]) => {
+			const badge = BADGE_BY_STATE[state as MissionState]
+			return badge ? [[chip, badge]] : []
+		}),
+	)
 
 const mostUrgent = (states: BotMissionState[]): BotMissionState =>
 	MOST_URGENT_FIRST.find((state) => states.includes(state)) ?? "working"
