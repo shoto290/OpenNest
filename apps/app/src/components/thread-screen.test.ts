@@ -64,6 +64,8 @@ const ROUTINE_TITLE = "Nightly report"
 
 const CAUSES_TITLE = "Routine reports could not be read"
 
+const BOT_TITLE = "Release manager"
+
 const A_MINUTE = 60_000
 
 const REPORTED: SpokenTurn = {
@@ -199,9 +201,12 @@ const threadOf = ({
 	onToggleSettings: () => undefined,
 })
 
-const screenOf = (thread: Thread) =>
+const NO_BOT_RECORDS: Bot[] = []
+
+const screenOf = (thread: Thread, bots: Bot[] = NO_BOT_RECORDS) =>
 	createElement(ThreadScreen, {
 		attachments,
+		bots,
 		drafts: createDraftsController(),
 		readerName: "Reader",
 		thread,
@@ -293,6 +298,7 @@ const SAID_AND_LANDED: AgentEvent[] = [
 
 type Room = {
 	driver: ScriptedDriver
+	bots: Bot[]
 	thread: Thread
 	idOf: (name: string) => string
 	send: (text: string) => Promise<void>
@@ -354,6 +360,7 @@ const roomOf = async ({
 
 	return {
 		driver,
+		bots,
 		thread: {
 			kind: "conversation",
 			conversation,
@@ -587,6 +594,33 @@ describe("ThreadScreen", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Dismiss notice" }))
 
 		expect(screen.queryByText(PINS_TITLE)).toBeNull()
+	})
+
+	it("writes the title of the bot record next to the author of that bot id", async () => {
+		const room = await roomOf({ names: ["Ada"], spoken: [SAID_BEFORE] })
+		render(
+			screenOf(
+				room.thread,
+				room.bots.map((bot) => ({ ...bot, title: BOT_TITLE })),
+			),
+		)
+		await settle()
+
+		expect(screen.getByText(SAID_BEFORE.text)).toBeTruthy()
+		expect(screen.getByText(BOT_TITLE)).toBeTruthy()
+	})
+
+	it("leaves the author of a participant no bot record matches with no title", async () => {
+		const room = await roomOf({ names: ["Ada"], spoken: [SAID_BEFORE] })
+		render(
+			screenOf(room.thread, [
+				{ ...room.bots[0], id: "bot-elsewhere", title: BOT_TITLE },
+			]),
+		)
+		await settle()
+
+		expect(screen.getByText(SAID_BEFORE.text)).toBeTruthy()
+		expect(screen.queryByText(BOT_TITLE)).toBeNull()
 	})
 
 	it("names the routine on the turn its report opened", async () => {

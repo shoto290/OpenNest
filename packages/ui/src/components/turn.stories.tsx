@@ -107,6 +107,42 @@ const GONE: MessageAuthor = {
 
 const ROOM: RosterBot[] = [LEAD, SECOND]
 
+const RELEASE_MANAGER = "Release manager"
+
+const TITLED_ROOM: { author: MessageAuthor; message: string }[] = [
+	{
+		author: { ...LEAD, title: "Ops" },
+		message: "The release notes are ready to read.",
+	},
+	{
+		author: SECOND,
+		message: "The migration is green on a fresh database.",
+	},
+	{
+		author: {
+			id: "bot-elia",
+			name: "Elia of the Migration and Release Desk",
+			animal: "mouse",
+			title: RELEASE_MANAGER,
+		},
+		message: "I am holding the tag until both of you sign off.",
+	},
+	{
+		author: {
+			id: "bot-nyx",
+			name: "Nyx",
+			animal: "bear",
+			title: "Release manager for the whole platform",
+		},
+		message: "I will publish once the tag is cut.",
+	},
+]
+
+const DELETED_TITLED: MessageAuthor = {
+	...GONE,
+	title: RELEASE_MANAGER,
+}
+
 const firstCharacterLeft = (element: HTMLElement) =>
 	element.getBoundingClientRect().left +
 	Number.parseFloat(getComputedStyle(element).paddingInlineStart)
@@ -801,6 +837,84 @@ export const Authored = meta.story({
 			firstCharacterLeft(bubble),
 			0,
 		)
+	},
+})
+
+export const Titled = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A conversation where three of the four bots carry a title. The title is written in a pill right after the name, the same pill the roster row wears, so a reader tells an ops bot from a release bot without opening the roster. A bot with no title keeps the bare name, no pill and no gap held for one. The column here is 320px wide on purpose: a title of fifteen characters is written whole, the name gives way before the pill does, and a title longer than the pill allows is cut with an ellipsis rather than pushing the crown or the header out of the column.",
+			},
+		},
+	},
+	render: () => (
+		<div className="flex w-80 flex-col gap-6">
+			{TITLED_ROOM.map(({ author, message }) => (
+				<AssistantTurn author={author} copyText={message} key={author.id}>
+					{message}
+				</AssistantTurn>
+			))}
+		</div>
+	),
+	play: async ({ canvasElement }) => {
+		const headers = slotsIn(canvasElement, "message-author")
+		const [titled, untitled, longName, longTitle] = headers
+
+		await expect(headers).toHaveLength(4)
+		await expect(slotIn(titled, "bot-title-badge")).toHaveTextContent("Ops")
+		await expect(
+			untitled.querySelector('[data-slot="bot-title-badge"]'),
+		).toBeNull()
+
+		const whole = slotIn(longName, "bot-title-badge")
+		const name = longName.firstElementChild as HTMLElement
+
+		await expect(whole).toHaveTextContent(RELEASE_MANAGER)
+		await expect(whole.scrollWidth).toBe(whole.clientWidth)
+		await expect(name.scrollWidth).toBeGreaterThan(name.clientWidth)
+
+		const cut = slotIn(longTitle, "bot-title-badge")
+
+		await expect(cut.scrollWidth).toBeGreaterThan(cut.clientWidth)
+
+		const column = slotIn(canvasElement, "message").parentElement as HTMLElement
+
+		for (const header of headers) {
+			await expect(header.getBoundingClientRect().right).toBeLessThanOrEqual(
+				column.getBoundingClientRect().right,
+			)
+		}
+	},
+})
+
+export const TitledDeleted = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"An author deleted since it wrote, still carrying its title. The name dims, and the pill dims with it, so the two read as one line written by someone who has left rather than a dead name next to a live label. Check that the pill sits at the same weight as the name, before the bin, and that the message under it stays as readable as any other.",
+			},
+		},
+	},
+	render: () => (
+		<div className="mx-auto flex max-w-2xl flex-col gap-6">
+			<AssistantTurn author={DELETED_TITLED} copyText={ANSWER}>
+				{ANSWER}
+			</AssistantTurn>
+		</div>
+	),
+	play: async ({ canvasElement }) => {
+		const header = slotIn(canvasElement, "message-author")
+		const badge = slotIn(header, "bot-title-badge")
+		const name = header.firstElementChild as HTMLElement
+
+		await expect(badge).toHaveTextContent(RELEASE_MANAGER)
+		await expect(getComputedStyle(badge).color).toBe(
+			getComputedStyle(name).color,
+		)
+		await expect(slotIn(header, "message-author-deleted")).toBeVisible()
 	},
 })
 

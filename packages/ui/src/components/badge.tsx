@@ -1,6 +1,7 @@
 import { mergeProps } from "@base-ui/react/merge-props"
 import { useRender } from "@base-ui/react/use-render"
 import { cva, type VariantProps } from "class-variance-authority"
+import type { ComponentPropsWithRef } from "react"
 
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -100,12 +101,32 @@ const BotBadgeDot = ({
 	/>
 )
 
+const BOT_TITLE_BADGE =
+	"shrink-0 truncate rounded-full bg-foreground/10 px-1.5 py-0.5 font-medium text-[10px] text-foreground/80 leading-none"
+
+type BotTitleBadgeProps = Omit<ComponentPropsWithRef<"span">, "title"> & {
+	title?: string
+}
+
+const BotTitleBadge = ({ title, className, ...props }: BotTitleBadgeProps) =>
+	title ? (
+		<span
+			data-slot="bot-title-badge"
+			className={cn(BOT_TITLE_BADGE, className)}
+			{...props}
+		>
+			{title}
+		</span>
+	) : null
+
 export {
 	Badge,
 	BOT_BADGES,
 	type BotBadge,
 	BotBadgeDot,
 	type BotBadgeDotProps,
+	BotTitleBadge,
+	type BotTitleBadgeProps,
 	badgeVariants,
 	botBadgeRingVariants,
 	botBadgeVariants,

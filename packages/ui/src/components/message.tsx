@@ -7,6 +7,7 @@ import {
 } from "react"
 import { useTranslation } from "react-i18next"
 
+import { BotTitleBadge } from "@workspace/ui/components/badge"
 import { Icons } from "@workspace/ui/components/icons"
 import { MessageSideContext } from "@workspace/ui/components/message-side-context"
 import type { RosterBot } from "@workspace/ui/components/roster"
@@ -170,7 +171,7 @@ export function MessageAuthor({
 	return (
 		<MessageHeader
 			data-slot="message-author"
-			className={cn("gap-1", className)}
+			className={cn("min-w-0 gap-1", className)}
 			{...props}
 		>
 			<span
@@ -181,6 +182,13 @@ export function MessageAuthor({
 			>
 				{author.name}
 			</span>
+			<BotTitleBadge
+				className={cn(
+					"max-w-24",
+					author.isDeleted && "bg-muted text-muted-foreground",
+				)}
+				title={author.title}
+			/>
 			{author.isLead ? (
 				<>
 					<Icons.Crown

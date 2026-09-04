@@ -15,6 +15,7 @@ type WorkspaceBodyProps = {
 	haveSpacesFailed: boolean
 	onRetrySpaces: () => void
 	bot?: Bot
+	bots: Bot[]
 	conversation?: Conversation
 	conversationRuntimes: ConversationRuntimes
 	chat: Chat
@@ -88,6 +89,7 @@ export function WorkspaceBody(props: WorkspaceBodyProps) {
 	return (
 		<ThreadScreen
 			attachments={props.attachments}
+			bots={props.bots}
 			drafts={props.drafts}
 			readerName={props.readerName}
 			thread={thread}

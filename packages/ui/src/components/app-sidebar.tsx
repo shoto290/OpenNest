@@ -20,7 +20,11 @@ import {
 	AvatarGroup,
 	type ConversationParticipant,
 } from "@workspace/ui/components/avatar-group"
-import { type BotBadge, BotBadgeDot } from "@workspace/ui/components/badge"
+import {
+	type BotBadge,
+	BotBadgeDot,
+	BotTitleBadge,
+} from "@workspace/ui/components/badge"
 import {
 	BotAvatar,
 	type BotAvatarBlot,
@@ -100,8 +104,6 @@ const TIMESTAMP_SLOT =
 	"ml-auto h-5 w-11 shrink-0 truncate text-right text-[11px] text-muted-foreground leading-5 tabular-nums"
 
 const NAME_LINE = "flex h-5 min-w-0 items-center gap-1.5"
-const TITLE_BADGE =
-	"max-w-16 shrink-0 truncate rounded-full bg-sidebar-foreground/10 px-1.5 py-0.5 font-medium text-[10px] text-sidebar-foreground/80 leading-none"
 
 const ROW_STACK = "relative flex h-9 min-w-0 flex-col justify-center"
 
@@ -630,11 +632,11 @@ const BotRosterRow = ({
 								<span className="truncate" data-slot="roster-row-name">
 									{bot.name}
 								</span>
-								{bot.title ? (
-									<span className={TITLE_BADGE} data-slot="roster-row-badge">
-										{bot.title}
-									</span>
-								) : null}
+								<BotTitleBadge
+									className="max-w-16"
+									data-slot="roster-row-badge"
+									title={bot.title}
+								/>
 								<span
 									className={TIMESTAMP_SLOT}
 									data-slot="roster-row-timestamp"

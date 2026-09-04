@@ -8,6 +8,7 @@ import type { BotAvatarBlot } from "@workspace/ui/components/bot-settings"
 type RosterBot = {
 	id: string
 	name: string
+	title?: string
 	animal?: BotAvatarAnimal
 	blot?: BotAvatarBlot
 	image?: string
