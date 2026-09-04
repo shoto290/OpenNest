@@ -304,7 +304,7 @@ async fn settling(
 		return Ok(());
 	};
 	let fresh = Fingerprint { checks, ..standing.clone() };
-	recorded(database, mission, Some(&standing), fresh, None).await
+	recorded(database, &mission.id, Some(&standing), fresh, None).await
 }
 
 async fn listed(
@@ -321,14 +321,14 @@ async fn listed(
 		return Ok(());
 	};
 	let checks = match asks_for_checks(held.as_ref(), &pull) {
-		false => kept_checks(held.as_ref()),
+		false => held.as_ref().map_or(Checks::None, |held| held.checks),
 		true => match learned_checks(reach, kept, &mission.repository, &pull.head.sha).await? {
 			Some(checks) => checks,
 			None => return Ok(()),
 		},
 	};
 	let fresh = Fingerprint::of(&pull, checks);
-	recorded(database, mission, held.as_ref(), fresh, Some(&pull.html_url)).await?;
+	recorded(database, &mission.id, held.as_ref(), fresh, Some(&pull.html_url)).await?;
 	kept.remember(&mission.id, etag);
 	Ok(())
 }
@@ -351,7 +351,7 @@ async fn learned_checks(
 
 async fn recorded(
 	database: &db::Database,
-	mission: &WatchedMission,
+	mission_id: &str,
 	held: Option<&Fingerprint>,
 	fresh: Fingerprint,
 	url: Option<&str>,
@@ -362,12 +362,8 @@ async fn recorded(
 	let entries = appended(held, &fresh, url);
 	let stored = serde_json::to_string(&fresh)
 		.map_err(|error| Failure::Unreadable(format!("no fingerprint: {error}")))?;
-	database.missions().record_github(mission.id.clone(), entries, stored).await?;
+	database.missions().record_github(mission_id.to_owned(), entries, stored).await?;
 	Ok(())
-}
-
-fn kept_checks(held: Option<&Fingerprint>) -> Checks {
-	held.map_or(Checks::None, |held| held.checks)
 }
 
 fn asks_for_checks(held: Option<&Fingerprint>, pull: &Pull) -> bool {
