@@ -446,7 +446,6 @@ describe("ThreadScreen", () => {
 		vi.clearAllMocks()
 		listRoutines.mockResolvedValue([SOLO_ROUTINE])
 		listSources.mockResolvedValue([SCHEDULE_SOURCE])
-		updateRoutine.mockResolvedValue({ ...SOLO_ROUTINE, isEnabled: false })
 	})
 
 	afterEach(() => {
@@ -455,6 +454,7 @@ describe("ThreadScreen", () => {
 	})
 
 	it("opens the routines of a solo bot thread on its main conversation", async () => {
+		updateRoutine.mockResolvedValue({ ...SOLO_ROUTINE, isEnabled: false })
 		render(screenOf(threadOf({ id: "bot-1", name: "Nyx", said: "held" })))
 		await settle()
 
