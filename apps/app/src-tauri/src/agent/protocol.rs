@@ -77,6 +77,7 @@ pub enum Frame {
 	Result(ResultFrame),
 	Commands(CommandsFrame),
 	ControlRequest(ControlRequestFrame),
+	HostRequest(HostRequestFrame),
 	ControlResponse(ControlResponseFrame),
 	SettingsRejected(RejectionFrame),
 	ServerEnvRejected(RejectionFrame),
@@ -227,6 +228,15 @@ pub enum ControlRequestBody {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HostRequestFrame {
+	pub request_id: String,
+	pub request: Value,
+}
+
+pub type HostAnswer = Result<Value, Value>;
+
+#[derive(Debug, Clone, Deserialize)]
 pub struct ControlResponseFrame {
 	pub response: ControlResponseBody,
 }
@@ -289,6 +299,14 @@ pub fn deny_command(session: &str, request_id: &str, message: &str) -> Value {
 			"decision": { "behavior": "deny", "message": message }
 		}),
 	)
+}
+
+pub fn host_response_command(session: &str, request_id: &str, answer: &HostAnswer) -> Value {
+	let body = match answer {
+		Ok(result) => serde_json::json!({ "requestId": request_id, "result": result }),
+		Err(error) => serde_json::json!({ "requestId": request_id, "error": error }),
+	};
+	command("host_response", session, body)
 }
 
 pub const CHECK: &str = "check";

@@ -20,6 +20,7 @@ use crate::db::repositories::runtime_context::ParticipantKey;
 use crate::environment::contract::{EnvOwner, ResolvedEnv};
 use crate::environment::store as environment;
 use crate::private_files;
+use crate::routines::host::RoutineHost;
 
 pub const EVENT_CHANNEL: &str = "agent://event";
 
@@ -587,6 +588,11 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 		.serving(identity.server_env)
 		.with_app_data(app.path().app_data_dir().ok())
 		.in_conversation(scope.conversation_id.clone())
+		.hosting(Arc::new(RoutineHost::new(
+			app.clone(),
+			scope.conversation_id.clone(),
+			scope.bot_id.clone(),
+		)))
 		.answering(output_schema);
 
 	let refused_id = resume.clone();

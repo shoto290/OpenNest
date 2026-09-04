@@ -1,5 +1,7 @@
 import { describeProvider } from "./describe"
 import { describeError } from "./describe-error"
+import type { HostError } from "./host"
+import { closeHostChannel, openHostChannel, settleHostAnswer } from "./host"
 import { readLines } from "./read-lines"
 
 import type {
@@ -32,6 +34,8 @@ type Command = {
 	text?: string
 	requestId?: string
 	decision?: PermissionDecision
+	result?: unknown
+	error?: HostError
 }
 
 export const sessionRequest = (command: Command): SessionRequest => ({
@@ -92,6 +96,7 @@ export const serve = async (requestedId?: string) => {
 			void opened.close()
 		})
 		opening.delete(session)
+		closeHostChannel(session)
 	}
 
 	const answerHost = async ({ type, text }: Command) => {
@@ -118,6 +123,7 @@ export const serve = async (requestedId?: string) => {
 		}
 		switch (command.type) {
 			case "open":
+				openHostChannel(session, emitter(session))
 				opening.set(session, open(command, session))
 				return
 			case "prompt":
@@ -132,6 +138,8 @@ export const serve = async (requestedId?: string) => {
 						opened.decide(command.requestId, command.decision)
 					}
 				})
+			case "host_response":
+				return settleHostAnswer(session, command)
 			case "close":
 				return close(session)
 		}

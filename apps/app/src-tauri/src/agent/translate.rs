@@ -150,9 +150,11 @@ impl Translator {
 			Frame::ControlRequest(request) => {
 				self.on_control_request(request.request_id, request.request)
 			}
-			Frame::Opened | Frame::Closed(_) | Frame::ControlResponse(_) | Frame::Ignored => {
-				Vec::new()
-			}
+			Frame::Opened
+			| Frame::Closed(_)
+			| Frame::ControlResponse(_)
+			| Frame::HostRequest(_)
+			| Frame::Ignored => Vec::new(),
 		}
 	}
 
