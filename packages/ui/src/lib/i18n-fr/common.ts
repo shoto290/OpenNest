@@ -32,6 +32,10 @@ const common = {
 		question: "Vous a posé une question",
 		permission: "Demande votre permission",
 		finishedTurn: "A terminé son tour",
+		mission: {
+			waiting_human: "A besoin de vous sur {{ticket}}",
+			ready_to_merge: "{{ticket}} est prête à fusionner",
+		},
 		failure: {
 			clicks: "Cliquer sur une notification n'ouvrira plus sa conversation",
 			focus:

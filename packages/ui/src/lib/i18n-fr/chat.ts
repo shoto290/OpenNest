@@ -552,6 +552,11 @@ const chat = {
 				description:
 					"Rien n'a été enregistré sur la mission. Renvoyez votre réponse.",
 			},
+			run: {
+				title: "Le bot n'a pas pu être lancé sur sa mission",
+				description:
+					"Rien n'a été modifié sur la mission. Ouvrez son fil pour voir où elle en est.",
+			},
 		},
 	},
 } as const

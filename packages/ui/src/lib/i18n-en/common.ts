@@ -33,6 +33,10 @@ const common = {
 		question: "Asked you a question",
 		permission: "Wants your permission",
 		finishedTurn: "Finished its turn",
+		mission: {
+			waiting_human: "Needs you on {{ticket}}",
+			ready_to_merge: "{{ticket}} is ready to merge",
+		},
 		failure: {
 			clicks: "Clicking a notification will no longer open its conversation",
 			focus: "Notifications may now appear while the app is in front",

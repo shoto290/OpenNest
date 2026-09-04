@@ -58,7 +58,9 @@ import { useEnvironment } from "@/lib/environment/use-environment"
 import { hasOverlayWindowControls, isSidebarResizable } from "@/lib/host"
 import { useExternalLinks } from "@/lib/links/use-external-links"
 import { missionRingBadges, withMissions } from "@/lib/missions/missions-model"
+import { createOpenedMissionController } from "@/lib/missions/opened-mission-controller"
 import { useMissionBoard } from "@/lib/missions/use-mission-board"
+import { useMissionRunDriver } from "@/lib/missions/use-mission-run-driver"
 import { useNotifications } from "@/lib/notifications/use-notifications"
 import { useRunDriver } from "@/lib/routines/use-run-driver"
 import { useCollapsedSections } from "@/lib/sections/use-collapsed-sections"
@@ -115,6 +117,10 @@ export function App() {
 		[chat.controller, driver, conversationRuntimes],
 	)
 	const drafts = useMemo(createDraftsController, [])
+	const openedMission = useMemo(
+		() => createOpenedMissionController(roster.controller),
+		[roster.controller],
+	)
 	const sections = useSections(store, {
 		move: roster.controller.moveToSection,
 		clear: roster.controller.clearSection,
@@ -146,11 +152,18 @@ export function App() {
 		chat: chat.controller,
 	})
 
+	useMissionRunDriver({
+		driver,
+		store,
+		runtimes: conversationRuntimes,
+	})
+
 	useNotifications({
 		chat: chat.controller,
 		runtimes: conversationRuntimes,
 		roster: roster.controller,
 		spaces: spaces.controller,
+		missions: openedMission,
 		user: user.controller,
 	})
 
@@ -612,6 +625,7 @@ export function App() {
 					isConversationSettingsOpen={isThreadConversationSettingsOpen}
 					isOverlayOpen={isOverlayOpen}
 					isSettingsOpen={isThreadSettingsOpen}
+					missions={openedMission}
 					onOpenConversationSettings={roster.controller.editConversation}
 					onRetrySpaces={loadSpaces}
 					onToggleSettings={toggleSettings}

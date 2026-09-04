@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react"
+import { useCallback, useSyncExternalStore } from "react"
 
 import { AppHeader } from "@workspace/ui/components/app-header"
 import { Notice } from "@workspace/ui/components/notice"
@@ -13,6 +13,7 @@ import type { Chat } from "@/lib/chat/use-chat"
 import type { ConversationRuntimes } from "@/lib/conversations/conversation-runtimes"
 import type { Bot, Conversation } from "@/lib/conversations/store-contract"
 import { hasOverlayWindowControls } from "@/lib/host"
+import type { OpenedMissionController } from "@/lib/missions/opened-mission-controller"
 
 type WorkspaceBodyProps = {
 	haveSpacesFailed: boolean
@@ -30,6 +31,7 @@ type WorkspaceBodyProps = {
 	onToggleSettings: () => void
 	isConversationSettingsOpen: boolean
 	onOpenConversationSettings: (conversationId: string) => void
+	missions: OpenedMissionController
 }
 
 const threadOf = ({
@@ -65,33 +67,24 @@ const threadOf = ({
 	return null
 }
 
-type OpenedMission = {
-	missionId: string
-	rowId: string
-}
-
 export function WorkspaceBody(props: WorkspaceBodyProps) {
 	const t = useCommonCopy()
-	const [opened, setOpened] = useState<OpenedMission | null>(null)
+	const { missions } = props
+	const opened = useSyncExternalStore(missions.subscribe, missions.getState)
 	const rowId = props.conversation?.id ?? props.bot?.id ?? null
 
 	const openMission = useCallback(
 		(missionId: string) => {
 			if (rowId) {
-				setOpened({ missionId, rowId })
+				missions.open({ missionId, rowId })
 			}
 		},
-		[rowId],
+		[missions, rowId],
 	)
-	const leaveMission = useCallback(() => setOpened(null), [])
+	const leaveMission = useCallback(() => missions.leave(), [missions])
 
-	const hasLeftTheRow = opened !== null && opened.rowId !== rowId
-
-	if (hasLeftTheRow) {
-		setOpened(null)
-	}
-
-	const openedMissionId = hasLeftTheRow ? null : (opened?.missionId ?? null)
+	const openedMissionId =
+		opened && opened.rowId === rowId ? opened.missionId : null
 
 	if (props.haveSpacesFailed) {
 		return (

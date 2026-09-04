@@ -15,12 +15,20 @@ import type { PermissionRequest, QuestionRequest } from "../agent/contract"
 import { type ChatState, initialChatState } from "../chat/chat-state"
 import type { Conversation } from "../conversations/store-contract"
 import { speakingBot } from "../conversations/transcript-fixtures"
+import {
+	createFakeMissions,
+	type FakeMissions,
+} from "../missions/fake-missions"
+import type { MissionState } from "../missions/mission-contract"
+import { aMission } from "../missions/mission-fixtures"
 
 const BOT = { kind: "bot", id: "bot-one" } as const
 
 const OTHER_BOT = { kind: "bot", id: "bot-two" } as const
 
 const ROOM = { kind: "conversation", id: "room-one" } as const
+
+const MISSION = { kind: "mission", id: "mission-1" } as const
 
 const SPACE = "space-one"
 
@@ -166,6 +174,7 @@ type Harness = {
 	runtimes: ReturnType<typeof createFakeRuntimes>
 	roster: ReturnType<typeof createFakeRoster>
 	spaces: { select: ReturnType<typeof vi.fn> }
+	missions: FakeMissions
 	notifications: FakeNotificationPort
 	windowFocus: ReturnType<typeof createFakeWindowFocus>
 	playChime: ReturnType<typeof vi.fn>
@@ -182,6 +191,7 @@ const start = async (
 	const runtimes = createFakeRuntimes()
 	const roster = createFakeRoster(bots, conversations)
 	const spaces = { select: vi.fn() }
+	const missions = createFakeMissions()
 	const notifications = createFakeNotificationPort()
 	const windowFocus = createFakeWindowFocus()
 	const playChime = vi.fn()
@@ -192,6 +202,7 @@ const start = async (
 		runtimes,
 		roster,
 		spaces,
+		missions,
 		notifications,
 		switches: () => ALL_ON,
 		hasFocus: () => false,
@@ -208,12 +219,21 @@ const start = async (
 		runtimes,
 		roster,
 		spaces,
+		missions,
 		notifications,
 		windowFocus,
 		playChime,
 		reportFailure,
 		stop,
 	}
+}
+
+const escalate = async (harness: Harness, state: MissionState) => {
+	const mission = aMission({ botId: "bot-one", state })
+	harness.missions.hold({ mission, events: [] })
+	harness.missions.change({ missionId: mission.id, state })
+	await Promise.resolve()
+	await Promise.resolve()
 }
 
 const seed = (harness: Harness, botId: string) => {
@@ -624,5 +644,61 @@ describe("startNotificationSource when a subscription breaks", () => {
 		await Promise.resolve()
 
 		expect(harness.reportFailure).not.toHaveBeenCalled()
+	})
+})
+
+describe("startNotificationSource on missions", () => {
+	it("names the bot and the ticket when a mission waits for a human", async () => {
+		const harness = await start()
+
+		await escalate(harness, "waiting_human")
+
+		expect(harness.notifications.sent).toEqual([
+			{ target: MISSION, title: "Nyx", body: "Needs you on OPE-32" },
+		])
+	})
+
+	it("names the bot and the ticket when a mission is ready to merge", async () => {
+		const harness = await start()
+
+		await escalate(harness, "ready_to_merge")
+
+		expect(harness.notifications.sent).toEqual([
+			{ target: MISSION, title: "Nyx", body: "OPE-32 is ready to merge" },
+		])
+	})
+
+	it("raises one notification when the mission stays in that state", async () => {
+		const harness = await start()
+
+		await escalate(harness, "waiting_human")
+		await escalate(harness, "waiting_human")
+
+		expect(harness.notifications.sent).toHaveLength(1)
+	})
+
+	it("stays quiet on the states the reader is not called for", async () => {
+		const harness = await start()
+
+		await escalate(harness, "waiting_bot")
+		await escalate(harness, "working")
+		await escalate(harness, "done")
+
+		expect(harness.notifications.sent).toEqual([])
+	})
+
+	it("raises a failure notice when the mission cannot be read", async () => {
+		const harness = await start()
+		harness.missions.refuse("mission-1")
+
+		harness.missions.change({
+			missionId: "mission-1",
+			state: "waiting_human",
+		})
+		await Promise.resolve()
+		await Promise.resolve()
+
+		expect(harness.reportFailure).toHaveBeenCalledTimes(1)
+		expect(harness.notifications.sent).toEqual([])
 	})
 })
