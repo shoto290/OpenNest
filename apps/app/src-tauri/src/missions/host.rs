@@ -2,9 +2,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tauri::{AppHandle, Manager, Runtime, State};
 
-use super::commands::{mission_close, mission_escalate, mission_note, mission_open, mission_row};
+use super::commands::{
+	mission_close, mission_escalate, mission_note, mission_open, mission_row, mission_watch,
+};
 use super::contract::{
-	Mission, MissionDraft, MissionEntry, MissionError, MissionEventKind, MissionNote, Ticket,
+	Mission, MissionDraft, MissionEntry, MissionError, MissionEventKind, MissionNote, MissionState,
+	MissionWatch, Ticket,
 };
 use crate::agent::protocol::HostAnswer;
 use crate::agent::session::{Answering, HostRequests};
@@ -87,6 +90,24 @@ impl<R: Runtime> MissionHost<R> {
 				};
 				answered(mission_close(self.app.clone(), state, asked.id, note).await?)
 			}
+			Operation::Watch => {
+				let asked: Armed = read(payload)?;
+				self.refuse_a_mission_it_does_not_own(database, &asked.id).await?;
+				let watch = MissionWatch {
+					branch: asked.branch,
+					repository: asked.repository,
+					workspace_path: asked.workspace_path,
+				};
+				answered(mission_watch(self.app.clone(), state, asked.id, watch).await?)
+			}
+			Operation::List => {
+				let _: Bare = read(payload)?;
+				let carried = database
+					.missions()
+					.still_open_for_bot(self.conversation_id.clone(), self.bot_id.clone())
+					.await?;
+				answered(carried.into_iter().map(listed).collect::<Vec<_>>())
+			}
 		}
 	}
 
@@ -162,6 +183,8 @@ enum Operation {
 	Note,
 	Escalate,
 	Close,
+	Watch,
+	List,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -200,6 +223,38 @@ struct Closed {
 	id: String,
 	outcome: Outcome,
 	summary: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Armed {
+	id: String,
+	branch: String,
+	repository: String,
+	#[serde(default)]
+	workspace_path: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Bare {}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Listed {
+	id: String,
+	ticket: Ticket,
+	state: MissionState,
+	opened_at: i64,
+}
+
+fn listed(mission: Mission) -> Listed {
+	Listed {
+		id: mission.id,
+		ticket: mission.ticket,
+		state: mission.state,
+		opened_at: mission.opened_at,
+	}
 }
 
 fn nothing() -> Value {
@@ -318,6 +373,34 @@ mod tests {
 		mission_detail(app.state(), id.to_owned()).await.expect("the mission reads").events
 	}
 
+	async fn armed_missions(app: &App<MockRuntime>) -> Vec<String> {
+		ready(&app.state::<db::DatabaseState>())
+			.expect("the database opens")
+			.missions()
+			.watched()
+			.await
+			.expect("the armed missions read")
+			.into_iter()
+			.map(|held| held.id)
+			.collect()
+	}
+
+	fn ids(answered: &Value) -> Vec<String> {
+		answered
+			.as_array()
+			.expect("a list")
+			.iter()
+			.filter_map(|row| row["id"].as_str().map(str::to_owned))
+			.collect()
+	}
+
+	fn an_arming(id: &str) -> Value {
+		asking(
+			"watch",
+			json!({ "id": id, "branch": "feature/ope-37", "repository": "shoto290/OpenNest" }),
+		)
+	}
+
 	#[tokio::test]
 	async fn a_mission_is_opened_noted_escalated_and_closed_by_the_bot_of_the_session() {
 		let app = a_host("lifecycle").await;
@@ -427,6 +510,7 @@ mod tests {
 			asking("note", json!({ "id": held.id, "line": "Sneaking in" })),
 			asking("escalate", json!({ "id": held.id, "question": "?", "reason": "?" })),
 			asking("close", json!({ "id": held.id, "outcome": "done", "summary": "?" })),
+			an_arming(&held.id),
 		] {
 			let refused = host.answer(asked).await.expect_err("the call is refused");
 
@@ -437,6 +521,7 @@ mod tests {
 			events(&app, &held.id).await.into_iter().map(|event| event.kind).collect::<Vec<_>>(),
 			vec![MissionEventKind::Opened]
 		);
+		assert!(armed_missions(&app).await.is_empty());
 
 		cleaned(&app);
 	}
@@ -451,6 +536,7 @@ mod tests {
 			asking("note", json!({ "id": held.id, "line": "Sneaking in" })),
 			asking("escalate", json!({ "id": held.id, "question": "?", "reason": "?" })),
 			asking("close", json!({ "id": held.id, "outcome": "done", "summary": "?" })),
+			an_arming(&held.id),
 		] {
 			let refused = host.answer(asked).await.expect_err("the call is refused");
 
@@ -461,7 +547,61 @@ mod tests {
 			events(&app, &held.id).await.into_iter().map(|event| event.kind).collect::<Vec<_>>(),
 			vec![MissionEventKind::Opened]
 		);
+		assert!(armed_missions(&app).await.is_empty());
 
+		cleaned(&app);
+	}
+
+	#[tokio::test]
+	async fn list_answers_the_open_missions_of_the_bot_of_the_session() {
+		let app = a_host("listed").await;
+		let mine = a_mission_of(&app, "c1", "b1").await;
+		let closed = a_mission_of(&app, "c1", "b1").await;
+		let theirs = a_mission_of(&app, "c1", "b2").await;
+		let host = serving(&app, "c1");
+		host.answer(asking(
+			"close",
+			json!({ "id": closed.id, "outcome": "done", "summary": "Already served" }),
+		))
+		.await
+		.expect("the mission is closed");
+
+		let answered =
+			host.answer(asking("list", json!({}))).await.expect("the missions are listed");
+
+		assert_eq!(ids(&answered), vec![mine.id.clone()], "got {answered}");
+		assert!(!ids(&answered).contains(&closed.id) && !ids(&answered).contains(&theirs.id));
+		let row = &answered.as_array().expect("a list")[0];
+		assert_eq!(row["ticket"]["externalId"], json!("OPE-1"));
+		assert_eq!(row["state"], json!("working"));
+		assert!(row["openedAt"].is_number(), "got {row}");
+
+		cleaned(&app);
+	}
+
+	#[tokio::test]
+	async fn a_mission_is_armed_and_listed_from_its_own_thread() {
+		let app = a_host("armed").await;
+		app.manage(crate::routines::webhook::start(app.handle().clone()));
+		let opened = a_mission_of(&app, "c1", "b1").await;
+		let host = serving(&app, &opened.thread_conversation_id);
+
+		let armed = host.answer(an_arming(&opened.id)).await.expect("the mission is armed");
+		let answered =
+			host.answer(asking("list", json!({}))).await.expect("the missions are listed");
+
+		assert!(
+			armed["url"].as_str().is_some_and(|url| url.starts_with("http://127.0.0.1:")),
+			"got {armed}"
+		);
+		assert_eq!(armed["header"], json!(crate::routines::webhook::HEADER));
+		assert!(armed["key"].as_str().is_some_and(|key| !key.is_empty()), "got {armed}");
+		assert_eq!(armed_missions(&app).await, vec![opened.id.clone()]);
+		assert_eq!(ids(&answered), vec![opened.id]);
+
+		if let Some(webhook) = app.try_state::<crate::routines::webhook::Webhook>() {
+			webhook.stop();
+		}
 		cleaned(&app);
 	}
 

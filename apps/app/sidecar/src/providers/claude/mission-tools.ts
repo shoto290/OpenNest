@@ -34,6 +34,15 @@ const OUTCOME =
 
 const SUMMARY = "What came out of the mission, in a few lines."
 
+const BRANCH =
+	"The branch this mission lands its work in, such as feature/ope-37."
+
+const REPOSITORY =
+	"The repository that branch lives in, written owner then slash then name."
+
+const WORKSPACE_PATH =
+	"The checkout of that repository on this machine, when you work in one. Leave it out otherwise."
+
 const OPEN =
 	"Open a mission on this conversation, owned by you, and get its own thread. Call this once you and the person agree on the objective and the ticket it carries."
 
@@ -46,6 +55,12 @@ const ESCALATE =
 const CLOSE =
 	"Close a mission of yours with its outcome and a summary. Nothing can be appended to it afterwards."
 
+const WATCH =
+	"Arm a mission of yours on the branch it lands its work in, so what happens on that branch reaches its thread. Call this once the branch exists."
+
+const LIST =
+	"Read the missions of yours this conversation still carries, each with the id the other mission tools take. Read this when you no longer hold the id mission_open answered."
+
 const TICKET = z.object({
 	platform: z.string().describe(TICKET_PLATFORM),
 	externalId: z.string().describe(TICKET_EXTERNAL_ID),
@@ -54,6 +69,8 @@ const TICKET = z.object({
 })
 
 type ToolInput = Record<string, z.ZodType>
+
+const NOTHING: ToolInput = {}
 
 const NAMED: ToolInput = { id: z.string().describe(MISSION_ID) }
 
@@ -77,6 +94,13 @@ const CLOSED: ToolInput = {
 	summary: z.string().describe(SUMMARY),
 }
 
+const ARMED: ToolInput = {
+	...NAMED,
+	branch: z.string().describe(BRANCH),
+	repository: z.string().describe(REPOSITORY),
+	workspacePath: z.string().describe(WORKSPACE_PATH).optional(),
+}
+
 const asked = carriedTo(SUBTYPE)
 
 type MissionTool = SdkMcpToolDefinition<ToolInput>
@@ -90,4 +114,8 @@ export const missionTools = (session: string | undefined): MissionTool[] => [
 	tool("mission_close", CLOSE, CLOSED, (input) =>
 		asked(session, "close", input),
 	),
+	tool("mission_watch", WATCH, ARMED, (input) =>
+		asked(session, "watch", input),
+	),
+	tool("mission_list", LIST, NOTHING, () => asked(session, "list", {})),
 ]

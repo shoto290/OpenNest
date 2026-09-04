@@ -31,6 +31,8 @@ describe("opennestServer", () => {
 			"mission_note",
 			"mission_escalate",
 			"mission_close",
+			"mission_watch",
+			"mission_list",
 		])
 	})
 })
