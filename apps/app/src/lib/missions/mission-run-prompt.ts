@@ -42,11 +42,11 @@ const messageIn = (payload: unknown): string | null => {
 }
 
 const agentLastMessageIn = (events: MissionEvent[]): string | null =>
-	[...events]
-		.reverse()
+	events
 		.filter((event) => event.kind === "agent_asked")
 		.map((event) => messageIn(event.payload))
-		.find((message) => message !== null) ?? null
+		.filter((message) => message !== null)
+		.at(-1) ?? null
 
 const payloadText = ({ mission, events }: MissionRunCall) =>
 	JSON.stringify(
