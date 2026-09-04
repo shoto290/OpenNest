@@ -1032,7 +1032,7 @@ export const MissionChipRaised = meta.story({
 		docs: {
 			description: {
 				story:
-					"Three loose bots ordered by their last word, where the one carrying a mission that waits on the reader is also the one that spoke longest ago. Check it renders first anyway: a mission that cannot move without a person outranks a room that is merely fresh, so the reader finds what is blocked at the top of the list rather than hunting for a pill down it. Check the two rows below keep the order the zone already sorts them into, and that nothing about the raised row changes shape — same height, same columns, same trailing edge. Only the loose zone moves: a pinned row and a row inside a section stay exactly where the reader put them. Pick `MissionChips` for the pill alone, `Roster` for the same list with no mission in it.",
+					"Three loose bots ordered by their last word, where the one carrying a mission that waits on the reader is also the one that spoke longest ago. Check it renders first anyway: a mission that cannot move without a person outranks a room that is merely fresh, so the reader finds what is blocked at the top of the list rather than hunting for a pill down it. Check the two rows below keep the order the zone already sorts them into, and that nothing about the raised row changes shape — same height, same columns, same trailing edge. Pick `MissionChipPinned` for the section where a rank the reader set holds the waiting row in place, `MissionChips` for the pill alone.",
 			},
 		},
 	},
@@ -2940,6 +2940,29 @@ export const Sections = meta.story({
 		await expect(research.getBoundingClientRect().bottom).toBeLessThanOrEqual(
 			rowFor(canvasElement, "Cinder").getBoundingClientRect().top,
 		)
+	},
+})
+
+export const MissionChipPinned = meta.story({
+	args: {
+		...sectionArgs(),
+		bots: SECTIONED_ROSTER.map((bot) =>
+			bot.id === "ember"
+				? { ...bot, mission: { state: "waiting" as const, count: 1 } }
+				: bot,
+		),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A sectioned roster where the second row of Research carries a mission waiting on its reader. Check the section renders in the order the reader pinned it and the waiting row stays second: a rank a person set by hand is not a guess the panel may improve on, so a mission never reorders a section any more than it reorders the pinned zone. Check the row still wears its chip in the waiting state, so the news reaches the reader through the pill where the order will not carry it. Pick `MissionChipRaised` for the zone where the waiting row does move up, `Sections` for the same roster with no mission in it.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expect(rowNames(canvasElement)).toEqual(GROUPED_ORDER)
+		await expect(chipStateIn(rowFor(canvasElement, "Ember"))).toBe("waiting")
 	},
 })
 
