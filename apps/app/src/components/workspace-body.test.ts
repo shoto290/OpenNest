@@ -68,6 +68,8 @@ const ACTIVITY = "Activity"
 
 const A_MINUTE = 60_000
 
+const BACK = "Back to the conversation"
+
 const READ_FAILURE_TITLE = "The mission could not be read"
 
 const SEND_FAILURE_TITLE = "The answer did not reach the bot"
@@ -111,8 +113,9 @@ const attachments = createAttachmentsController({
 type Workspace = {
 	bot: Bot
 	conversation: Conversation
+	otherConversation: Conversation
 	driver: ScriptedDriver
-	body: () => ReturnType<typeof createElement>
+	body: (selected?: Conversation) => ReturnType<typeof createElement>
 }
 
 const workspaceOf = async (store = createFakeTranscriptStore()) => {
@@ -123,6 +126,12 @@ const workspaceOf = async (store = createFakeTranscriptStore()) => {
 		title: "Walls",
 		botIds: [bot.id],
 	})
+	const otherConversation = await store.createConversation({
+		spaceId: SPACE,
+		sectionId: null,
+		title: "Roof",
+		botIds: [bot.id],
+	})
 	const driver = createScriptedDriver()
 	const runtimes = createConversationRuntimes(driver, store)
 	const chatController = createChatController(createScriptedDriver(), store)
@@ -130,13 +139,14 @@ const workspaceOf = async (store = createFakeTranscriptStore()) => {
 	const workspace: Workspace = {
 		bot,
 		conversation,
+		otherConversation,
 		driver,
-		body: () =>
+		body: (selected = conversation) =>
 			createElement(WorkspaceBody, {
 				attachments,
 				bots: [bot],
 				chat: { state: initialChatState, controller: chatController },
-				conversation,
+				conversation: selected,
 				conversationRuntimes: runtimes,
 				drafts: createDraftsController(),
 				haveSpacesFailed: false,
@@ -361,7 +371,26 @@ describe("WorkspaceBody missions", () => {
 		await openMission()
 		expect(missionHeader()).toBeTruthy()
 
-		fireEvent.keyDown(window, { key: "Escape" })
+		fireEvent.click(screen.getByRole("button", { name: BACK }))
+		await settle()
+
+		expect(missionHeader()).toBeNull()
+		expect(screen.getAllByText("Walls").length).toBeGreaterThan(0)
+	})
+
+	it("shows the thread of the origin row when it is selected again", async () => {
+		const { workspace } = await seed((mission) => ({ mission, events: [] }))
+		const view = render(workspace.body())
+		await settle()
+
+		await openMission()
+		expect(missionHeader()).toBeTruthy()
+
+		view.rerender(workspace.body(workspace.otherConversation))
+		await settle()
+		expect(missionHeader()).toBeNull()
+
+		view.rerender(workspace.body())
 		await settle()
 
 		expect(missionHeader()).toBeNull()

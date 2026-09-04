@@ -85,6 +85,12 @@ export function WorkspaceBody(props: WorkspaceBodyProps) {
 	)
 	const leaveMission = useCallback(() => setOpened(null), [])
 
+	const openedMissionId = opened?.rowId === rowId ? opened.missionId : null
+
+	if (opened && openedMissionId === null) {
+		setOpened(null)
+	}
+
 	if (props.haveSpacesFailed) {
 		return (
 			<Notice
@@ -95,11 +101,11 @@ export function WorkspaceBody(props: WorkspaceBodyProps) {
 		)
 	}
 
-	if (opened && opened.rowId === rowId) {
+	if (openedMissionId) {
 		return (
 			<MissionThreadScreen
 				bots={props.bots}
-				missionId={opened.missionId}
+				missionId={openedMissionId}
 				onLeave={leaveMission}
 				readerName={props.readerName}
 				runtimes={props.conversationRuntimes}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react"
+import { useMemo } from "react"
 
 import type { MissionEventModel } from "@workspace/ui/components/mission"
 import { MissionThread } from "@workspace/ui/components/mission-thread"
@@ -32,21 +32,6 @@ const MissionReadFailure = ({ onRetry }: MissionReadFailureProps) => {
 			title={t("missions.failure.read.title")}
 		/>
 	)
-}
-
-const useLeaveOnEscape = (onLeave: () => void) => {
-	useEffect(() => {
-		const leave = (event: KeyboardEvent) => {
-			if (event.key !== "Escape") {
-				return
-			}
-			event.preventDefault()
-			onLeave()
-		}
-
-		window.addEventListener("keydown", leave, true)
-		return () => window.removeEventListener("keydown", leave, true)
-	}, [onLeave])
 }
 
 const reportSendFailure = (t: ChatCopy) =>
@@ -84,8 +69,6 @@ const OpenedMission = ({
 	)
 	const { state, controller } = useConversation(runtimes, conversation)
 
-	useLeaveOnEscape(onLeave)
-
 	const send = (text: string) => {
 		void controller.send(text).then(
 			() => {
@@ -108,6 +91,7 @@ const OpenedMission = ({
 			hasFailedToRead={hasFailedToRead}
 			isClosed={mission.closedAt !== null}
 			now={now}
+			onBack={onLeave}
 			onRetry={onRetry}
 			onSend={send}
 			state={mission.state}

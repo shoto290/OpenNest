@@ -519,6 +519,7 @@ const chat = {
 		},
 		header: {
 			tools: "Tools",
+			back: "Back to the conversation",
 		},
 		feed: {
 			label: "Mission thread",

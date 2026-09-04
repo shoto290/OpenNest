@@ -534,6 +534,7 @@ const chat = {
 		},
 		header: {
 			tools: "Outils",
+			back: "Retour à la conversation",
 		},
 		feed: {
 			label: "Fil de la mission",

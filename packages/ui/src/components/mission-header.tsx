@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next"
 
 import { Badge } from "@workspace/ui/components/badge"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
+import { Button } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	MISSION_AVATAR_SIZE,
@@ -18,6 +19,7 @@ type MissionHeaderProps = {
 	ticket: MissionTicket
 	tools: string[]
 	state: MissionState
+	onBack: () => void
 	className?: string
 }
 
@@ -26,6 +28,7 @@ const MissionHeader = ({
 	ticket,
 	tools,
 	state,
+	onBack,
 	className,
 }: MissionHeaderProps) => {
 	const { t } = useTranslation("chat")
@@ -38,6 +41,14 @@ const MissionHeader = ({
 			)}
 			data-slot="mission-header"
 		>
+			<Button
+				aria-label={t("missions.header.back")}
+				onClick={onBack}
+				size="icon-sm"
+				variant="ghost"
+			>
+				<Icons.Previous aria-hidden="true" />
+			</Button>
 			<BotIdentityAvatar
 				animal={bot.animal}
 				badge={missionBadgeFor(state)}
