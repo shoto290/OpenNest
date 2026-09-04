@@ -76,6 +76,7 @@ import {
 	type Thread,
 	type ThreadAuthors,
 	type ThreadFace,
+	type ThreadFacts,
 	type ThreadPermission,
 	type ThreadQuotes,
 } from "@/lib/chat/thread-contract"
@@ -151,12 +152,34 @@ const toPinnedRow = (
 	}
 }
 
+type RoutinesScope = {
+	conversationId: string
+	leadBotId?: string
+}
+
+const routinesScopeOf = (
+	facts: ThreadFacts,
+	mainConversationId: string | null,
+): RoutinesScope | null => {
+	if (facts.conversation) {
+		return {
+			conversationId: facts.conversation.id,
+			leadBotId: leadOf(facts.conversation),
+		}
+	}
+
+	return facts.bot && mainConversationId
+		? { conversationId: mainConversationId, leadBotId: facts.bot.id }
+		: null
+}
+
 type ThreadHeaderProps = {
 	thread: LoadedThread
 	botWork: WorkingState | null
 	botImage?: string
 	present: RosterBot[]
 	pinnedRows: PinnedMessage[]
+	hasRoutines: boolean
 	onJumpToPin: (bubbleId: string) => void
 	onUnpin: (bubbleId: string) => void
 }
@@ -167,6 +190,7 @@ const ThreadHeader = ({
 	botImage,
 	present,
 	pinnedRows,
+	hasRoutines,
 	onJumpToPin,
 	onUnpin,
 }: ThreadHeaderProps) => {
@@ -206,7 +230,7 @@ const ThreadHeader = ({
 				)
 			}
 			trailing={
-				thread.kind === "conversation" ? (
+				hasRoutines ? (
 					<>
 						{pinned}
 						<RoutinesPanelTrigger />
@@ -708,6 +732,7 @@ function ThreadView({
 		alsoQuoted,
 	)
 	const pins = usePinnedMessages(controller, state.conversationId)
+	const routinesScope = routinesScopeOf(facts, state.conversationId)
 	const { highlightedMessageId, jumpToMessage } = useThreadJump(
 		controller,
 		scrollerRef,
@@ -822,6 +847,7 @@ function ThreadView({
 				<ThreadHeader
 					botImage={botImage}
 					botWork={facts.botWork}
+					hasRoutines={routinesScope !== null}
 					onJumpToPin={(bubbleId) => jumpToMessage(pins.anchorOf(bubbleId))}
 					onUnpin={pins.unpin}
 					pinnedRows={pinnedRows}
@@ -894,13 +920,8 @@ function ThreadView({
 
 	return (
 		<RosterProvider bots={bots}>
-			{facts.conversation ? (
-				<ThreadRoutines
-					conversationId={facts.conversation.id}
-					leadBotId={leadOf(facts.conversation)}
-				>
-					{layout}
-				</ThreadRoutines>
+			{routinesScope ? (
+				<ThreadRoutines {...routinesScope}>{layout}</ThreadRoutines>
 			) : (
 				layout
 			)}
