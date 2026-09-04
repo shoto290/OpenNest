@@ -43,7 +43,7 @@ const toAuthor = (
 	title: string | undefined,
 ): MessageAuthor => ({
 	...toParticipantRow(participant),
-	title: title || undefined,
+	title,
 	isLead: participant.role === "lead",
 	isDeleted: participant.isDeleted,
 })
