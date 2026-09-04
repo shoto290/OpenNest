@@ -153,25 +153,20 @@ const toPinnedRow = (
 }
 
 type RoutinesScope = {
-	conversationId: string
+	conversationId: string | null
 	leadBotId?: string
 }
 
 const routinesScopeOf = (
 	facts: ThreadFacts,
 	mainConversationId: string | null,
-): RoutinesScope | null => {
-	if (facts.conversation) {
-		return {
-			conversationId: facts.conversation.id,
-			leadBotId: leadOf(facts.conversation),
-		}
-	}
-
-	return facts.bot && mainConversationId
-		? { conversationId: mainConversationId, leadBotId: facts.bot.id }
-		: null
-}
+): RoutinesScope =>
+	facts.conversation
+		? {
+				conversationId: facts.conversation.id,
+				leadBotId: leadOf(facts.conversation),
+			}
+		: { conversationId: mainConversationId, leadBotId: facts.bot?.id }
 
 type ThreadHeaderProps = {
 	thread: LoadedThread
@@ -847,7 +842,7 @@ function ThreadView({
 				<ThreadHeader
 					botImage={botImage}
 					botWork={facts.botWork}
-					hasRoutines={routinesScope !== null}
+					hasRoutines={routinesScope.conversationId !== null}
 					onJumpToPin={(bubbleId) => jumpToMessage(pins.anchorOf(bubbleId))}
 					onUnpin={pins.unpin}
 					pinnedRows={pinnedRows}
@@ -920,11 +915,7 @@ function ThreadView({
 
 	return (
 		<RosterProvider bots={bots}>
-			{routinesScope ? (
-				<ThreadRoutines {...routinesScope}>{layout}</ThreadRoutines>
-			) : (
-				layout
-			)}
+			<ThreadRoutines {...routinesScope}>{layout}</ThreadRoutines>
 		</RosterProvider>
 	)
 }

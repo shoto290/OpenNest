@@ -630,7 +630,7 @@ describe("PRF1 render baseline", () => {
 	it("shows the last message of a two hundred run thread", async () => {
 		expect(await measureThreadOpen()).toMatchInlineSnapshot(`
 			{
-			  "commits": 11,
+			  "commits": 10,
 			  "markdownProcessors": 20,
 			  "runs": 200,
 			  "tasksToLastMessage": 0,
@@ -642,7 +642,7 @@ describe("PRF1 render baseline", () => {
 		expect(await measureThreadReopen()).toMatchInlineSnapshot(`
 			{
 			  "cold": {
-			    "commits": 11,
+			    "commits": 10,
 			    "markdownProcessors": 20,
 			    "tasksToLastMessage": 0,
 			  },
@@ -663,12 +663,12 @@ describe("PRF1 render baseline", () => {
 			vi.useFakeTimers()
 
 			expect(await measureLongTranscriptOpen()).toMatchInlineSnapshot(`
-				{
-				  "commits": 11,
-				  "markdownProcessors": 500,
-				  "messages": 500,
-				}
-			`)
+			{
+			  "commits": 10,
+			  "markdownProcessors": 500,
+			  "messages": 500,
+			}
+		`)
 		},
 		LONG_TRANSCRIPT_TIMEOUT_MS,
 	)

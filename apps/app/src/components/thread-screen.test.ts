@@ -428,6 +428,9 @@ const withoutMainConversation = (thread: BotThread): BotThread => ({
 	},
 })
 
+const turnGroups = () =>
+	document.querySelectorAll('[data-slot="chat-turn-group"]')
+
 const openRoutinesPanel = async () => {
 	fireEvent.click(screen.getByRole("button", { name: ROUTINES_TOGGLE }))
 	await settle()
@@ -480,6 +483,25 @@ describe("ThreadScreen", () => {
 
 		expect(screen.queryByRole("button", { name: ROUTINES_TOGGLE })).toBeNull()
 		expect(listRoutines).not.toHaveBeenCalled()
+		expect(listSources).not.toHaveBeenCalled()
+	})
+
+	it("keeps the transcript a solo bot thread mounted when its main conversation arrives", async () => {
+		const thread = threadOf({ id: "bot-1", name: "Nyx", said: "held" })
+		const { rerender } = render(screenOf(withoutMainConversation(thread)))
+		await settle()
+
+		const painted = turnGroups()[0]
+		fireEvent.click(screen.getAllByRole("button", { name: "Reply" })[0])
+		expect(screen.getByRole("button", { name: "Cancel reply" })).toBeTruthy()
+
+		rerender(screenOf(thread))
+		await settle()
+
+		expect(turnGroups()[0]).toBe(painted)
+		expect(screen.getByRole("button", { name: "Cancel reply" })).toBeTruthy()
+		expect(screen.getByRole("button", { name: ROUTINES_TOGGLE })).toBeTruthy()
+		expect(listRoutines).toHaveBeenCalledWith("c-bot-1")
 	})
 
 	it("tells the reader when the routines of a solo bot thread could not be read", async () => {

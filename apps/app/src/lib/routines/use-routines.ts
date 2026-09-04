@@ -75,7 +75,7 @@ const knownOf = async (
 }
 
 export const useRoutines = (
-	conversationId: string,
+	conversationId: string | null,
 	leadBotId?: string,
 ): ConversationRoutines => {
 	const [held, setHeld] = useState<Routine[]>(NO_ROUTINES)
@@ -84,6 +84,10 @@ export const useRoutines = (
 	const [failure, setFailure] = useState<RoutinesFailure | null>(null)
 
 	const reload = useCallback(() => {
+		if (!conversationId) {
+			return
+		}
+
 		void Promise.allSettled([
 			routinesTransport.list(conversationId),
 			declaredByLead(leadBotId),
