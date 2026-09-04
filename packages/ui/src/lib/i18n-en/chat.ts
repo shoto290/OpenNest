@@ -336,6 +336,11 @@ const chat = {
 				description:
 					"Nothing was changed. Try again to read its missions and its routines.",
 			},
+			write: {
+				title: "The routine could not be changed",
+				description:
+					"The change was not saved. Read the routines again to see where they stand.",
+			},
 		},
 	},
 	routines: {
@@ -491,13 +496,6 @@ const chat = {
 			title: "No routine yet",
 			description:
 				"A routine runs a bot on its own, on a schedule or when a file it watches changes.",
-		},
-		failure: {
-			write: {
-				title: "The routine could not be changed",
-				description:
-					"The change was not saved. Read the routines again to see where they stand.",
-			},
 		},
 	},
 } as const

@@ -345,6 +345,11 @@ const chat = {
 				description:
 					"Rien n'a été modifié. Réessayez pour lire ses missions et ses routines.",
 			},
+			write: {
+				title: "La routine n'a pas pu être modifiée",
+				description:
+					"La modification n'a pas été enregistrée. Relisez les routines pour voir où elles en sont.",
+			},
 		},
 	},
 	routines: {
@@ -506,13 +511,6 @@ const chat = {
 			title: "Aucune routine",
 			description:
 				"Une routine fait travailler un bot toute seule, sur un horaire ou quand un fichier qu'elle surveille change.",
-		},
-		failure: {
-			write: {
-				title: "La routine n'a pas pu être modifiée",
-				description:
-					"La modification n'a pas été enregistrée. Relisez les routines pour voir où elles en sont.",
-			},
 		},
 	},
 } as const

@@ -46,28 +46,6 @@ const CLOSED_MISSIONS_OPENER = "closed-missions-opener"
 
 type RoutinesFailure = "missions" | "routines" | "activity" | "write"
 
-const FAILURE_COPY = {
-	missions: {
-		title: "activity.failure.missions.title",
-		description: "activity.failure.missions.description",
-	},
-	routines: {
-		title: "activity.failure.routines.title",
-		description: "activity.failure.routines.description",
-	},
-	activity: {
-		title: "activity.failure.activity.title",
-		description: "activity.failure.activity.description",
-	},
-	write: {
-		title: "routines.failure.write.title",
-		description: "routines.failure.write.description",
-	},
-} as const satisfies Record<
-	RoutinesFailure,
-	{ title: string; description: string }
->
-
 type RoutinesPanelForm = {
 	open: RoutineFormModel | null
 	sources: RoutineTriggerSource[]
@@ -187,9 +165,9 @@ const RoutinesPanelBody = ({
 
 	const notice = failure ? (
 		<Notice
-			description={t(FAILURE_COPY[failure].description)}
+			description={t(`activity.failure.${failure}.description`)}
 			retry={{ onRetry }}
-			title={t(FAILURE_COPY[failure].title)}
+			title={t(`activity.failure.${failure}.title`)}
 		/>
 	) : null
 
