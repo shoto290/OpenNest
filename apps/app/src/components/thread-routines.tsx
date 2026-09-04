@@ -5,7 +5,7 @@ import { RoutinesPanel } from "@workspace/ui/components/routines-panel"
 import { useRoutines } from "@/lib/routines/use-routines"
 
 type ThreadRoutinesProps = {
-	conversationId: string
+	conversationId: string | null
 	leadBotId?: string
 	children: ReactNode
 }

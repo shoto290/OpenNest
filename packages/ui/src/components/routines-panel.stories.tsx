@@ -270,9 +270,7 @@ export const Closed = meta.story({
 		},
 	},
 	play: async ({ canvas, canvasElement }) => {
-		const control = canvas.getByRole("button", {
-			name: "Routines of this conversation",
-		})
+		const control = canvas.getByRole("button", { name: "Routines" })
 		await expect(control).toHaveAttribute("aria-expanded", "false")
 		await expect(control).toHaveAttribute("aria-controls", "routines-panel")
 
@@ -300,9 +298,7 @@ export const Toggling = meta.story({
 		},
 	},
 	play: async ({ args, canvas, userEvent }) => {
-		const control = canvas.getByRole("button", {
-			name: "Routines of this conversation",
-		})
+		const control = canvas.getByRole("button", { name: "Routines" })
 
 		await userEvent.click(control)
 		await expect(args.onOpenChange).toHaveBeenCalledWith(true)
@@ -595,9 +591,7 @@ export const InWorkspaceShell = meta.story({
 		const workspace = canvas.getByRole("complementary", { name: "Workspace" })
 		const widthBefore = workspace.getBoundingClientRect().width
 
-		await userEvent.click(
-			canvas.getByRole("button", { name: "Routines of this conversation" }),
-		)
+		await userEvent.click(canvas.getByRole("button", { name: "Routines" }))
 		const panel = canvas.getByRole("complementary", { name: "Routines" })
 		await waitFor(
 			() => expect(panel.getBoundingClientRect().width).toBeGreaterThan(0),

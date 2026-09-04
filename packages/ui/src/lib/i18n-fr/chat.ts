@@ -308,7 +308,7 @@ const chat = {
 	routines: {
 		panel: {
 			label: "Routines",
-			toggle: "Routines de cette conversation",
+			toggle: "Routines",
 			title: "Routines",
 		},
 		form: {
@@ -461,20 +461,19 @@ const chat = {
 		confirm: {
 			title: "Supprimer {{title}} ?",
 			description:
-				"La routine et l'historique de ses exécutions disparaissent. Ce qu'elle a déjà dit dans cette conversation reste.",
+				"La routine et l'historique de ses exécutions disparaissent. Ce qu'elle a déjà dit reste.",
 			label: "Supprimer la routine",
 			failure: "La routine n'a pas pu être supprimée. Réessayez.",
 		},
 		empty: {
 			title: "Aucune routine",
 			description:
-				"Une routine fait travailler un bot de cette conversation toute seule, sur un horaire ou quand un fichier qu'elle surveille change.",
+				"Une routine fait travailler un bot toute seule, sur un horaire ou quand un fichier qu'elle surveille change.",
 		},
 		failure: {
 			read: {
 				title: "Les routines n'ont pas pu être lues",
-				description:
-					"Rien n'a été modifié. Réessayez pour lire les routines de cette conversation.",
+				description: "Rien n'a été modifié. Réessayez pour lire les routines.",
 			},
 			write: {
 				title: "La routine n'a pas pu être modifiée",

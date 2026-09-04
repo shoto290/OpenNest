@@ -2,7 +2,7 @@
 
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { createElement } from "react"
-import { afterEach, beforeEach, describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { NoticeSurface } from "@workspace/ui/components/notice-surface"
 import "@workspace/ui/lib/i18n"
@@ -32,7 +32,31 @@ import {
 	seatBots,
 } from "@/lib/conversations/transcript-fixtures"
 import { type FakeLayout, fakeLayout } from "@/lib/perf/fake-layout"
+import type { Routine } from "@/lib/routines/routine-contract"
+import { routinesTransport } from "@/lib/routines/routines-transport"
 import type { ReportedRunsReader } from "@/lib/routines/run-port"
+import { triggerSourcesTransport } from "@/lib/routines/trigger-sources-transport"
+
+vi.mock("@/lib/routines/routines-transport", async (importOriginal) => {
+	const actual =
+		await importOriginal<typeof import("@/lib/routines/routines-transport")>()
+
+	return {
+		...actual,
+		routinesTransport: {
+			...actual.routinesTransport,
+			list: vi.fn(),
+			update: vi.fn(),
+		},
+	}
+})
+vi.mock("@/lib/routines/trigger-sources-transport", () => ({
+	triggerSourcesTransport: { sources: vi.fn() },
+}))
+
+const listRoutines = vi.mocked(routinesTransport.list)
+const updateRoutine = vi.mocked(routinesTransport.update)
+const listSources = vi.mocked(triggerSourcesTransport.sources)
 
 const CRASH: ChatError = {
 	id: "crashed-0",
@@ -378,6 +402,47 @@ const roomOf = async ({
 	}
 }
 
+const SOLO_ROUTINE: Routine = {
+	id: "r-1",
+	conversationId: "c-bot-1",
+	botId: "bot-1",
+	title: "Shift log digest",
+	instruction: "Read the shift log and report what changed.",
+	triggerSourceId: "schedule",
+	filter: { matchMode: "all", rows: [] },
+	triggerConfig: { every: "1h" },
+	isEnabled: true,
+	consecutiveFailures: 0,
+	createdAt: 0,
+}
+
+const SCHEDULE_SOURCE = {
+	id: "schedule",
+	title: "Schedule",
+	payload: [],
+	dedupeKey: "occurrenceId",
+}
+
+const ROUTINES_TOGGLE = "Routines"
+
+const READ_ROUTINES_TITLE = "Routines could not be read"
+
+const withoutMainConversation = (thread: BotThread): BotThread => ({
+	...thread,
+	chat: {
+		...thread.chat,
+		state: { ...thread.chat.state, conversationId: null },
+	},
+})
+
+const turnGroups = () =>
+	document.querySelectorAll('[data-slot="chat-turn-group"]')
+
+const openRoutinesPanel = async () => {
+	fireEvent.click(screen.getByRole("button", { name: ROUTINES_TOGGLE }))
+	await settle()
+}
+
 const stopsFor = (name: string) =>
 	screen.queryAllByRole("button", { name: `Stop ${name}` })
 
@@ -388,11 +453,76 @@ describe("ThreadScreen", () => {
 
 	beforeEach(() => {
 		layout = fakeLayout()
+		vi.clearAllMocks()
+		listRoutines.mockResolvedValue([SOLO_ROUTINE])
+		listSources.mockResolvedValue([SCHEDULE_SOURCE])
 	})
 
 	afterEach(() => {
 		cleanup()
 		layout.restore()
+	})
+
+	it("opens the routines of a solo bot thread on its main conversation", async () => {
+		updateRoutine.mockResolvedValue({ ...SOLO_ROUTINE, isEnabled: false })
+		render(screenOf(threadOf({ id: "bot-1", name: "Nyx", said: "held" })))
+		await settle()
+
+		await openRoutinesPanel()
+
+		expect(listRoutines).toHaveBeenCalledWith("c-bot-1")
+		expect(listSources).toHaveBeenCalledWith("bot-1")
+		expect(screen.getByText(SOLO_ROUTINE.title)).toBeTruthy()
+
+		fireEvent.click(screen.getByRole("switch", { name: SOLO_ROUTINE.title }))
+		await settle()
+
+		expect(updateRoutine).toHaveBeenCalledWith(
+			SOLO_ROUTINE.id,
+			expect.objectContaining({ isEnabled: false }),
+		)
+	})
+
+	it("leaves a solo bot thread with no main conversation without routines", async () => {
+		const thread = threadOf({ id: "bot-1", name: "Nyx", said: "held" })
+		render(screenOf(withoutMainConversation(thread)))
+		await settle()
+
+		expect(screen.queryByRole("button", { name: ROUTINES_TOGGLE })).toBeNull()
+		expect(listRoutines).not.toHaveBeenCalled()
+		expect(listSources).not.toHaveBeenCalled()
+	})
+
+	it("keeps the transcript a solo bot thread mounted when its main conversation arrives", async () => {
+		const thread = threadOf({ id: "bot-1", name: "Nyx", said: "held" })
+		const { rerender } = render(screenOf(withoutMainConversation(thread)))
+		await settle()
+
+		const painted = turnGroups()[0]
+		fireEvent.click(screen.getAllByRole("button", { name: "Reply" })[0])
+		expect(screen.getByRole("button", { name: "Cancel reply" })).toBeTruthy()
+
+		rerender(screenOf(thread))
+		await settle()
+
+		expect(turnGroups()[0]).toBe(painted)
+		expect(screen.getByRole("button", { name: "Cancel reply" })).toBeTruthy()
+		expect(listRoutines).toHaveBeenCalledWith("c-bot-1")
+	})
+
+	it("tells the reader when the routines of a solo bot thread could not be read", async () => {
+		listRoutines.mockRejectedValue(new Error("refused"))
+		render(screenOf(threadOf({ id: "bot-1", name: "Nyx", said: "held" })))
+		await settle()
+
+		await openRoutinesPanel()
+		expect(screen.getByText(READ_ROUTINES_TITLE)).toBeTruthy()
+
+		listRoutines.mockResolvedValue([SOLO_ROUTINE])
+		fireEvent.click(screen.getByRole("button", { name: "Retry" }))
+		await settle()
+
+		expect(screen.getByText(SOLO_ROUTINE.title)).toBeTruthy()
 	})
 
 	it("forgets the reply target of the thread left behind", async () => {

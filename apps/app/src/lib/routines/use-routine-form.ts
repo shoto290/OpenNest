@@ -25,7 +25,7 @@ import { routinesTransport } from "./routines-transport"
 import type { Filter } from "./trigger-contract"
 
 export type RoutineFormWiring = {
-	conversationId: string
+	conversationId: string | null
 	isOverDetail: boolean
 	leadBotId: string | undefined
 	sources: RoutineTriggerSource[]
@@ -145,7 +145,7 @@ export const useRoutineForm = ({
 
 	const create = useCallback(
 		(values: RoutineFormValues) =>
-			leadBotId
+			conversationId && leadBotId
 				? routinesTransport.create({
 						conversationId,
 						botId: leadBotId,
