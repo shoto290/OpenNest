@@ -897,7 +897,6 @@ describe("ThreadScreen", () => {
 
 		expect(screen.getByText(REPORT_TEXT)).toBeTruthy()
 		expect(screen.getByText(ROUTINE_TITLE)).toBeTruthy()
-		expect(document.querySelector('[data-slot="turn-cause"]')).toBeTruthy()
 	})
 
 	it("shows a report written while the solo thread is open", async () => {

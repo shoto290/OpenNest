@@ -51,7 +51,7 @@ type Harness = {
 	botId: string
 	stop: () => void
 	requested: (cause?: RunCause) => RunRequested
-	soloRun: () => Promise<RunRequested>
+	soloRun: () => RunRequested
 	state: () => ConversationState
 	soloState: () => ChatState
 	shown: () => [string | null, string][]
@@ -84,6 +84,7 @@ const createHarness = async (
 		title: "Walls",
 		botIds: [bot.id],
 	})
+	const mainChat = await store.mainChat(bot.id)
 	const runtimes = createConversationRuntimes(driver, store)
 	const chat = createChatController(driver, store)
 	const runs = createFakeRunPort()
@@ -144,10 +145,10 @@ const createHarness = async (
 				[authorBotId, content] as [string | null, string],
 		)
 
-	const soloRun = async (): Promise<RunRequested> => {
-		const mainChat = await store.mainChat(bot.id)
-		return { ...requested(), conversationId: mainChat.id }
-	}
+	const soloRun = (): RunRequested => ({
+		...requested(),
+		conversationId: mainChat.id,
+	})
 
 	return {
 		driver,
@@ -401,7 +402,7 @@ describe("startRunDriver", () => {
 
 	it("writes the report into the solo thread when the run is the main chat", async () => {
 		await harness.openSoloOnScreen()
-		harness.runs.request(await harness.soloRun())
+		harness.runs.request(harness.soloRun())
 		await settled()
 		await harness.endTurn(reported("Two tickets closed."))
 
@@ -418,7 +419,7 @@ describe("startRunDriver", () => {
 
 	it("marks the reported turn of a solo thread with its routine", async () => {
 		await harness.openSoloOnScreen()
-		harness.runs.request(await harness.soloRun())
+		harness.runs.request(harness.soloRun())
 		await settled()
 		await harness.endTurn(reported("Two tickets closed."))
 
@@ -433,7 +434,7 @@ describe("startRunDriver", () => {
 
 	it("closes a solo run with the turn id of the published report", async () => {
 		await harness.openSoloOnScreen()
-		harness.runs.request(await harness.soloRun())
+		harness.runs.request(harness.soloRun())
 		await settled()
 		await harness.endTurn(reported("Two tickets closed."))
 
@@ -443,7 +444,7 @@ describe("startRunDriver", () => {
 	})
 
 	it("settles a solo report in the store while its chat stays closed", async () => {
-		const run = await harness.soloRun()
+		const run = harness.soloRun()
 		harness.runs.request(run)
 		await settled()
 		await harness.endTurn(reported("Two tickets closed."))
@@ -458,7 +459,7 @@ describe("startRunDriver", () => {
 
 	it("leaves the solo transcript unchanged when a run reports nothing", async () => {
 		await harness.openSoloOnScreen()
-		harness.runs.request(await harness.soloRun())
+		harness.runs.request(harness.soloRun())
 		await settled()
 		await harness.endTurn(reported("   "))
 
@@ -469,7 +470,7 @@ describe("startRunDriver", () => {
 	it("leaves the bot idle in its solo thread while a run is in flight", async () => {
 		await harness.openSoloOnScreen()
 		const idle = harness.soloState()
-		harness.runs.request(await harness.soloRun())
+		harness.runs.request(harness.soloRun())
 		await settled()
 
 		const running = harness.soloState()
