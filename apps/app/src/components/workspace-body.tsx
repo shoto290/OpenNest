@@ -85,11 +85,13 @@ export function WorkspaceBody(props: WorkspaceBodyProps) {
 	)
 	const leaveMission = useCallback(() => setOpened(null), [])
 
-	const openedMissionId = opened?.rowId === rowId ? opened.missionId : null
+	const hasLeftTheRow = opened !== null && opened.rowId !== rowId
 
-	if (opened && openedMissionId === null) {
+	if (hasLeftTheRow) {
 		setOpened(null)
 	}
+
+	const openedMissionId = hasLeftTheRow ? null : (opened?.missionId ?? null)
 
 	if (props.haveSpacesFailed) {
 		return (
