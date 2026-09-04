@@ -4,7 +4,7 @@ use tauri::{AppHandle, Manager, Runtime, State};
 
 use super::commands::{mission_close, mission_escalate, mission_note, mission_open, mission_row};
 use super::contract::{
-	MissionDraft, MissionEntry, MissionError, MissionEventKind, MissionNote, Ticket,
+	Mission, MissionDraft, MissionEntry, MissionError, MissionEventKind, MissionNote, Ticket,
 };
 use crate::agent::protocol::HostAnswer;
 use crate::agent::session::{Answering, HostRequests};
@@ -107,13 +107,18 @@ impl<R: Runtime> MissionHost<R> {
 			.ok_or_else(|| MissionError::Unexpected { detail: NO_DATABASE.to_owned() })
 	}
 
+	fn runs_in(&self, held: &Mission) -> bool {
+		held.origin_conversation_id == self.conversation_id
+			|| held.thread_conversation_id == self.conversation_id
+	}
+
 	async fn refuse_a_mission_it_does_not_own(
 		&self,
 		database: &db::Database,
 		id: &str,
 	) -> Result<(), MissionError> {
 		let held = mission_row(database, id).await?;
-		if held.origin_conversation_id != self.conversation_id {
+		if !self.runs_in(&held) {
 			return Err(MissionError::MissionOfAnotherConversation {
 				id: held.id,
 				conversation_id: self.conversation_id.clone(),
@@ -226,7 +231,7 @@ mod tests {
 	use tauri::{App, Manager as _};
 
 	use super::super::commands::{mission_detail, mission_open as opened};
-	use super::super::contract::{Mission, MissionEvent, MissionState};
+	use super::super::contract::{MissionEvent, MissionState};
 	use super::*;
 
 	const A_SPACE: &str = "
@@ -243,7 +248,7 @@ mod tests {
 	async fn a_host(name: &str) -> App<MockRuntime> {
 		let mut context = mock_context(noop_assets());
 		context.config_mut().identifier =
-			format!("com.opennest.mission-host-{name}-{}", std::process::id()).into();
+			format!("com.opennest.mission-host-{name}-{}", std::process::id());
 		let app = mock_builder().build(context).expect("the app builds");
 		if let Ok(dir) = app.path().app_data_dir() {
 			let _ = fs::remove_dir_all(&dir);
@@ -369,6 +374,43 @@ mod tests {
 					BOT.to_owned(),
 					json!({ "outcome": "done", "summary": "The tools are served" })
 				),
+			]
+		);
+
+		cleaned(&app);
+	}
+
+	#[tokio::test]
+	async fn a_mission_is_served_from_its_own_thread_where_its_bot_carries_the_work_out() {
+		let app = a_host("own-thread").await;
+		let opened = a_mission_of(&app, "c1", "b1").await;
+		let host = serving(&app, &opened.thread_conversation_id);
+
+		host.answer(asking("note", json!({ "id": opened.id, "line": "The work moved" })))
+			.await
+			.expect("the note lands");
+		host.answer(asking(
+			"escalate",
+			json!({ "id": opened.id, "question": "Which platform?", "reason": "The person decides" }),
+		))
+		.await
+		.expect("the mission is escalated");
+		let closed = host
+			.answer(asking(
+				"close",
+				json!({ "id": opened.id, "outcome": "done", "summary": "The work is done" }),
+			))
+			.await
+			.expect("the mission is closed");
+
+		assert_eq!(closed["state"], json!("done"));
+		assert_eq!(
+			events(&app, &opened.id).await.into_iter().map(|event| event.kind).collect::<Vec<_>>(),
+			vec![
+				MissionEventKind::Opened,
+				MissionEventKind::Note,
+				MissionEventKind::Escalated,
+				MissionEventKind::Closed,
 			]
 		);
 

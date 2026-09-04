@@ -582,8 +582,7 @@ mod tests {
 	#[test]
 	fn a_subtype_no_mounted_host_declares_is_refused_by_name() {
 		let refused = declaring(&mounted(), &serde_json::json!({ "subtype": "ledger" }))
-			.err()
-			.expect("no host declares it");
+			.expect_err("no host declares it");
 
 		assert_eq!(refused, serde_json::json!({ "kind": "unservedSubtype", "subtype": "ledger" }));
 	}
