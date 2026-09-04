@@ -416,7 +416,7 @@ const SCHEDULE_SOURCE = {
 	dedupeKey: "occurrenceId",
 }
 
-const ROUTINES_TOGGLE = "Routines of this conversation"
+const ROUTINES_TOGGLE = "Routines"
 
 const READ_ROUTINES_TITLE = "Routines could not be read"
 

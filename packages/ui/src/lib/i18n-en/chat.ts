@@ -299,7 +299,7 @@ const chat = {
 	routines: {
 		panel: {
 			label: "Routines",
-			toggle: "Routines of this conversation",
+			toggle: "Routines",
 			title: "Routines",
 		},
 		form: {
@@ -446,20 +446,19 @@ const chat = {
 		confirm: {
 			title: "Delete {{title}}?",
 			description:
-				"The routine and its run history go with it. Nothing it already said in this conversation is touched.",
+				"The routine and its run history go with it. Nothing it already said is touched.",
 			label: "Delete routine",
 			failure: "The routine could not be deleted. Try again.",
 		},
 		empty: {
 			title: "No routine yet",
 			description:
-				"A routine runs a bot of this conversation on its own, on a schedule or when a file it watches changes.",
+				"A routine runs a bot on its own, on a schedule or when a file it watches changes.",
 		},
 		failure: {
 			read: {
 				title: "Routines could not be read",
-				description:
-					"Nothing was changed. Try again to read the routines of this conversation.",
+				description: "Nothing was changed. Try again to read the routines.",
 			},
 			write: {
 				title: "The routine could not be changed",
