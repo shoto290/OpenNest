@@ -175,7 +175,7 @@ mod tests {
 	async fn a_host(name: &str) -> App<MockRuntime> {
 		let mut context = mock_context(noop_assets());
 		context.config_mut().identifier =
-			format!("com.opennest.mission-call-{name}-{}", std::process::id()).into();
+			format!("com.opennest.mission-call-{name}-{}", std::process::id());
 		let app = mock_builder().build(context).expect("the app builds");
 		cleaned(&app);
 		app.manage(db::bootstrap(app.handle()));
