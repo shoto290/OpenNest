@@ -670,7 +670,7 @@ export function createChatController(
 			conversationId,
 			description: i18n.t("chat:transcript.cause.unavailable.soloDescription"),
 		})
-		if (!reported || reported.size === 0) {
+		if (!reported?.size) {
 			return
 		}
 		setCauses(bot, new Map([...reported, ...bot.state.reportedCauses]))
