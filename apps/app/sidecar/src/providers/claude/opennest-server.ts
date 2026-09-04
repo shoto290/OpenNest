@@ -8,6 +8,7 @@ import {
 	type DelegateScope,
 	delegateTool,
 } from "./delegate"
+import { missionTools } from "./mission-tools"
 import { routineTools } from "./routine-tools"
 
 export const OPENNEST_SERVER = "opennest"
@@ -19,6 +20,7 @@ export type OpennestScope = DelegateScope & { session?: string }
 export const opennestTools = ({ session, ...scope }: OpennestScope) => [
 	delegateTool(scope),
 	...routineTools(session),
+	...missionTools(session),
 ]
 
 export const opennestServer = (

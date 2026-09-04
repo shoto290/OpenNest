@@ -28,6 +28,8 @@ pub trait EventSink: Send + Sync + 'static {
 pub type Answering = Pin<Box<dyn Future<Output = HostAnswer> + Send>>;
 
 pub trait HostRequests: std::fmt::Debug + Send + Sync + 'static {
+	fn subtype(&self) -> &'static str;
+
 	fn serve(&self, request: Value) -> Answering;
 }
 
@@ -101,7 +103,7 @@ pub struct SessionOptions {
 	pub extra_env: Vec<(String, String)>,
 	pub server_env: ResolvedEnv,
 	pub output_schema: Option<serde_json::Value>,
-	pub host: Option<Arc<dyn HostRequests>>,
+	pub hosts: Vec<Arc<dyn HostRequests>>,
 }
 
 impl SessionOptions {
@@ -116,7 +118,7 @@ impl SessionOptions {
 			extra_env: Vec::new(),
 			server_env: ResolvedEnv::default(),
 			output_schema: None,
-			host: None,
+			hosts: Vec::new(),
 		}
 	}
 
@@ -151,7 +153,7 @@ impl SessionOptions {
 	}
 
 	pub fn hosting(mut self, host: Arc<dyn HostRequests>) -> Self {
-		self.host = Some(host);
+		self.hosts.push(host);
 		self
 	}
 
@@ -226,7 +228,7 @@ impl Session {
 		let desk = HostDesk {
 			sidecar: sidecar.clone(),
 			key: key.clone(),
-			host: options.host.clone(),
+			hosts: options.hosts.clone(),
 			sink: sink.clone(),
 		};
 		tokio::spawn(read_loop(frames, shared.clone(), sink.clone(), opened_tx, desk));
@@ -403,7 +405,7 @@ fn crashed(closed: &ClosedFrame) -> TransportError {
 struct HostDesk {
 	sidecar: Arc<Sidecar>,
 	key: String,
-	host: Option<Arc<dyn HostRequests>>,
+	hosts: Vec<Arc<dyn HostRequests>>,
 	sink: Arc<dyn EventSink>,
 }
 
@@ -411,12 +413,12 @@ impl HostDesk {
 	fn answer(&self, asked: HostRequestFrame) {
 		let sidecar = self.sidecar.clone();
 		let key = self.key.clone();
-		let host = self.host.clone();
+		let host = declaring(&self.hosts, &asked.request);
 		let sink = self.sink.clone();
 		tokio::spawn(async move {
 			let answer = match host {
-				Some(host) => host.serve(asked.request).await,
-				None => Err(unserved()),
+				Ok(host) => host.serve(asked.request).await,
+				Err(refusal) => Err(refusal),
 			};
 			let command = protocol::host_response_command(&key, &asked.request_id, &answer);
 			if let Err(error) = sidecar.send(command) {
@@ -426,11 +428,16 @@ impl HostDesk {
 	}
 }
 
-fn unserved() -> Value {
-	serde_json::json!({
-		"kind": "unexpected",
-		"detail": "this session answers no host request"
-	})
+fn declaring(
+	hosts: &[Arc<dyn HostRequests>],
+	request: &Value,
+) -> Result<Arc<dyn HostRequests>, Value> {
+	let subtype = request.get("subtype").and_then(Value::as_str).unwrap_or_default();
+	hosts.iter().find(|host| host.subtype() == subtype).cloned().ok_or_else(|| unserved(subtype))
+}
+
+fn unserved(subtype: &str) -> Value {
+	serde_json::json!({ "kind": "unservedSubtype", "subtype": subtype })
 }
 
 async fn read_loop(
@@ -534,8 +541,50 @@ async fn on_exit(
 mod tests {
 	use super::*;
 
+	#[derive(Debug)]
+	struct StubHost {
+		subtype: &'static str,
+	}
+
+	impl HostRequests for StubHost {
+		fn subtype(&self) -> &'static str {
+			self.subtype
+		}
+
+		fn serve(&self, request: Value) -> Answering {
+			Box::pin(async move { Ok(request) })
+		}
+	}
+
 	fn options() -> SessionOptions {
 		SessionOptions::new(PathBuf::from("/tmp"))
+	}
+
+	fn mounted() -> Vec<Arc<dyn HostRequests>> {
+		options()
+			.hosting(Arc::new(StubHost { subtype: "routine" }))
+			.hosting(Arc::new(StubHost { subtype: "mission" }))
+			.hosts
+	}
+
+	#[test]
+	fn a_request_is_carried_to_the_host_that_declares_the_subtype_it_names() {
+		let hosts = mounted();
+
+		for subtype in ["routine", "mission"] {
+			let chosen = declaring(&hosts, &serde_json::json!({ "subtype": subtype }))
+				.expect("a host declares it");
+
+			assert_eq!(chosen.subtype(), subtype);
+		}
+	}
+
+	#[test]
+	fn a_subtype_no_mounted_host_declares_is_refused_by_name() {
+		let refused = declaring(&mounted(), &serde_json::json!({ "subtype": "ledger" }))
+			.expect_err("no host declares it");
+
+		assert_eq!(refused, serde_json::json!({ "kind": "unservedSubtype", "subtype": "ledger" }));
 	}
 
 	#[test]

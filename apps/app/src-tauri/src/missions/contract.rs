@@ -166,6 +166,12 @@ pub enum MissionError {
 	#[serde(rename_all = "camelCase")]
 	BlankField { field: String },
 	#[serde(rename_all = "camelCase")]
+	MissionOfAnotherConversation { id: String, conversation_id: String },
+	#[serde(rename_all = "camelCase")]
+	MissionOfAnotherBot { id: String, bot_id: String },
+	#[serde(rename_all = "camelCase")]
+	UnreadableRequest { detail: String },
+	#[serde(rename_all = "camelCase")]
 	Undeliverable { detail: String },
 	#[serde(rename_all = "camelCase")]
 	Unexpected { detail: String },

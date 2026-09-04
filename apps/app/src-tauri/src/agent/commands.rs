@@ -19,6 +19,7 @@ use crate::db::repositories::conversations::Bot as StoredBot;
 use crate::db::repositories::runtime_context::ParticipantKey;
 use crate::environment::contract::{EnvOwner, ResolvedEnv};
 use crate::environment::store as environment;
+use crate::missions::host::MissionHost;
 use crate::private_files;
 use crate::routines::host::RoutineHost;
 
@@ -589,6 +590,11 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 		.with_app_data(app.path().app_data_dir().ok())
 		.in_conversation(scope.conversation_id.clone())
 		.hosting(Arc::new(RoutineHost::new(
+			app.clone(),
+			scope.conversation_id.clone(),
+			scope.bot_id.clone(),
+		)))
+		.hosting(Arc::new(MissionHost::new(
 			app.clone(),
 			scope.conversation_id.clone(),
 			scope.bot_id.clone(),
