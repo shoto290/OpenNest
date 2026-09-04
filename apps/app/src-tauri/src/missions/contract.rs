@@ -158,6 +158,8 @@ pub enum MissionError {
 	#[serde(rename_all = "camelCase")]
 	UnknownConversation { id: String },
 	#[serde(rename_all = "camelCase")]
+	MissionAlreadyClosed { id: String },
+	#[serde(rename_all = "camelCase")]
 	UnknownBot { id: String },
 	#[serde(rename_all = "camelCase")]
 	UnknownParticipant { conversation_id: String, bot_id: String },

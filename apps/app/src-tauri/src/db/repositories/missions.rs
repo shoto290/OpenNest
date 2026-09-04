@@ -55,11 +55,10 @@ const INSERT_EVENT: &str = "INSERT INTO mission_events
 	SELECT ?1, ?2, COALESCE(max(seq), 0) + 1, ?3, ?4, ?5, ?6
 	FROM mission_events WHERE mission_id = ?2";
 
-const CLOSE_MISSION: &str = "UPDATE missions SET closed_at = ?2
-	WHERE id = ?1 AND closed_at IS NULL";
+const CLOSE_MISSION: &str = "UPDATE missions SET closed_at = ?2 WHERE id = ?1";
 
 const SELECT_EVENTS: &str = "SELECT id, mission_id, kind, source, payload, created_at
-	FROM mission_events WHERE mission_id = ?1 ORDER BY seq ASC LIMIT ?2";
+	FROM mission_events WHERE mission_id = ?1 ORDER BY seq DESC LIMIT ?2";
 
 pub struct MissionsRepository {
 	access: Access,
@@ -93,11 +92,11 @@ impl MissionsRepository {
 			.call(move |connection| {
 				let mut statement = connection.prepare_cached(&format!(
 					"{MISSION_COLUMNS} WHERE origin_conversation_id = ?1
-					ORDER BY opened_at ASC, id ASC LIMIT ?2"
+					ORDER BY opened_at DESC, id DESC LIMIT ?2"
 				))?;
 				let rows = statement
 					.query_map(params![conversation_id, MAX_MISSIONS_PER_READ], mission)?;
-				Ok(parted(rows.collect::<rusqlite::Result<Vec<_>>>()?))
+				Ok(parted(oldest_first(rows.collect::<rusqlite::Result<Vec<_>>>()?)))
 			})
 			.await?)
 	}
@@ -108,10 +107,10 @@ impl MissionsRepository {
 			.call(move |connection| {
 				let mut statement = connection.prepare_cached(&format!(
 					"{MISSION_COLUMNS} WHERE closed_at IS NULL
-					ORDER BY opened_at ASC, id ASC LIMIT ?1"
+					ORDER BY opened_at DESC, id DESC LIMIT ?1"
 				))?;
 				let rows = statement.query_map([MAX_MISSIONS_PER_READ], mission)?;
-				Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+				Ok(oldest_first(rows.collect::<rusqlite::Result<Vec<_>>>()?))
 			})
 			.await?)
 	}
@@ -124,7 +123,7 @@ impl MissionsRepository {
 				};
 				let mut statement = connection.prepare_cached(SELECT_EVENTS)?;
 				let rows = statement.query_map(params![held.id, MAX_EVENTS_PER_MISSION], event)?;
-				let events = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+				let events = oldest_first(rows.collect::<rusqlite::Result<Vec<_>>>()?);
 				Ok(Ok(MissionDetail { mission: held, events }))
 			})
 			.await?
@@ -178,8 +177,11 @@ fn appended(
 	entry: &MissionEntry,
 ) -> Result<Mission, MissionError> {
 	let transaction = write_transaction(connection)?;
-	if held(&transaction, mission_id)?.is_none() {
+	let Some(standing) = held(&transaction, mission_id)? else {
 		return Err(MissionError::UnknownMission { id: mission_id.to_owned() });
+	};
+	if standing.closed_at.is_some() {
+		return Err(MissionError::MissionAlreadyClosed { id: mission_id.to_owned() });
 	}
 	let at = now();
 	record(&transaction, mission_id, entry, at)?;
@@ -218,6 +220,11 @@ fn held(connection: &Connection, id: &str) -> Result<Option<Mission>, DatabaseEr
 
 fn read(transaction: &Transaction<'_>, id: &str) -> Result<Mission, MissionError> {
 	held(transaction, id)?.ok_or_else(|| MissionError::UnknownMission { id: id.to_owned() })
+}
+
+fn oldest_first<T>(mut newest_first: Vec<T>) -> Vec<T> {
+	newest_first.reverse();
+	newest_first
 }
 
 fn parted(missions: Vec<Mission>) -> ConversationMissions {
@@ -567,6 +574,127 @@ mod tests {
 			],
 			"the board dropped an open mission or misread its state"
 		);
+
+		drop(database);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	const MISSIONS_PAST_THE_CAP: &str = "
+		WITH RECURSIVE counter(value) AS
+			(SELECT 1 UNION ALL SELECT value + 1 FROM counter WHERE value < 205)
+		INSERT INTO conversations (id, kind, space_id, title, created_at, updated_at)
+			SELECT 'thread-' || value, 'mission', 'personal', 'Objective ' || value, value, value
+			FROM counter;
+
+		WITH RECURSIVE counter(value) AS
+			(SELECT 1 UNION ALL SELECT value + 1 FROM counter WHERE value < 205)
+		INSERT INTO missions (id, origin_conversation_id, bot_id, thread_conversation_id,
+			objective, ticket_platform, ticket_external_id, ticket_url, ticket_title,
+			tools, opened_at)
+			SELECT 'm-' || value, 'c1', 'b1', 'thread-' || value, 'Objective ' || value,
+				'github', value, 'https://opennest.test/tickets/' || value, 'Ticket', '[]', value
+			FROM counter;
+	";
+
+	fn events_past_the_cap(mission_id: &str) -> String {
+		format!(
+			"WITH RECURSIVE counter(value) AS
+				(SELECT 2 UNION ALL SELECT value + 1 FROM counter WHERE value < 506)
+			INSERT INTO mission_events (id, mission_id, seq, kind, source, payload, created_at)
+				SELECT 'e-' || value, '{mission_id}', value, 'note', 'bot',
+					'{{\"seq\":' || value || '}}', value
+				FROM counter;"
+		)
+	}
+
+	#[tokio::test]
+	async fn a_conversation_past_the_cap_answers_the_missions_opened_last() {
+		let (database, dir) = planted().await;
+		database
+			.call_mut(|connection| Ok(connection.execute_batch(MISSIONS_PAST_THE_CAP)?))
+			.await
+			.expect("the missions are planted");
+
+		let held =
+			database.missions().of_conversation("c1".to_owned()).await.expect("the missions read");
+
+		assert_eq!(held.open.len(), MAX_MISSIONS_PER_READ as usize, "the read went past its cap");
+		assert_eq!(
+			held.open.first().map(|mission| mission.objective.clone()),
+			Some("Objective 6".to_owned()),
+			"the capped read did not drop the oldest missions"
+		);
+		assert_eq!(
+			held.open.last().map(|mission| mission.objective.clone()),
+			Some("Objective 205".to_owned()),
+			"the newest mission fell out of the read"
+		);
+
+		drop(database);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_mission_past_the_cap_answers_the_events_written_last() {
+		let (database, dir) = planted().await;
+		let opened = database
+			.missions()
+			.open(a_draft("c1", "b1", "Fix the crash"))
+			.await
+			.expect("the mission opens");
+		let planting = events_past_the_cap(&opened.id);
+		database
+			.call_mut(move |connection| Ok(connection.execute_batch(&planting)?))
+			.await
+			.expect("the events are planted");
+
+		let detail = database.missions().detail(opened.id).await.expect("the mission reads");
+
+		assert_eq!(
+			detail.events.len(),
+			MAX_EVENTS_PER_MISSION as usize,
+			"the read went past its cap"
+		);
+		assert_eq!(
+			detail.events.first().map(|event| event.payload.clone()),
+			Some(json!({ "seq": 7 })),
+			"the capped read did not drop the oldest events"
+		);
+		assert_eq!(
+			detail.events.last().map(|event| event.payload.clone()),
+			Some(json!({ "seq": 506 })),
+			"the newest event fell out of the read"
+		);
+
+		drop(database);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn an_event_appended_to_a_closed_mission_is_refused_and_written_nowhere() {
+		let (database, dir) = planted().await;
+		let opened = database
+			.missions()
+			.open(a_draft("c1", "b1", "Fix the crash"))
+			.await
+			.expect("the mission opens");
+		let closed = database
+			.missions()
+			.append(opened.id.clone(), an_entry(MissionEventKind::Closed))
+			.await
+			.expect("the mission is closed");
+
+		let refused = database
+			.missions()
+			.append(opened.id.clone(), an_entry(MissionEventKind::Failed))
+			.await
+			.expect_err("the event is refused");
+
+		assert_eq!(refused, MissionError::MissionAlreadyClosed { id: opened.id.clone() });
+		assert_eq!(count_of(&database, "mission_events").await, 2, "an event was written anyway");
+		let detail = database.missions().detail(opened.id).await.expect("the mission reads");
+		assert_eq!(detail.mission.state, MissionState::Done, "the refused event moved the state");
+		assert_eq!(detail.mission.closed_at, closed.closed_at);
 
 		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
