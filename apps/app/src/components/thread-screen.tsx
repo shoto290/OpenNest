@@ -540,12 +540,12 @@ const withMissionCards = ({
 }: MissionCardRowsProps): TranscriptItem[] =>
 	runRows.flatMap((runRow, runIndex) => [
 		runRow,
-		...placed.flatMap(({ mission, runIndex: opened }) => {
-			const face = faceOf(mission.botId)
-			return opened === runIndex && face
-				? [toMissionCardRow(mission, face, onOpen)]
-				: []
-		}),
+		...placed
+			.filter((opened) => opened.runIndex === runIndex)
+			.flatMap(({ mission }) => {
+				const face = faceOf(mission.botId)
+				return face ? [toMissionCardRow(mission, face, onOpen)] : []
+			}),
 	])
 
 type BotThreadTailProps = {

@@ -10,14 +10,11 @@ export type PlacedMission = {
 const NOT_PLACED = -1
 
 const openingRunIndex = (runs: TranscriptRow[][], mission: Mission): number => {
-	for (let index = runs.length - 1; index >= 0; index -= 1) {
-		const run = runs[index][0]
-		if (run.timestamp <= mission.openedAt) {
-			return run.authorBotId === mission.botId ? index : NOT_PLACED
-		}
-	}
+	const index = runs.findLastIndex(
+		([opening]) => opening.timestamp <= mission.openedAt,
+	)
 
-	return NOT_PLACED
+	return runs[index]?.[0].authorBotId === mission.botId ? index : NOT_PLACED
 }
 
 export const placeMissions = (
