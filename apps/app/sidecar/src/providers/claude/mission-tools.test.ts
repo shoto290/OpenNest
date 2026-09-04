@@ -54,6 +54,17 @@ const calls: [string, Record<string, unknown>, string][] = [
 		{ id: "m1", outcome: "done", summary: "The tools are served" },
 		"close",
 	],
+	[
+		"mission_watch",
+		{
+			id: "m1",
+			branch: "feature/ope-37",
+			repository: "shoto290/OpenNest",
+			workspacePath: "/tmp/opennest",
+		},
+		"watch",
+	],
+	["mission_list", {}, "list"],
 ]
 
 const answers: Record<string, unknown> = {
@@ -61,6 +72,20 @@ const answers: Record<string, unknown> = {
 	note: A_MISSION,
 	escalate: { ...A_MISSION, state: "waiting_human" },
 	close: { ...A_MISSION, state: "done" },
+	watch: {
+		mission: A_MISSION,
+		url: "http://127.0.0.1:7788/hooks/mission",
+		key: "a-key",
+		header: "x-opennest-key",
+	},
+	list: [
+		{
+			id: "m1",
+			ticket: A_TICKET,
+			state: "working",
+			openedAt: 1,
+		},
+	],
 }
 
 const aHost = (served: (asked: Asked) => Served) => {
@@ -103,12 +128,14 @@ afterEach(() => {
 })
 
 describe("missionTools", () => {
-	it("serves the four mission tools under their own names", () => {
+	it("serves the six mission tools under their own names", () => {
 		expect(missionTools(SESSION).map((held) => held.name)).toEqual([
 			"mission_open",
 			"mission_note",
 			"mission_escalate",
 			"mission_close",
+			"mission_watch",
+			"mission_list",
 		])
 	})
 

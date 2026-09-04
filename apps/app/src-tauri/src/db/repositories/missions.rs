@@ -176,6 +176,26 @@ impl MissionsRepository {
 			.await?)
 	}
 
+	pub async fn still_open_for_bot(
+		&self,
+		conversation_id: String,
+		bot_id: String,
+	) -> Result<Vec<Mission>, MissionError> {
+		Ok(self
+			.access
+			.call(move |connection| {
+				let mut statement = connection.prepare_cached(&format!(
+					"{MISSION_COLUMNS} WHERE closed_at IS NULL AND bot_id = ?2
+					AND (origin_conversation_id = ?1 OR thread_conversation_id = ?1)
+					ORDER BY opened_at DESC, id DESC LIMIT ?3"
+				))?;
+				let rows = statement
+					.query_map(params![conversation_id, bot_id, MAX_MISSIONS_PER_READ], mission)?;
+				Ok(oldest_first(rows.collect::<rusqlite::Result<Vec<_>>>()?))
+			})
+			.await?)
+	}
+
 	pub async fn still_open(&self) -> Result<Vec<Mission>, MissionError> {
 		Ok(self
 			.access
