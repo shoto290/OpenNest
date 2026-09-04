@@ -10,6 +10,13 @@ const bots = {
 		},
 		empty: "Aucun bot pour l'instant",
 		unavailable: "Vos bots n'ont pas pu être lus.",
+		mission: {
+			unavailable: {
+				title: "Les missions n'ont pas pu être lues",
+				description:
+					"Vos bots sont intacts. Chaque ligne s'affiche sans sa mission jusqu'à la prochaine lecture.",
+			},
+		},
 		actions: "Actions pour {{name}}",
 		settings: "Réglages",
 		duplicate: "Dupliquer",

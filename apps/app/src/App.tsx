@@ -57,6 +57,8 @@ import { toEnvironmentRows } from "@/lib/environment/environment-rows"
 import { useEnvironment } from "@/lib/environment/use-environment"
 import { hasOverlayWindowControls, isSidebarResizable } from "@/lib/host"
 import { useExternalLinks } from "@/lib/links/use-external-links"
+import { withMissions } from "@/lib/missions/missions-model"
+import { useMissionBoard } from "@/lib/missions/use-mission-board"
 import { useNotifications } from "@/lib/notifications/use-notifications"
 import { useRunDriver } from "@/lib/routines/use-run-driver"
 import { useCollapsedSections } from "@/lib/sections/use-collapsed-sections"
@@ -165,6 +167,8 @@ export function App() {
 		chat: chat.controller,
 		roster: roster.controller,
 	})
+
+	const missions = useMissionBoard()
 
 	const conversationBadges = useConversationBadges({
 		runtimes: conversationRuntimes,
@@ -373,8 +377,12 @@ export function App() {
 	const now = useRosterClock()
 	const rosterBots = useMemo(() => {
 		probeRender("rosterBots")
-		return withBadges(toRosterBots(bots, { working, previews }, now), badges)
-	}, [bots, working, previews, now, badges])
+		return withMissions(
+			withBadges(toRosterBots(bots, { working, previews }, now), badges),
+			missions,
+			now,
+		)
+	}, [bots, working, previews, now, badges, missions])
 
 	const listedRosters = Object.keys(rosters).join(" ")
 
@@ -402,10 +410,17 @@ export function App() {
 		return Object.fromEntries(
 			Object.entries(rosters).map(([spaceId, spaceBots]) => [
 				spaceId,
-				withBadges(toRosterBots(spaceBots, { working, previews }, now), badges),
+				withMissions(
+					withBadges(
+						toRosterBots(spaceBots, { working, previews }, now),
+						badges,
+					),
+					missions,
+					now,
+				),
 			]),
 		)
-	}, [rosters, working, previews, now, badges])
+	}, [rosters, working, previews, now, badges, missions])
 
 	const conversationRosters = roster.state.conversationRosters
 

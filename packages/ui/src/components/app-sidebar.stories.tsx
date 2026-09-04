@@ -155,6 +155,47 @@ const BADGED_ROSTER: AppSidebarBot[] = [
 	ROSTER[3],
 ]
 
+const MISSION_ROSTER: AppSidebarBot[] = [
+	{
+		...ROSTER[0],
+		title: "OPE-29",
+		lastMessage: "Drive every roster line from the mission its bot is on.",
+		timestamp: "2h",
+		status: "idle",
+		badge: "attention",
+	},
+	{
+		...ROSTER[1],
+		title: "OPE-30",
+		lastMessage: "Open the mission thread from the line that carries it.",
+		timestamp: "4h",
+		status: "idle",
+		badge: "done",
+	},
+	{
+		...ROSTER[2],
+		title: "OPE-28",
+		lastMessage: "List every mission event in the activity panel.",
+		timestamp: "6h",
+		status: "idle",
+		badge: "failed",
+	},
+	{
+		...ROSTER[3],
+		title: "OPE-31",
+		lastMessage: "Mirror the mission board into the tray menu.",
+		timestamp: "9h",
+		status: "onMission",
+	},
+]
+
+const RAISED_MISSION_ROSTER: AppSidebarBot[] = [
+	MISSION_ROSTER[0],
+	{ ...ROSTER[4], timestamp: "now" },
+	{ ...ROSTER[5], timestamp: "3m" },
+	{ ...ROSTER[6], timestamp: "12m" },
+]
+
 const IDENTITY_BLOTS: BotAvatarBlot[] = [
 	"red",
 	"yellow",
@@ -935,6 +976,78 @@ export const BadgesOnRail = meta.story({
 			await expect(dotBox.right).toBeLessThanOrEqual(panelBox.right)
 			await expect(dotBox.left).toBeGreaterThanOrEqual(panelBox.left)
 		}
+	},
+})
+
+export const MissionLines = meta.story({
+	args: { bots: MISSION_ROSTER, selectedBotId: "beacon" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Four rows driven by the mission their bot is on, one per state a mission can hold on a line. The waiting row asks for the reader and carries attention, the ready row carries done, the failed row carries failed, and the row whose bot still has the ball carries no dot at all and shimmers its line instead. Check the title pill reads the ticket the mission was opened on rather than the bot's own title, that the preview reads the objective rather than the last thing said in the room, and that the time is the time the mission opened. Check the running row shimmers the objective itself: a mission says what it is about even while it moves, so the pose verb never takes the line back. Pick `Badges` for the same three dots derived from a chat instead of a mission, `MissionRaised` for what a waiting mission does to the order of the list.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const rows = rowsIn(canvasElement)
+
+		await expect(rows.map(badgeIn)).toEqual([
+			"attention",
+			"done",
+			"failed",
+			undefined,
+		])
+
+		await expect(slotIn(rows[0], "roster-row-badge")).toHaveTextContent(
+			"OPE-29",
+		)
+		await expect(slotIn(rows[0], "roster-row-preview")).toHaveTextContent(
+			"Drive every roster line from the mission its bot is on.",
+		)
+		await expect(slotIn(rows[0], "roster-row-timestamp")).toHaveTextContent(
+			"2h",
+		)
+
+		const running = rows[3]
+		await expect(slotIn(running, "roster-row-preview")).toHaveTextContent(
+			"Mirror the mission board into the tray menu.",
+		)
+		await expect(slotIn(running, "text-shimmer")).toBeInTheDocument()
+		await expect(
+			running.querySelector('[data-slot="bot-activity-dot"]'),
+		).toBeNull()
+
+		await expectAlignedRows(rows)
+		await expect(uniqueCount(rowHeights(rows))).toBe(1)
+	},
+})
+
+export const MissionRaised = meta.story({
+	args: { bots: RAISED_MISSION_ROSTER, selectedBotId: "flint" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"One bot held up by a mission waiting for the reader, over three bots holding no mission at all. Check the waiting row sits at the top even though the three under it spoke more recently — a mission that cannot move without a person outranks a room that is merely fresh — and that the three rows below read exactly as they do without any mission: their own title where they have one, their last message, the time they last spoke, no dot. Check nothing else about the raised row changes shape: it keeps the row height, the columns and the trailing badge edge the list holds throughout. Pick `MissionLines` for the four states a mission puts on a line, `Roster` for the same list ordered by the last word alone.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const rows = rowsIn(canvasElement)
+
+		await expect(slotIn(rows[0], "roster-row-name")).toHaveTextContent("Atlas")
+		await expect(rows.map(badgeIn)).toEqual([
+			"attention",
+			undefined,
+			undefined,
+			undefined,
+		])
+		await expect(slotIn(rows[1], "roster-row-timestamp")).toHaveTextContent(
+			"now",
+		)
+		await expectAlignedRows(rows)
+		await expect(uniqueCount(rowHeights(rows))).toBe(1)
 	},
 })
 
@@ -1920,6 +2033,48 @@ export const SpaceBadges = meta.story({
 		await expect(
 			slotsIn(trigger, "space-switcher-badge")[0]?.dataset.badge,
 		).toBe("attention")
+	},
+})
+
+export const MissionSpaceRing = meta.story({
+	args: {
+		spaces: FIVE_SPACES,
+		selectedSpaceId: "vocca",
+		botsBySpaceId: { ...FIVE_ROSTERS, vocca: MISSION_ROSTER.slice(3) },
+		badgesBySpaceId: { atelier: "attention" },
+		user: READER,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A mission waiting for the reader in a space they are not looking at. Check the dot for that space takes the attention ring while every other space in the strip is drawn exactly as it is without one, and that the switcher above the roster repeats the mark, so a reader deep in one space still learns another one is blocked on them. Check the open roster stays as it reads: its own bot is on a mission that has not asked for anything, so it shimmers its objective and carries no dot of its own — the ring is the only thing lit. Pick `SpaceBadges` for three rings at once from three different states, `MissionLines` for what the mission puts on the rows themselves.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const dots = spaceDotsIn(canvasElement).map(
+			(button) => slotsIn(button, "space-dot")[0]?.dataset.badge,
+		)
+		await expect(dots).toEqual([
+			undefined,
+			undefined,
+			"attention",
+			undefined,
+			undefined,
+		])
+
+		const trigger = canvas.getByRole("button", {
+			name: "Change space, Vocca open",
+		})
+		await expect(
+			slotsIn(trigger, "space-switcher-badge")[0]?.dataset.badge,
+		).toBe("attention")
+
+		await expect(slotsIn(canvasElement, "bot-activity-dot")).toHaveLength(0)
+		await expect(
+			canvas.getAllByText("Mirror the mission board into the tray menu.")[0],
+		).toBeInTheDocument()
 	},
 })
 

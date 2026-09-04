@@ -222,7 +222,7 @@ const CAROUSEL_HELD = "overflow-x-hidden"
 const CAROUSEL_PANEL =
 	"flex w-full flex-none snap-start snap-always flex-col gap-1.5 overflow-y-auto overscroll-y-contain px-[9px] pt-0 pb-1.5 group-data-[state=collapsed]/sidebar:px-0"
 
-type AppSidebarStatus = "idle" | "working"
+type AppSidebarStatus = "idle" | "working" | "onMission"
 
 const NO_BOTS: AppSidebarBot[] = []
 
@@ -273,8 +273,11 @@ interface AppSidebarConversation {
 
 const poseOf = (bot: AppSidebarBot) => bot.pose ?? "thinking"
 
+const isOnMission = (held: { status?: AppSidebarStatus }) =>
+	held.status === "onMission"
+
 const isBusy = (held: { status?: AppSidebarStatus }) =>
-	held.status === "working"
+	held.status === "working" || isOnMission(held)
 
 const badgeOf = (conversation: AppSidebarConversation) =>
 	conversation.participants.find(
@@ -645,7 +648,7 @@ const BotRosterRow = ({
 								</span>
 							</span>
 							<RowPreview isWorking={working}>
-								{working
+								{working && !isOnMission(bot)
 									? t("roster.working", { pose: t(`roster.pose.${pose}`) })
 									: bot.lastMessage && toPlainText(bot.lastMessage)}
 							</RowPreview>

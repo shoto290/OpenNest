@@ -19,6 +19,13 @@ const bots = {
 		},
 		empty: "No bots yet",
 		unavailable: "Your bots could not be read.",
+		mission: {
+			unavailable: {
+				title: "Missions could not be read",
+				description:
+					"Your bots are intact. Each line reads without its mission until the next read.",
+			},
+		},
 		actions: "Actions for {{name}}",
 		settings: "Settings",
 		duplicate: "Duplicate",
