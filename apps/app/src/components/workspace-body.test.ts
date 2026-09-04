@@ -112,7 +112,6 @@ type Workspace = {
 	bot: Bot
 	conversation: Conversation
 	driver: ScriptedDriver
-	store: TranscriptStore
 	body: () => ReturnType<typeof createElement>
 }
 
@@ -132,7 +131,6 @@ const workspaceOf = async (store = createFakeTranscriptStore()) => {
 		bot,
 		conversation,
 		driver,
-		store,
 		body: () =>
 			createElement(WorkspaceBody, {
 				attachments,

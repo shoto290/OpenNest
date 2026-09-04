@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from "react"
+import { useEffect, useMemo } from "react"
 
 import type { MissionEventModel } from "@workspace/ui/components/mission"
 import { MissionThread } from "@workspace/ui/components/mission-thread"
@@ -86,19 +86,16 @@ const OpenedMission = ({
 
 	useLeaveOnEscape(onLeave)
 
-	const send = useCallback(
-		(text: string) => {
-			void controller.send(text).then(
-				() => {
-					if (controller.getState().refusedMessage) {
-						reportSendFailure(t)
-					}
-				},
-				() => reportSendFailure(t),
-			)
-		},
-		[controller, t],
-	)
+	const send = (text: string) => {
+		void controller.send(text).then(
+			() => {
+				if (controller.getState().refusedMessage) {
+					reportSendFailure(t)
+				}
+			},
+			() => reportSendFailure(t),
+		)
+	}
 
 	return (
 		<MissionThread
@@ -140,22 +137,22 @@ export function MissionThreadScreen({
 		? bots.find(({ id }) => id === read.mission.botId)
 		: undefined
 
-	if (!read || !bot) {
-		return hasFailedToRead || read !== null ? (
-			<MissionReadFailure onRetry={onRetry} />
-		) : null
+	if (read && bot) {
+		return (
+			<OpenedMission
+				bot={bot}
+				events={read.events}
+				hasFailedToRead={hasFailedToRead}
+				mission={read.mission}
+				onLeave={onLeave}
+				onRetry={onRetry}
+				readerName={readerName}
+				runtimes={runtimes}
+			/>
+		)
 	}
 
-	return (
-		<OpenedMission
-			bot={bot}
-			events={read.events}
-			hasFailedToRead={hasFailedToRead}
-			mission={read.mission}
-			onLeave={onLeave}
-			onRetry={onRetry}
-			readerName={readerName}
-			runtimes={runtimes}
-		/>
-	)
+	const isReading = read === null && !hasFailedToRead
+
+	return isReading ? null : <MissionReadFailure onRetry={onRetry} />
 }
