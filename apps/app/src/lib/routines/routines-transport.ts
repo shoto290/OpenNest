@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event"
 import type {
 	ReportedRun,
 	Routine,
+	RoutineChanged,
 	RoutineDraft,
 	RoutineEdit,
 	RoutineKey,
@@ -15,6 +16,8 @@ import type {
 import type { RunRequestListener } from "./run-port"
 
 export const RUN_REQUESTED_EVENT = "routine://run-requested"
+
+export const CHANGED_EVENT = "routine://changed"
 
 export const DEFAULT_RUN_PAGE = 50
 
@@ -38,4 +41,6 @@ export const routinesTransport = {
 		listen<RunRequested>(RUN_REQUESTED_EVENT, ({ payload }) =>
 			listener(payload),
 		),
+	onChanged: (listener: (changed: RoutineChanged) => void) =>
+		listen<RoutineChanged>(CHANGED_EVENT, ({ payload }) => listener(payload)),
 }

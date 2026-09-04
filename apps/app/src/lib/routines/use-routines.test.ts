@@ -25,6 +25,7 @@ vi.mock("./routines-transport", async (importOriginal) => ({
 		key: vi.fn(),
 		runs: vi.fn(),
 		runNow: vi.fn(),
+		onChanged: vi.fn(),
 	},
 }))
 vi.mock("./trigger-sources-transport", () => ({
@@ -37,6 +38,7 @@ const remove = vi.mocked(routinesTransport.delete)
 const create = vi.mocked(routinesTransport.create)
 const readKey = vi.mocked(routinesTransport.key)
 const readRuns = vi.mocked(routinesTransport.runs)
+const onChanged = vi.mocked(routinesTransport.onChanged)
 const sources = vi.mocked(triggerSourcesTransport.sources)
 
 const ROUTINE: Routine = {
@@ -116,8 +118,20 @@ const mountHeldRoutines = async () => {
 	return result
 }
 
+const announce = async (conversationId: string) => {
+	const listener = onChanged.mock.calls.at(-1)?.[0]
+	if (!listener) {
+		throw new Error("no routine change listener was registered")
+	}
+
+	await act(async () => {
+		listener({ conversationId })
+	})
+}
+
 beforeEach(() => {
 	vi.clearAllMocks()
+	onChanged.mockResolvedValue(() => undefined)
 })
 
 afterEach(cleanup)
@@ -756,4 +770,37 @@ it("leaves the routines list reachable when the runs cannot be read", async () =
 	})
 	expect(result.current.detail.open).toBeNull()
 	expect(result.current.routines).toHaveLength(1)
+})
+
+it("re-reads the list when a routine of the open conversation changes", async () => {
+	const result = await mountHeldRoutines()
+
+	list.mockResolvedValueOnce([ROUTINE, { ...ROUTINE, id: "r-3" }])
+	await announce(ROUTINE.conversationId)
+
+	await waitFor(() => expect(result.current.routines).toHaveLength(2))
+})
+
+it("reads nothing when the change carries another conversation", async () => {
+	const result = await mountHeldRoutines()
+
+	await announce("c-other")
+
+	expect(list).toHaveBeenCalledTimes(1)
+	expect(result.current.routines).toHaveLength(1)
+})
+
+it("re-reads the run history of the open routine when a routine changes", async () => {
+	const result = await mountLeadRoutines([ROUTINE])
+	readRuns.mockResolvedValue([])
+
+	await act(async () => {
+		result.current.detail.onOpen(ROUTINE.id)
+	})
+	expect(readRuns).toHaveBeenCalledTimes(1)
+
+	list.mockResolvedValueOnce([ROUTINE])
+	await announce(ROUTINE.conversationId)
+
+	await waitFor(() => expect(readRuns).toHaveBeenCalledTimes(2))
 })

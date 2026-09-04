@@ -34,6 +34,10 @@ const opening = (routineId: string): OpenRoutine => ({
 	refusal: null,
 })
 
+export type OpenedRoutineDetail = RoutinesPanelDetail & {
+	refreshRuns: () => void
+}
+
 export type RoutineDetailWiring = {
 	routines: RoutineRowModel[]
 	onWriteFailure: () => void
@@ -42,7 +46,7 @@ export type RoutineDetailWiring = {
 export const useRoutineDetail = ({
 	routines,
 	onWriteFailure,
-}: RoutineDetailWiring): RoutinesPanelDetail => {
+}: RoutineDetailWiring): OpenedRoutineDetail => {
 	const [held, setHeld] = useState<OpenRoutine | null>(null)
 	const placed = useRef(0)
 	const reads = useRef(0)
@@ -110,6 +114,12 @@ export const useRoutineDetail = ({
 		}
 	}, [held, readRuns])
 
+	const refreshRuns = useCallback(() => {
+		if (held) {
+			readRuns(held.routineId)
+		}
+	}, [held, readRuns])
+
 	const onRunNow = useCallback(() => {
 		if (!held || held.isRunning) {
 			return
@@ -163,7 +173,7 @@ export const useRoutineDetail = ({
 	}, [routines, held])
 
 	return useMemo(
-		() => ({ open, onOpen, onClose, onRetryRuns, onRunNow }),
-		[open, onOpen, onClose, onRetryRuns, onRunNow],
+		() => ({ open, onOpen, onClose, onRetryRuns, onRunNow, refreshRuns }),
+		[open, onOpen, onClose, onRetryRuns, onRunNow, refreshRuns],
 	)
 }

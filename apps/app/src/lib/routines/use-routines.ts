@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import type { RoutineTriggerSource } from "@workspace/ui/components/routine-form"
 import type { RoutineRowModel } from "@workspace/ui/components/routine-row"
@@ -19,6 +19,7 @@ import {
 import { routinesTransport } from "./routines-transport"
 import type { TriggerSource } from "./trigger-contract"
 import { triggerSourcesTransport } from "./trigger-sources-transport"
+import { useRoutineAnnouncements } from "./use-routine-announcements"
 import { useRoutineDetail } from "./use-routine-detail"
 import { useRoutineForm } from "./use-routine-form"
 
@@ -74,6 +75,34 @@ const knownOf = async (
 	return toKnownSources(lead ? [lead, ...others] : others)
 }
 
+type RoutinesRead = {
+	sources: RoutineTriggerSource[]
+	listed: { rows: Routine[]; known: KnownSources } | null
+	failure: RoutinesFailure | null
+}
+
+const readOf = async (
+	listing: PromiseSettledResult<Routine[]>,
+	declaring: PromiseSettledResult<TriggerSource[]>,
+	leadBotId: string | undefined,
+): Promise<RoutinesRead> => {
+	const declared = declaring.status === "fulfilled" ? declaring.value : null
+	const sources = declared ? toTriggerSources(declared) : NO_SOURCES
+
+	if (listing.status === "rejected") {
+		return { sources, listed: null, failure: "read" }
+	}
+
+	return {
+		sources,
+		listed: {
+			rows: listing.value,
+			known: await knownOf(listing.value, leadDeclaration(leadBotId, declared)),
+		},
+		failure: declared ? null : "read",
+	}
+}
+
 export const useRoutines = (
 	conversationId: string | null,
 	leadBotId?: string,
@@ -82,29 +111,32 @@ export const useRoutines = (
 	const [known, setKnown] = useState<KnownSources>(NO_KNOWN_SOURCES)
 	const [sources, setSources] = useState<RoutineTriggerSource[]>(NO_SOURCES)
 	const [failure, setFailure] = useState<RoutinesFailure | null>(null)
+	const reads = useRef(0)
 
 	const reload = useCallback(() => {
 		if (!conversationId) {
 			return
 		}
 
+		reads.current += 1
+		const ticket = reads.current
+
 		void Promise.allSettled([
 			routinesTransport.list(conversationId),
 			declaredByLead(leadBotId),
 		]).then(async ([listing, declaring]) => {
-			const declared = declaring.status === "fulfilled" ? declaring.value : null
-			setSources(declared ? toTriggerSources(declared) : NO_SOURCES)
-
-			if (listing.status === "rejected") {
-				setFailure("read")
+			const read = await readOf(listing, declaring, leadBotId)
+			if (ticket !== reads.current) {
 				return
 			}
 
-			setKnown(
-				await knownOf(listing.value, leadDeclaration(leadBotId, declared)),
-			)
-			setHeld(listing.value)
-			setFailure(declared ? null : "read")
+			setSources(read.sources)
+			setFailure(read.failure)
+
+			if (read.listed) {
+				setKnown(read.listed.known)
+				setHeld(read.listed.rows)
+			}
 		})
 	}, [conversationId, leadBotId])
 
@@ -164,6 +196,14 @@ export const useRoutines = (
 		routines,
 		onWriteFailure: raiseWriteFailure,
 	})
+
+	const { refreshRuns } = detail
+	const onAnnounced = useCallback(() => {
+		reload()
+		refreshRuns()
+	}, [reload, refreshRuns])
+
+	useRoutineAnnouncements(conversationId, onAnnounced)
 
 	const form = useRoutineForm({
 		conversationId,

@@ -108,6 +108,10 @@ export type RunRequested = {
 	payload: unknown
 }
 
+export type RoutineChanged = {
+	conversationId: string
+}
+
 export type SkipReason = "leaseHeld" | "hourlyCap" | "backingOff"
 
 export type Refusal =
