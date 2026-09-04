@@ -1,6 +1,8 @@
 
 use std::collections::HashMap;
+use std::future::Future;
 use std::path::PathBuf;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -10,7 +12,7 @@ use tokio::sync::{mpsc, oneshot, Mutex};
 use super::contract::{
 	AgentEvent, ConnectionState, PermissionDecision, TransportError, TurnOutcome, TurnState,
 };
-use super::protocol::{self, ClosedFrame, Frame, OpenRequest};
+use super::protocol::{self, ClosedFrame, Frame, HostAnswer, HostRequestFrame, OpenRequest};
 use super::sidecar::Sidecar;
 use super::translate::Translator;
 use crate::environment::contract::ResolvedEnv;
@@ -21,6 +23,12 @@ pub const PARTIAL_MESSAGES: &str = "partialMessages";
 
 pub trait EventSink: Send + Sync + 'static {
 	fn emit(&self, event: AgentEvent);
+}
+
+pub type Answering = Pin<Box<dyn Future<Output = HostAnswer> + Send>>;
+
+pub trait HostRequests: std::fmt::Debug + Send + Sync + 'static {
+	fn serve(&self, request: Value) -> Answering;
 }
 
 impl EventSink for mpsc::UnboundedSender<AgentEvent> {
@@ -93,6 +101,7 @@ pub struct SessionOptions {
 	pub extra_env: Vec<(String, String)>,
 	pub server_env: ResolvedEnv,
 	pub output_schema: Option<serde_json::Value>,
+	pub host: Option<Arc<dyn HostRequests>>,
 }
 
 impl SessionOptions {
@@ -107,6 +116,7 @@ impl SessionOptions {
 			extra_env: Vec::new(),
 			server_env: ResolvedEnv::default(),
 			output_schema: None,
+			host: None,
 		}
 	}
 
@@ -137,6 +147,11 @@ impl SessionOptions {
 
 	pub fn serving(mut self, server_env: ResolvedEnv) -> Self {
 		self.server_env = server_env;
+		self
+	}
+
+	pub fn hosting(mut self, host: Arc<dyn HostRequests>) -> Self {
+		self.host = Some(host);
 		self
 	}
 
@@ -208,7 +223,13 @@ impl Session {
 		}));
 
 		let (opened_tx, opened_rx) = oneshot::channel::<Result<(), TransportError>>();
-		tokio::spawn(read_loop(frames, shared.clone(), sink.clone(), opened_tx));
+		let desk = HostDesk {
+			sidecar: sidecar.clone(),
+			key: key.clone(),
+			host: options.host.clone(),
+			sink: sink.clone(),
+		};
+		tokio::spawn(read_loop(frames, shared.clone(), sink.clone(), opened_tx, desk));
 
 		let request = options.open_request(sidecar.supports(PARTIAL_MESSAGES));
 		let session = Self { sidecar, key, shared, sink, resumed };
@@ -379,11 +400,45 @@ fn crashed(closed: &ClosedFrame) -> TransportError {
 	TransportError::Crashed { code: None, detail: closed.detail.clone() }
 }
 
+struct HostDesk {
+	sidecar: Arc<Sidecar>,
+	key: String,
+	host: Option<Arc<dyn HostRequests>>,
+	sink: Arc<dyn EventSink>,
+}
+
+impl HostDesk {
+	fn answer(&self, asked: HostRequestFrame) {
+		let sidecar = self.sidecar.clone();
+		let key = self.key.clone();
+		let host = self.host.clone();
+		let sink = self.sink.clone();
+		tokio::spawn(async move {
+			let answer = match host {
+				Some(host) => host.serve(asked.request).await,
+				None => Err(unserved()),
+			};
+			let command = protocol::host_response_command(&key, &asked.request_id, &answer);
+			if let Err(error) = sidecar.send(command) {
+				sink.emit(AgentEvent::Failed { error });
+			}
+		});
+	}
+}
+
+fn unserved() -> Value {
+	serde_json::json!({
+		"kind": "unexpected",
+		"detail": "this session answers no host request"
+	})
+}
+
 async fn read_loop(
 	mut frames: mpsc::UnboundedReceiver<Value>,
 	shared: Arc<Mutex<Shared>>,
 	sink: Arc<dyn EventSink>,
 	opened_tx: oneshot::Sender<Result<(), TransportError>>,
+	desk: HostDesk,
 ) {
 	let mut opened_tx = Some(opened_tx);
 	let mut seen: u64 = 0;
@@ -415,6 +470,11 @@ async fn read_loop(
 				return;
 			}
 			_ => {}
+		}
+
+		if let Frame::HostRequest(asked) = frame {
+			desk.answer(asked);
+			continue;
 		}
 
 		let (entering, events, ending) = {

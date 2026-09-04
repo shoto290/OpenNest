@@ -73,6 +73,7 @@ Every other command names its session.
 | `prompt` | `text` | one `SDKUserMessage` on the session's prompt stream |
 | `interrupt` | — | `Query.interrupt()` |
 | `permission` | `requestId`, `decision` | the `canUseTool` promise's answer |
+| `host_response` | `requestId`, `result` or `error` | the `askHost` promise's answer |
 | `close` | — | the prompt stream ends and `Query.close()` runs |
 
 `open` maps to SDK options directly:
@@ -172,6 +173,7 @@ The frame is an `SDKMessage` verbatim, plus the four the sidecar adds itself.
 | `assistant` | `SDKAssistantMessage` — `text` and/or `tool_use` blocks | `messageCompleted` / `activity` |
 | `user` | `SDKUserMessage` — `tool_result` with `is_error` | `activity` (succeeded / failed) |
 | `result` | `SDKResultMessage` — `subtype`, `session_id`, `is_error` | `turnEnded` |
+| `host_request` | the sidecar, from `askHost` | nothing — it is answered, not read |
 | `control_request` / `can_use_tool` | the sidecar, from `canUseTool` | `permissionRequested` |
 | `control_request` / `can_use_tool`, tool `AskUserQuestion` | the sidecar, from `canUseTool` | `questionRequested` |
 | `settings_rejected` | the sidecar, when the bot's `settings.json` is refused in part or in whole | `failed` — `settingsRejected`, the frame's `detail` as its reason |
@@ -204,6 +206,47 @@ replies written into its input, keyed by the question they answer.
 true` and the turn continues. A session closing settles every promise it still
 holds as a denial: an unanswered one would block its tool forever, since a
 permission prompt has no deadline of its own.
+
+## Host requests
+
+`canUseTool` asks the reader; `host_request` asks the host itself. The sidecar
+emits it under a `requestId` it owns, and the host answers with exactly one
+`host_response` carrying that same id, either a `result` or an `error`.
+
+```json
+{"session":"…","frame":{"type":"host_request","requestId":"…",
+ "request":{"subtype":"routine","operation":"create","payload":{…}}}}
+```
+
+```json
+{"type":"host_response","session":"…","requestId":"…","result":{…}}
+{"type":"host_response","session":"…","requestId":"…","error":{"kind":"routineOfAnotherBot","id":"…","botId":"…"}}
+```
+
+A `host_request` never reaches the translator: it raises no `AgentEvent`, it ends
+no turn, and it does not promote a session to `Running`.
+
+`subtype` names who serves the request. `routine` is served by
+`routines::host::RoutineHost`, over the five operations `list`, `create`,
+`update`, `runNow` and `delete`:
+
+- the conversation and the bot come from the scope the session was opened with,
+  never from the payload — a payload naming a field its operation does not
+  declare is refused, that field named, and nothing is written;
+- `list` answers every routine of that conversation, whatever bot owns one;
+- `update`, `runNow` and `delete` refuse a routine of another conversation or of
+  another bot, that routine named;
+- every conversation is served the same way, a bot's own solo thread included:
+  nothing here reads the kind of a conversation;
+- every write emits `routine://changed` with the conversation id, whatever asked
+  for it.
+
+An `error` is a `RoutineError`, the same taxonomy the front's own invokes are
+refused with. A session opened with no host attached answers every request with
+one, so a request is never left hanging. So does the end of a session: a `close`
+command, a `closed` frame, or an `open` reusing the same session key settles
+every request that channel still awaits as `undeliverable`, since a host answer
+has no deadline of its own.
 
 ## Stop and shutdown
 

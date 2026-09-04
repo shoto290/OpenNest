@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use serde::Serialize;
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 
@@ -18,6 +19,22 @@ use crate::conversations::contract::TranscriptStoreError;
 use crate::db;
 
 pub const RUN_REQUESTED_EVENT: &str = "routine://run-requested";
+
+pub const CHANGED_EVENT: &str = "routine://changed";
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RoutineChanged {
+	pub conversation_id: String,
+}
+
+fn announce_change<R: Runtime>(
+	app: &AppHandle<R>,
+	conversation_id: &str,
+) -> Result<(), RoutineError> {
+	app.emit(CHANGED_EVENT, RoutineChanged { conversation_id: conversation_id.to_owned() })
+		.map_err(|error| RoutineError::Undeliverable { detail: error.to_string() })
+}
 
 pub(crate) struct Announcer<'a, R: Runtime> {
 	pub(crate) app: &'a AppHandle<R>,
@@ -99,7 +116,9 @@ pub async fn routine_create<R: Runtime>(
 		.await?;
 	refuse_unreadable_expression(&draft.trigger_source_id, &draft.trigger_config)?;
 	let key = uuid::Uuid::new_v4().to_string();
-	database.routines().create(draft, key, SystemClock.now_ms()).await
+	let stored = database.routines().create(draft, key, SystemClock.now_ms()).await?;
+	announce_change(&app, &stored.conversation_id)?;
+	Ok(stored)
 }
 
 #[tauri::command]
@@ -115,15 +134,21 @@ pub async fn routine_update<R: Runtime>(
 	refuse_unsupported_rows(&app, database, &held.bot_id, &held.trigger_source_id, &edit.filter)
 		.await?;
 	refuse_unreadable_expression(&held.trigger_source_id, &edit.trigger_config)?;
-	database.routines().update(id, edit).await
+	let stored = database.routines().update(id, edit).await?;
+	announce_change(&app, &stored.conversation_id)?;
+	Ok(stored)
 }
 
 #[tauri::command]
-pub async fn routine_delete(
+pub async fn routine_delete<R: Runtime>(
+	app: AppHandle<R>,
 	state: State<'_, db::DatabaseState>,
 	id: String,
 ) -> Result<(), RoutineError> {
-	ready(&state)?.routines().delete(id).await
+	let database = ready(&state)?;
+	let held = routine_row(database, &id).await?;
+	database.routines().delete(id).await?;
+	announce_change(&app, &held.conversation_id)
 }
 
 #[tauri::command]
@@ -157,7 +182,11 @@ pub async fn routine_run_now<R: Runtime>(
 	state: State<'_, db::DatabaseState>,
 	id: String,
 ) -> Result<TriggerDecision, RoutineError> {
-	core::run_now(ready(&state)?, &Announcer { app: &app }, &SystemClock, id).await
+	let database = ready(&state)?;
+	let held = routine_row(database, &id).await?;
+	let decision = core::run_now(database, &Announcer { app: &app }, &SystemClock, id).await?;
+	announce_change(&app, &held.conversation_id)?;
+	Ok(decision)
 }
 
 #[tauri::command]
@@ -198,7 +227,10 @@ fn called_at<R: Runtime>(app: &AppHandle<R>, trigger_source_id: &str) -> Option<
 	app.try_state::<webhook::Webhook>().and_then(|webhook| webhook.url())
 }
 
-async fn routine_row(database: &db::Database, id: &str) -> Result<Routine, RoutineError> {
+pub(crate) async fn routine_row(
+	database: &db::Database,
+	id: &str,
+) -> Result<Routine, RoutineError> {
 	database
 		.routines()
 		.held(id.to_owned())

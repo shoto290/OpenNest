@@ -332,6 +332,12 @@ pub enum RoutineError {
 	#[serde(rename_all = "camelCase")]
 	UnknownSource { id: String },
 	#[serde(rename_all = "camelCase")]
+	RoutineOfAnotherConversation { id: String, conversation_id: String },
+	#[serde(rename_all = "camelCase")]
+	RoutineOfAnotherBot { id: String, bot_id: String },
+	#[serde(rename_all = "camelCase")]
+	UnreadableRequest { detail: String },
+	#[serde(rename_all = "camelCase")]
 	UnknownTurn { id: String },
 	#[serde(rename_all = "camelCase")]
 	TurnOfAnotherConversation { turn_id: String, conversation_id: String },
