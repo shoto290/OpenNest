@@ -53,9 +53,9 @@ export const openHostChannel = (
 	}
 }
 
-export const askHost = (session: string, request: HostRequest) =>
+export const askHost = (session: string | undefined, request: HostRequest) =>
 	new Promise<unknown>((resolve, reject) => {
-		const channel = channels.get(session)
+		const channel = session ? channels.get(session) : undefined
 		if (!channel) {
 			reject(undeliverable(UNKNOWN_SESSION))
 			return

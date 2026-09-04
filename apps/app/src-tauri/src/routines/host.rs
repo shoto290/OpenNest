@@ -3,7 +3,8 @@ use serde_json::Value;
 use tauri::{AppHandle, Manager, Runtime, State};
 
 use super::commands::{
-	routine_create, routine_delete, routine_list, routine_row, routine_run_now, routine_update,
+	routine_create, routine_delete, routine_list, routine_row, routine_run_now,
+	routine_trigger_sources, routine_update,
 };
 use super::contract::{Filter, FilterMatchMode, RoutineDraft, RoutineEdit, RoutineError};
 use crate::agent::protocol::HostAnswer;
@@ -45,8 +46,14 @@ impl<R: Runtime> RoutineHost<R> {
 		let database = ready(&state)?;
 		match operation {
 			Operation::List => {
-				let _: Listed = read(payload)?;
+				let _: Bare = read(payload)?;
 				answered(routine_list(state, self.conversation_id.clone()).await?)
+			}
+			Operation::TriggerSources => {
+				let _: Bare = read(payload)?;
+				answered(
+					routine_trigger_sources(self.app.clone(), state, self.bot_id.clone()).await?,
+				)
 			}
 			Operation::Create => {
 				let asked: Created = read(payload)?;
@@ -134,6 +141,7 @@ enum Asked {
 #[serde(rename_all = "camelCase")]
 enum Operation {
 	List,
+	TriggerSources,
 	Create,
 	Update,
 	RunNow,
@@ -142,7 +150,7 @@ enum Operation {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct Listed {}
+struct Bare {}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -442,6 +450,31 @@ mod tests {
 		assert_eq!(updated["title"], json!("Renamed"));
 		assert_eq!(ran["kind"], json!("started"));
 		assert!(listed(&app, "m1").await.is_empty());
+
+		cleaned(&app);
+	}
+
+	#[tokio::test]
+	async fn trigger_sources_answer_what_the_bot_of_the_session_may_be_triggered_by() {
+		let app = a_host("sources").await;
+
+		let answered = serving(&app, "c1")
+			.answer(json!({ "subtype": "routine", "operation": "triggerSources" }))
+			.await
+			.expect("the sources are answered");
+
+		let sources = answered.as_array().expect("a list");
+		let ids: Vec<&str> = sources.iter().filter_map(|source| source["id"].as_str()).collect();
+		assert!(ids.contains(&"schedule"), "got {answered}");
+		let schedule =
+			sources.iter().find(|source| source["id"] == json!("schedule")).expect("the schedule");
+		let fields: Vec<&str> = schedule["payload"]
+			.as_array()
+			.expect("its fields")
+			.iter()
+			.filter_map(|field| field["name"].as_str())
+			.collect();
+		assert_eq!(fields, vec!["occurrenceId", "firedAt", "expression"]);
 
 		cleaned(&app);
 	}

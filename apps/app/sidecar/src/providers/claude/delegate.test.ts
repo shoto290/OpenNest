@@ -2,12 +2,7 @@ import { describe, expect, it } from "bun:test"
 
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk"
 
-import {
-	DELEGATE_SERVER,
-	DELEGATE_TOOL,
-	delegateServer,
-	reportOf,
-} from "./delegate"
+import { reportOf } from "./delegate"
 
 const streaming = async function* (
 	...messages: SDKMessage[]
@@ -41,15 +36,5 @@ describe("reportOf", () => {
 
 	it("names the failure when the run ends without a result at all", async () => {
 		expect(await reportOf(streaming())).toContain("before reporting")
-	})
-})
-
-describe("delegateServer", () => {
-	it("bridges one in-process server under the name the tool answers to", () => {
-		const servers = delegateServer({ cwd: "/tmp", managedSettings: {} })
-
-		expect(Object.keys(servers)).toEqual([DELEGATE_SERVER])
-		expect(servers[DELEGATE_SERVER]?.type).toBe("sdk")
-		expect(DELEGATE_TOOL).toBe(`mcp__${DELEGATE_SERVER}__delegate`)
 	})
 })

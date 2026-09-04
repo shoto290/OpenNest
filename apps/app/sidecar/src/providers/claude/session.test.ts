@@ -6,8 +6,8 @@ import { join } from "node:path"
 import type { Settings } from "@anthropic-ai/claude-agent-sdk"
 
 import { claudeSourceExecutable } from "./build"
-import { DELEGATE_SERVER } from "./delegate"
 import { EXECUTABLE_OVERRIDE_ENV } from "./executable"
+import { OPENNEST_SERVER } from "./opennest-server"
 import { buildOptions, CLASSIFY_ASK_USER_QUESTION } from "./session"
 import {
 	bundleLine,
@@ -27,6 +27,11 @@ const settingsOf = (options: ReturnType<typeof buildOptions>): Settings =>
 process.env[EXECUTABLE_OVERRIDE_ENV] = claudeSourceExecutable()
 
 const identity = "You are Bean, the baker."
+
+const systemBundle = new URL(
+	"../../../../src-tauri/plugins/opennest",
+	import.meta.url,
+).pathname
 
 const request = {
 	cwd: "/tmp",
@@ -226,14 +231,27 @@ describe("buildOptions", () => {
 	it("hands over the servers the bundle declares", () => {
 		expect(
 			Object.keys(buildOptions(request, undefined).mcpServers ?? {}),
-		).toEqual([DELEGATE_SERVER])
+		).toEqual([OPENNEST_SERVER])
 	})
 
-	it("leaves an unbundled session without a server of any kind", () => {
-		expect(
-			buildOptions({ cwd: "/tmp", partialMessages: false }, undefined)
-				.mcpServers,
-		).toBeUndefined()
+	it("leaves an unbundled session without a server or a routine of any kind", () => {
+		const options = buildOptions(
+			{ cwd: "/tmp", partialMessages: false },
+			undefined,
+		)
+
+		expect(options.mcpServers).toBeUndefined()
+		expect(appended(options)).not.toContain("routine_create")
+	})
+
+	it("carries the routines skill of the system bundle into a bundled session", () => {
+		const options = buildOptions(
+			{ ...request, systemPluginPath: systemBundle },
+			undefined,
+		)
+
+		expect(Object.keys(options.mcpServers ?? {})).toContain(OPENNEST_SERVER)
+		expect(appended(options)).toContain("routine_create")
 	})
 
 	it("denies the asynchronous agent tools on every spawn", () => {
@@ -348,7 +366,7 @@ describe("buildOptions", () => {
 
 		expect(Object.keys(options.mcpServers ?? {})).toEqual([
 			"clock",
-			DELEGATE_SERVER,
+			OPENNEST_SERVER,
 		])
 		expect(appended(options)).toContain(leftOut[0])
 	})
