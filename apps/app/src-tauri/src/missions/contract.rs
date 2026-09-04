@@ -159,6 +159,14 @@ pub struct MissionDetail {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct MissionInThread {
+	pub mission: Mission,
+	pub events: Vec<MissionEvent>,
+	pub earlier_events: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ConversationMissions {
 	pub open: Vec<Mission>,
 	pub done: Vec<Mission>,
@@ -237,6 +245,23 @@ impl From<TranscriptStoreError> for MissionError {
 			TranscriptStoreError::UnknownBot { id } => MissionError::UnknownBot { id },
 			TranscriptStoreError::Storage { failure } => MissionError::Storage { failure },
 			other => MissionError::Unexpected { detail: format!("{other:?}") },
+		}
+	}
+}
+
+impl From<MissionError> for TranscriptStoreError {
+	fn from(error: MissionError) -> Self {
+		match error {
+			MissionError::Unavailable { failure } => TranscriptStoreError::Unavailable { failure },
+			MissionError::Storage { failure } => TranscriptStoreError::Storage { failure },
+			MissionError::UnknownBot { id } => TranscriptStoreError::UnknownBot { id },
+			MissionError::UnknownConversation { id } => {
+				TranscriptStoreError::UnknownConversation { id }
+			}
+			MissionError::UnknownParticipant { conversation_id, bot_id } => {
+				TranscriptStoreError::UnknownParticipant { conversation_id, bot_id }
+			}
+			other => TranscriptStoreError::UnreadableHistory { detail: format!("{other:?}") },
 		}
 	}
 }

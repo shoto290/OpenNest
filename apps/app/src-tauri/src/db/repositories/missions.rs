@@ -9,7 +9,8 @@ use super::conversations::open_thread_under;
 use crate::db::{Access, DatabaseError};
 use crate::missions::contract::{
 	ConversationMissions, Mission, MissionDetail, MissionDraft, MissionEntry, MissionError,
-	MissionEvent, MissionEventKind, MissionState, MissionWatch, Ticket, WatchedMission,
+	MissionEvent, MissionEventKind, MissionInThread, MissionState, MissionWatch, Ticket,
+	WatchedMission,
 };
 
 const MAX_MISSIONS_PER_READ: u32 = 200;
@@ -72,6 +73,8 @@ const CLOSE_MISSION: &str = "UPDATE missions SET closed_at = ?2 WHERE id = ?1";
 
 const SELECT_EVENTS: &str = "SELECT id, mission_id, kind, source, payload, created_at
 	FROM mission_events WHERE mission_id = ?1 ORDER BY seq DESC LIMIT ?2";
+
+const COUNT_EVENTS: &str = "SELECT count(*) FROM mission_events WHERE mission_id = ?1";
 
 pub struct MissionsRepository {
 	access: Access,
@@ -192,6 +195,35 @@ impl MissionsRepository {
 				let rows = statement
 					.query_map(params![conversation_id, bot_id, MAX_MISSIONS_PER_READ], mission)?;
 				Ok(oldest_first(rows.collect::<rusqlite::Result<Vec<_>>>()?))
+			})
+			.await?)
+	}
+
+	pub async fn in_thread(
+		&self,
+		conversation_id: String,
+		events: u32,
+	) -> Result<Option<MissionInThread>, MissionError> {
+		Ok(self
+			.access
+			.call(move |connection| {
+				let mut statement = connection.prepare_cached(&format!(
+					"{MISSION_COLUMNS} WHERE thread_conversation_id = ?1"
+				))?;
+				let Some(threaded) = statement.query_row([conversation_id], mission).optional()?
+				else {
+					return Ok(None);
+				};
+				let mut statement = connection.prepare_cached(SELECT_EVENTS)?;
+				let rows = statement.query_map(params![threaded.id, events], event)?;
+				let latest = oldest_first(rows.collect::<rusqlite::Result<Vec<_>>>()?);
+				let held: i64 =
+					connection.query_row(COUNT_EVENTS, [&threaded.id], |row| row.get(0))?;
+				Ok(Some(MissionInThread {
+					earlier_events: held - latest.len() as i64,
+					mission: threaded,
+					events: latest,
+				}))
 			})
 			.await?)
 	}
@@ -1018,6 +1050,46 @@ mod tests {
 		assert_eq!(refused, MissionError::UnknownMission { id: "x9".to_owned() });
 		assert_eq!(read, MissionError::UnknownMission { id: "x9".to_owned() });
 		assert_eq!(count_of(&database, "mission_events").await, 0, "an event was written anyway");
+
+		drop(database);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_thread_answers_with_its_mission_the_events_it_is_bounded_to_and_what_it_left_out() {
+		let (database, dir) = planted().await;
+		let opened = database
+			.missions()
+			.open(a_draft("c1", "b1", "Fix the crash"))
+			.await
+			.expect("the mission opens");
+		for _ in 0..3 {
+			database
+				.missions()
+				.append(opened.id.clone(), an_entry(MissionEventKind::Note))
+				.await
+				.expect("the event is appended");
+		}
+
+		let in_thread = database
+			.missions()
+			.in_thread(opened.thread_conversation_id.clone(), 2)
+			.await
+			.expect("the thread reads")
+			.expect("a mission behind the thread");
+
+		assert_eq!(in_thread.mission.id, opened.id);
+		assert_eq!(
+			in_thread.events.iter().map(|event| event.kind).collect::<Vec<_>>(),
+			vec![MissionEventKind::Note, MissionEventKind::Note],
+			"the thread carried something other than its most recent events"
+		);
+		assert_eq!(in_thread.earlier_events, 2, "the events left out went miscounted");
+		assert_eq!(
+			database.missions().in_thread("c1".to_owned(), 2).await.expect("the read answers"),
+			None,
+			"a conversation holding a mission answered as its thread"
+		);
 
 		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
