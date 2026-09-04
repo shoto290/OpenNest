@@ -19,6 +19,7 @@ const LEAD_ROLE: &str = "lead";
 const CHAT_TITLE: &str = "Chat";
 const CHAT_KIND: &str = "main";
 const TOPIC_KIND: &str = "topic";
+const MISSION_KIND: &str = "mission";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AvatarAnimal {
@@ -618,6 +619,37 @@ fn insert_chat(transaction: &Transaction<'_>, bot_id: &str) -> Result<Chat, Conv
 		params![created.id, bot_id, PARTICIPANT_ROLE, at],
 	)?;
 	Ok(created)
+}
+
+pub(in crate::db) fn open_thread_under(
+	transaction: &Transaction<'_>,
+	origin_conversation_id: &str,
+	bot_id: &str,
+	title: &str,
+) -> Result<String, ConversationError> {
+	let space_id: Option<String> = transaction
+		.query_row(
+			"SELECT space_id FROM conversations WHERE id = ?1",
+			[origin_conversation_id],
+			|row| row.get(0),
+		)
+		.optional()?
+		.ok_or_else(|| ConversationError::UnknownConversation {
+			id: origin_conversation_id.to_owned(),
+		})?;
+	let id = Uuid::new_v4().to_string();
+	let at = now();
+	transaction.execute(
+		"INSERT INTO conversations (id, kind, space_id, title, created_at, updated_at)
+			VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
+		params![id, MISSION_KIND, space_id, title, at],
+	)?;
+	transaction.execute(
+		"INSERT INTO conversation_participants (conversation_id, bot_id, role, joined_at, join_seq)
+			VALUES (?1, ?2, ?3, ?4, 0)",
+		params![id, bot_id, PARTICIPANT_ROLE, at],
+	)?;
+	Ok(id)
 }
 
 fn created_bot(

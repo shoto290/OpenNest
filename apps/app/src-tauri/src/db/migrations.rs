@@ -32,6 +32,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 23, statements: ROUTINE_TASK },
 	Migration { version: 24, statements: ROUTINE_LAST_OCCURRENCE },
 	Migration { version: 25, statements: ROUTINE_REPORTED_TURN },
+	Migration { version: 26, statements: MISSIONS },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -506,6 +507,82 @@ CREATE UNIQUE INDEX IF NOT EXISTS routine_runs_one_run_per_reported_turn
 	ON routine_runs (reported_turn_id) WHERE reported_turn_id IS NOT NULL;
 ";
 
+const MISSIONS: &str = "
+PRAGMA legacy_alter_table = ON;
+ALTER TABLE conversations RENAME TO conversations_without_missions;
+PRAGMA legacy_alter_table = OFF;
+
+CREATE TABLE conversations (
+	id TEXT PRIMARY KEY,
+	kind TEXT NOT NULL CHECK (kind IN ('main', 'topic', 'mission')),
+	title TEXT NOT NULL,
+	created_at INTEGER NOT NULL,
+	updated_at INTEGER NOT NULL,
+	archived_at INTEGER,
+	pin_position INTEGER,
+	space_id TEXT REFERENCES spaces(id) ON DELETE CASCADE,
+	section_id TEXT REFERENCES sections(id) ON DELETE SET NULL,
+	instructions TEXT NOT NULL DEFAULT ''
+);
+
+INSERT INTO conversations (id, kind, title, created_at, updated_at, archived_at, pin_position,
+		space_id, section_id, instructions)
+	SELECT id, kind, title, created_at, updated_at, archived_at, pin_position,
+		space_id, section_id, instructions
+	FROM conversations_without_missions;
+
+DROP TABLE conversations_without_missions;
+
+CREATE INDEX conversations_of_space ON conversations (space_id) WHERE kind = 'topic';
+
+CREATE TABLE missions (
+	id TEXT PRIMARY KEY,
+	origin_conversation_id TEXT NOT NULL,
+	bot_id TEXT NOT NULL,
+	thread_conversation_id TEXT NOT NULL UNIQUE
+		REFERENCES conversations (id) ON DELETE CASCADE,
+	objective TEXT NOT NULL,
+	ticket_platform TEXT NOT NULL,
+	ticket_external_id TEXT NOT NULL,
+	ticket_url TEXT NOT NULL,
+	ticket_title TEXT NOT NULL,
+	tools TEXT NOT NULL DEFAULT '[]',
+	opened_at INTEGER NOT NULL,
+	closed_at INTEGER,
+	FOREIGN KEY (origin_conversation_id, bot_id)
+		REFERENCES conversation_participants (conversation_id, bot_id) ON DELETE CASCADE
+);
+
+CREATE INDEX missions_of_conversation ON missions (origin_conversation_id, opened_at, id);
+
+CREATE INDEX missions_still_open ON missions (opened_at, id) WHERE closed_at IS NULL;
+
+CREATE TABLE mission_events (
+	id TEXT PRIMARY KEY,
+	mission_id TEXT NOT NULL REFERENCES missions (id) ON DELETE CASCADE,
+	seq INTEGER NOT NULL,
+	kind TEXT NOT NULL CHECK (kind IN
+		('opened', 'note', 'agent_asked', 'answered', 'escalated', 'ready', 'failed', 'closed')),
+	source TEXT NOT NULL,
+	payload TEXT NOT NULL,
+	created_at INTEGER NOT NULL,
+	UNIQUE (mission_id, seq)
+);
+
+CREATE TRIGGER mission_events_are_written_once
+BEFORE UPDATE ON mission_events
+BEGIN
+	SELECT RAISE(ABORT, 'a mission event records one moment: append a new one, never edit it');
+END;
+
+CREATE TRIGGER mission_events_outlive_their_mission
+BEFORE DELETE ON mission_events
+WHEN EXISTS (SELECT 1 FROM missions WHERE id = OLD.mission_id)
+BEGIN
+	SELECT RAISE(ABORT, 'a mission event is never erased while its mission stands');
+END;
+";
+
 pub fn latest_version() -> u32 {
 	MIGRATIONS.last().map_or(0, |migration| migration.version)
 }
@@ -577,6 +654,7 @@ mod tests {
 	const ROUTINE_TASK_STEP: u32 = 23;
 	const ROUTINE_LAST_OCCURRENCE_STEP: u32 = 24;
 	const ROUTINE_REPORTED_TURN_STEP: u32 = 25;
+	const MISSIONS_STEP: u32 = 26;
 
 	const A_LIVE_SESSION: &str = "INSERT INTO runtime_sessions
 		(id, conversation_id, bot_id, provider_session_id, seq, status, started_at)
@@ -642,6 +720,113 @@ mod tests {
 				CREATE TABLE half_landed (id TEXT PRIMARY KEY);",
 		},
 	];
+
+	#[test]
+	fn the_conversations_a_file_already_held_come_out_of_the_missions_step_untouched() {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, shipped_before(MISSIONS_STEP)).expect("the shipped schema");
+		connection
+			.execute_batch(
+				"INSERT INTO bots (id, space_id, name, model, created_at)
+					VALUES ('b1', 'personal', 'First', 'sonnet', 1);
+				INSERT INTO conversations
+					(id, kind, space_id, title, instructions, created_at, updated_at, pin_position)
+					VALUES ('c1', 'main', NULL, 'Chat', '', 1, 1, NULL),
+						('c2', 'topic', 'personal', 'Room', 'be brief', 2, 3, 7);
+				INSERT INTO conversation_participants
+					(conversation_id, bot_id, role, joined_at, join_seq)
+					VALUES ('c1', 'b1', 'assistant', 1, 0), ('c2', 'b1', 'lead', 2, 0);
+				INSERT INTO turns (id, conversation_id, seq, started_at)
+					VALUES ('t1', 'c2', 1, 1);
+				INSERT INTO messages
+					(id, conversation_id, turn_id, seq, role, content, completion_state, created_at)
+					VALUES ('m1', 'c2', 't1', 1, 'user', 'hello', 'complete', 1);",
+			)
+			.expect("the rooms this build upgrades from");
+
+		apply(&mut connection).expect("the file comes up to this build");
+
+		assert_eq!(version(&connection).expect("version"), latest_version());
+		assert_eq!(
+			rooms_of(&connection),
+			vec![
+				("c1".to_owned(), "main".to_owned(), None, "Chat".to_owned(), String::new(), None),
+				(
+					"c2".to_owned(),
+					"topic".to_owned(),
+					Some("personal".to_owned()),
+					"Room".to_owned(),
+					"be brief".to_owned(),
+					Some(7),
+				),
+			],
+			"the step that opened the mission kind cost the file its rooms"
+		);
+		assert_eq!(
+			transcript_of(&connection, "c2"),
+			vec!["hello".to_owned()],
+			"the rebuilt table dropped the messages hanging off it"
+		);
+		assert!(
+			has_index(&connection, "conversations_of_space"),
+			"the space index was not rebuilt"
+		);
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[test]
+	fn a_thread_of_a_mission_is_a_conversation_the_schema_has_a_word_for() {
+		let dir = temp_dir();
+		let connection = fixture(&dir);
+
+		let mission = write(
+			&connection,
+			"INSERT INTO conversations (id, kind, title, created_at, updated_at)
+				VALUES ('c3', 'mission', 'Third', 1, 1)",
+		);
+		let invented = write(
+			&connection,
+			"INSERT INTO conversations (id, kind, title, created_at, updated_at)
+				VALUES ('c4', 'errand', 'Fourth', 1, 1)",
+		);
+
+		assert!(mission.is_ok(), "a mission thread was refused: {mission:?}");
+		assert!(invented.is_err(), "a kind the schema has no word for was stored");
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[test]
+	fn a_mission_event_is_appended_and_never_edited_nor_erased() {
+		let dir = temp_dir();
+		let connection = fixture(&dir);
+		connection.execute_batch(A_MISSION).expect("the mission is opened");
+
+		let kind = write(
+			&connection,
+			"INSERT INTO mission_events (id, mission_id, seq, kind, source, payload, created_at)
+				VALUES ('e2', 'x1', 2, 'merged', 'bot', '{}', 2)",
+		);
+		let edit = write(&connection, "UPDATE mission_events SET kind = 'closed' WHERE id = 'e1'");
+		let erase = write(&connection, "DELETE FROM mission_events WHERE id = 'e1'");
+		write(&connection, "DELETE FROM missions WHERE id = 'x1'").expect("the mission is dropped");
+
+		assert!(kind.is_err(), "an event kind the schema has no word for was stored");
+		assert!(edit.is_err(), "a mission event was edited");
+		assert!(erase.is_err(), "a mission event was erased under a standing mission");
+		assert_eq!(
+			count(&connection, "mission_events"),
+			0,
+			"the events of a dropped mission stayed behind"
+		);
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
 
 	#[test]
 	fn a_failing_step_rolls_back_its_tables_and_its_version() {
@@ -1721,6 +1906,42 @@ mod tests {
 			.collect::<rusqlite::Result<Vec<_>>>()
 			.expect("rows")
 	}
+
+	fn rooms_of(
+		connection: &Connection,
+	) -> Vec<(String, String, Option<String>, String, String, Option<i64>)> {
+		let mut statement = connection
+			.prepare(
+				"SELECT id, kind, space_id, title, instructions, pin_position
+					FROM conversations ORDER BY id ASC",
+			)
+			.expect("prepare");
+		statement
+			.query_map([], |row| {
+				Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?))
+			})
+			.expect("query")
+			.collect::<rusqlite::Result<Vec<_>>>()
+			.expect("rows")
+	}
+
+	fn count(connection: &Connection, table: &str) -> u32 {
+		connection
+			.query_row(&format!("SELECT count(*) FROM {table}"), [], |row| row.get(0))
+			.expect("query")
+	}
+
+	const A_MISSION: &str = "
+		INSERT INTO conversations (id, kind, space_id, title, created_at, updated_at)
+			VALUES ('c9', 'mission', 'personal', 'Fix the crash', 1, 1);
+		INSERT INTO missions (id, origin_conversation_id, bot_id, thread_conversation_id,
+			objective, ticket_platform, ticket_external_id, ticket_url, ticket_title,
+			tools, opened_at)
+			VALUES ('x1', 'c1', 'b1', 'c9', 'Fix the crash', 'github', '42',
+				'https://opennest.test/tickets/42', 'Crash on open', '[]', 1);
+		INSERT INTO mission_events (id, mission_id, seq, kind, source, payload, created_at)
+			VALUES ('e1', 'x1', 1, 'opened', 'bot', '{}', 1);
+	";
 
 	fn has_table(connection: &Connection, name: &str) -> bool {
 		connection

@@ -1,5 +1,6 @@
 pub mod conversations;
 pub mod messages;
+pub mod missions;
 pub mod routines;
 pub mod runtime_context;
 pub mod sections;
@@ -9,6 +10,7 @@ pub mod user;
 
 pub use conversations::ConversationsRepository;
 pub use messages::MessagesRepository;
+pub use missions::MissionsRepository;
 pub use routines::RoutinesRepository;
 pub use runtime_context::RuntimeContextRepository;
 pub use sections::SectionsRepository;
