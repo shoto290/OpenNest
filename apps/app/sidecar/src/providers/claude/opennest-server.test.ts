@@ -18,7 +18,7 @@ describe("opennestServer", () => {
 		expect(DELEGATE_TOOL).toBe(`mcp__${OPENNEST_SERVER}__delegate`)
 	})
 
-	it("carries the delegate tool and every routine tool of the session", () => {
+	it("carries the delegate tool and every routine and mission tool of the session", () => {
 		expect(opennestTools(scope).map((held) => held.name)).toEqual([
 			"delegate",
 			"routine_list",
@@ -27,6 +27,10 @@ describe("opennestServer", () => {
 			"routine_update",
 			"routine_run_now",
 			"routine_delete",
+			"mission_open",
+			"mission_note",
+			"mission_escalate",
+			"mission_close",
 		])
 	})
 })

@@ -115,6 +115,10 @@ impl MissionsRepository {
 			.await?)
 	}
 
+	pub async fn held(&self, id: String) -> Result<Option<Mission>, MissionError> {
+		Ok(self.access.call(move |connection| held(connection, &id)).await?)
+	}
+
 	pub async fn detail(&self, id: String) -> Result<MissionDetail, MissionError> {
 		self.access
 			.call(move |connection| {

@@ -12,6 +12,8 @@ use crate::agent::session::{Answering, HostRequests};
 use crate::conversations::commands::ready;
 use crate::db;
 
+const SUBTYPE: &str = "routine";
+
 const NO_DATABASE: &str = "the store this session writes to is not open";
 
 #[derive(Debug)]
@@ -121,6 +123,10 @@ impl<R: Runtime> RoutineHost<R> {
 }
 
 impl<R: Runtime> HostRequests for RoutineHost<R> {
+	fn subtype(&self) -> &'static str {
+		SUBTYPE
+	}
+
 	fn serve(&self, request: Value) -> Answering {
 		let held = self.clone();
 		Box::pin(async move { held.answer(request).await })

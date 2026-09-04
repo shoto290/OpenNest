@@ -128,6 +128,17 @@ pub async fn mission_board<R: Runtime>(
 	Ok(board)
 }
 
+pub(crate) async fn mission_row(
+	database: &db::Database,
+	id: &str,
+) -> Result<Mission, MissionError> {
+	database
+		.missions()
+		.held(id.to_owned())
+		.await?
+		.ok_or_else(|| MissionError::UnknownMission { id: id.to_owned() })
+}
+
 #[cfg(test)]
 mod tests {
 	use std::fs;

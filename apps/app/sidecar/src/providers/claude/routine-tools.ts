@@ -1,7 +1,7 @@
 import { type SdkMcpToolDefinition, tool } from "@anthropic-ai/claude-agent-sdk"
 import { z } from "zod"
 
-import { askHost, HostRefusal } from "../../host"
+import { carriedTo } from "./host-calls"
 
 const SUBTYPE = "routine"
 
@@ -77,26 +77,7 @@ const EDITED: ToolInput = {
 	isEnabled: z.boolean().describe(IS_ENABLED),
 }
 
-const spoken = (answer: unknown) => ({
-	content: [{ type: "text" as const, text: JSON.stringify(answer ?? null) }],
-})
-
-const asked = async (
-	session: string | undefined,
-	operation: string,
-	payload: object,
-) => {
-	try {
-		return spoken(
-			await askHost(session, { subtype: SUBTYPE, operation, payload }),
-		)
-	} catch (error) {
-		if (error instanceof HostRefusal) {
-			return { ...spoken(error.error), isError: true }
-		}
-		throw error
-	}
-}
+const asked = carriedTo(SUBTYPE)
 
 type RoutineTool = SdkMcpToolDefinition<ToolInput>
 
