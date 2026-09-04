@@ -44,7 +44,29 @@ const NEW_ROUTINE_KEY = "new-routine"
 const NEW_ROUTINE_OPENER = "new-routine-opener"
 const CLOSED_MISSIONS_OPENER = "closed-missions-opener"
 
-type RoutinesFailure = "read" | "write"
+type RoutinesFailure = "missions" | "routines" | "activity" | "write"
+
+const FAILURE_COPY = {
+	missions: {
+		title: "activity.failure.missions.title",
+		description: "activity.failure.missions.description",
+	},
+	routines: {
+		title: "activity.failure.routines.title",
+		description: "activity.failure.routines.description",
+	},
+	activity: {
+		title: "activity.failure.activity.title",
+		description: "activity.failure.activity.description",
+	},
+	write: {
+		title: "routines.failure.write.title",
+		description: "routines.failure.write.description",
+	},
+} as const satisfies Record<
+	RoutinesFailure,
+	{ title: string; description: string }
+>
 
 type RoutinesPanelForm = {
 	open: RoutineFormModel | null
@@ -165,9 +187,9 @@ const RoutinesPanelBody = ({
 
 	const notice = failure ? (
 		<Notice
-			description={t(`routines.failure.${failure}.description`)}
+			description={t(FAILURE_COPY[failure].description)}
 			retry={{ onRetry }}
-			title={t(`routines.failure.${failure}.title`)}
+			title={t(FAILURE_COPY[failure].title)}
 		/>
 	) : null
 

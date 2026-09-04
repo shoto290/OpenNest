@@ -1,6 +1,9 @@
 import { type ReactNode, useState } from "react"
 
-import { RoutinesPanel } from "@workspace/ui/components/routines-panel"
+import {
+	type RoutinesFailure,
+	RoutinesPanel,
+} from "@workspace/ui/components/routines-panel"
 
 import { useMissions } from "@/lib/missions/use-missions"
 import { useRoutines } from "@/lib/routines/use-routines"
@@ -9,6 +12,17 @@ type ThreadRoutinesProps = {
 	conversationId: string | null
 	leadBotId?: string
 	children: ReactNode
+}
+
+const activityFailure = (
+	routines: RoutinesFailure | null,
+	hasMissionsFailed: boolean,
+): RoutinesFailure | null => {
+	if (!hasMissionsFailed) {
+		return routines
+	}
+
+	return routines === "routines" ? "activity" : "missions"
 }
 
 const ThreadRoutines = ({
@@ -29,7 +43,7 @@ const ThreadRoutines = ({
 	return (
 		<RoutinesPanel
 			detail={detail}
-			failure={failure ?? (missions.hasFailed ? "read" : null)}
+			failure={activityFailure(failure, missions.hasFailed)}
 			form={form}
 			isOpen={isOpen}
 			missions={missions.missions}

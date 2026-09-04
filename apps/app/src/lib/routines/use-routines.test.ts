@@ -175,14 +175,14 @@ it("keeps a read failure whatever a write resolves to", async () => {
 	await act(async () => {
 		result.current.reload()
 	})
-	await waitFor(() => expect(result.current.failure).toBe("read"))
+	await waitFor(() => expect(result.current.failure).toBe("routines"))
 
 	update.mockResolvedValueOnce({ ...ROUTINE, isEnabled: false })
 	await act(async () => {
 		result.current.setEnabled(ROUTINE.id, false)
 	})
 	await waitFor(() => expect(result.current.routines[0].isEnabled).toBe(false))
-	expect(result.current.failure).toBe("read")
+	expect(result.current.failure).toBe("routines")
 })
 
 it("carries the address, the key and the header name of a created webhook routine", async () => {
@@ -279,7 +279,7 @@ it("lists the routines of a conversation whose sources are unreadable", async ()
 		useRoutines(ROUTINE.conversationId, ROUTINE.botId),
 	)
 
-	await waitFor(() => expect(result.current.failure).toBe("read"))
+	await waitFor(() => expect(result.current.failure).toBe("routines"))
 	expect(result.current.routines).toHaveLength(1)
 	expect(result.current.form.canCreate).toBe(false)
 })

@@ -6,6 +6,8 @@ import type { RoutinesPanelMissions } from "@workspace/ui/components/routines-pa
 import { toMissionRows } from "./missions-model"
 import { missionsTransport } from "./missions-transport"
 
+import { useRosterClock } from "@/lib/bots/use-roster-clock"
+
 const NO_MISSIONS: MissionRowModel[] = []
 
 export type ConversationMissionsRead = {
@@ -19,9 +21,9 @@ export const useMissions = (
 ): ConversationMissionsRead => {
 	const [running, setRunning] = useState<MissionRowModel[]>(NO_MISSIONS)
 	const [closed, setClosed] = useState<MissionRowModel[]>(NO_MISSIONS)
-	const [readAt, setReadAt] = useState(0)
 	const [hasFailed, setFailed] = useState(false)
 	const reads = useRef(0)
+	const now = useRosterClock()
 
 	const reload = useCallback(() => {
 		if (!conversationId) {
@@ -39,7 +41,6 @@ export const useMissions = (
 
 				setRunning(toMissionRows(listed.open))
 				setClosed(toMissionRows(listed.done))
-				setReadAt(Date.now())
 				setFailed(false)
 			},
 			() => {
@@ -68,10 +69,10 @@ export const useMissions = (
 
 	return useMemo(
 		() => ({
-			missions: { running, closed, now: readAt },
+			missions: { running, closed, now },
 			hasFailed,
 			reload,
 		}),
-		[running, closed, readAt, hasFailed, reload],
+		[running, closed, now, hasFailed, reload],
 	)
 }

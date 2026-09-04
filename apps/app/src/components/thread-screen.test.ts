@@ -462,6 +462,8 @@ const ROUTINES_TOGGLE = "Activity"
 
 const READ_ROUTINES_TITLE = "Routines could not be read"
 
+const READ_MISSIONS_TITLE = "Missions could not be read"
+
 const withoutMainConversation = (thread: BotThread): BotThread => ({
 	...thread,
 	chat: {
@@ -636,19 +638,43 @@ describe("ThreadScreen", () => {
 		expect(listMissions).toHaveBeenCalledTimes(2)
 	})
 
-	it("tells the reader when the missions of a solo bot thread could not be read", async () => {
+	it("names the missions when they are the read that failed", async () => {
 		listMissions.mockRejectedValue(new Error("refused"))
 		render(screenOf(threadOf({ id: "bot-1", name: "Nyx", said: "held" })))
 		await settle()
 
 		await openRoutinesPanel()
-		expect(screen.getByText(READ_ROUTINES_TITLE)).toBeTruthy()
+		expect(screen.getByText(READ_MISSIONS_TITLE)).toBeTruthy()
+		expect(screen.queryByText(READ_ROUTINES_TITLE)).toBeNull()
 
 		listMissions.mockResolvedValue({ open: [], done: [] })
 		fireEvent.click(screen.getByRole("button", { name: "Retry" }))
 		await settle()
 
+		expect(screen.queryByText(READ_MISSIONS_TITLE)).toBeNull()
+		expect(screen.getByText(SOLO_ROUTINE.title)).toBeTruthy()
+	})
+
+	it("covers both reads with one notice when neither came back", async () => {
+		listRoutines.mockRejectedValue(new Error("refused"))
+		listMissions.mockRejectedValue(new Error("refused"))
+		render(screenOf(threadOf({ id: "bot-1", name: "Nyx", said: "held" })))
+		await settle()
+
+		await openRoutinesPanel()
+		expect(
+			screen.getByText("The activity of this conversation could not be read"),
+		).toBeTruthy()
+		expect(screen.queryByText(READ_MISSIONS_TITLE)).toBeNull()
 		expect(screen.queryByText(READ_ROUTINES_TITLE)).toBeNull()
+
+		listRoutines.mockResolvedValue([SOLO_ROUTINE])
+		listMissions.mockResolvedValue({ open: [], done: [] })
+		fireEvent.click(screen.getByRole("button", { name: "Retry" }))
+		await settle()
+
+		expect(listRoutines).toHaveBeenCalledTimes(2)
+		expect(listMissions).toHaveBeenCalledTimes(2)
 		expect(screen.getByText(SOLO_ROUTINE.title)).toBeTruthy()
 	})
 

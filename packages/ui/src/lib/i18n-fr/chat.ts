@@ -330,6 +330,22 @@ const chat = {
 		routines: {
 			title: "Routines",
 		},
+		failure: {
+			missions: {
+				title: "Les missions n'ont pas pu être lues",
+				description:
+					"Rien n'a été modifié. Réessayez pour lire les missions de cette conversation.",
+			},
+			routines: {
+				title: "Les routines n'ont pas pu être lues",
+				description: "Rien n'a été modifié. Réessayez pour lire les routines.",
+			},
+			activity: {
+				title: "L'activité de cette conversation n'a pas pu être lue",
+				description:
+					"Rien n'a été modifié. Réessayez pour lire ses missions et ses routines.",
+			},
+		},
 	},
 	routines: {
 		form: {
@@ -492,10 +508,6 @@ const chat = {
 				"Une routine fait travailler un bot toute seule, sur un horaire ou quand un fichier qu'elle surveille change.",
 		},
 		failure: {
-			read: {
-				title: "Les routines n'ont pas pu être lues",
-				description: "Rien n'a été modifié. Réessayez pour lire les routines.",
-			},
 			write: {
 				title: "La routine n'a pas pu être modifiée",
 				description:

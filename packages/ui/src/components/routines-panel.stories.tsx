@@ -448,21 +448,70 @@ export const OpeningAMission = meta.story({
 	},
 })
 
-export const ReadFailed = meta.story({
-	args: { failure: "read", missions: NO_MISSION_AT_ALL, routines: NO_ROUTINES },
+export const RoutinesReadFailed = meta.story({
+	args: { failure: "routines", routines: NO_ROUTINES },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"A read that failed, whether the missions or the routines are the ones that could not be read. Check that the failure takes the place of the empty state rather than sitting beside it — a conversation whose activity could not be read has not lost it — and that the retry is the only thing asked of the reader. Pick `WriteFailed` for the failure that follows a change the reader asked for.",
+					"The routines could not be read, the missions could. Check that the notice names the routines rather than the activity as a whole, that the missions the app did read stay on screen under it, and that the retry is the only thing asked of the reader. Pick `MissionsReadFailed` for the other way round.",
 			},
 		},
 	},
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
 		await expect(canvas.getByText("Routines could not be read")).toBeVisible()
-		await expect(canvas.queryByText("No routine yet")).not.toBeInTheDocument()
-		await expect(slotsIn(canvasElement, "mission-row")).toHaveLength(0)
+		await expect(
+			canvas.queryByText("Missions could not be read"),
+		).not.toBeInTheDocument()
 		await expect(slotsIn(canvasElement, "routine-row")).toHaveLength(0)
+
+		await userEvent.click(canvas.getByRole("button", { name: "Retry" }))
+		await expect(args.onRetry).toHaveBeenCalled()
+	},
+})
+
+export const MissionsReadFailed = meta.story({
+	args: { failure: "missions", missions: NO_MISSION_AT_ALL },
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"The missions could not be read, the routines could. Check that the notice names the missions rather than blaming a routines read that never failed, and that the routines the app did read stay on screen under it.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		await expect(canvas.getByText("Missions could not be read")).toBeVisible()
+		await expect(
+			canvas.queryByText("Routines could not be read"),
+		).not.toBeInTheDocument()
+		await expect(slotsIn(canvasElement, "routine-row")).toHaveLength(
+			ROUTINES.length,
+		)
+	},
+})
+
+export const ActivityReadFailed = meta.story({
+	args: {
+		failure: "activity",
+		missions: NO_MISSION_AT_ALL,
+		routines: NO_ROUTINES,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Neither read came back. Check that one notice covers both rather than two stacked on top of each other, that it takes the place of the empty state — a conversation whose activity could not be read has not lost it — and that its retry asks for both reads at once.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		await expect(
+			canvas.getByText("The activity of this conversation could not be read"),
+		).toBeVisible()
+		await expect(slotsIn(canvasElement, "chat-notice")).toHaveLength(1)
+		await expect(canvas.queryByText("No routine yet")).not.toBeInTheDocument()
 
 		await userEvent.click(canvas.getByRole("button", { name: "Retry" }))
 		await expect(args.onRetry).toHaveBeenCalled()

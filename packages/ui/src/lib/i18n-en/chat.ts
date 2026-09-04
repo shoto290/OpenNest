@@ -321,6 +321,22 @@ const chat = {
 		routines: {
 			title: "Routines",
 		},
+		failure: {
+			missions: {
+				title: "Missions could not be read",
+				description:
+					"Nothing was changed. Try again to read the missions of this conversation.",
+			},
+			routines: {
+				title: "Routines could not be read",
+				description: "Nothing was changed. Try again to read the routines.",
+			},
+			activity: {
+				title: "The activity of this conversation could not be read",
+				description:
+					"Nothing was changed. Try again to read its missions and its routines.",
+			},
+		},
 	},
 	routines: {
 		form: {
@@ -477,10 +493,6 @@ const chat = {
 				"A routine runs a bot on its own, on a schedule or when a file it watches changes.",
 		},
 		failure: {
-			read: {
-				title: "Routines could not be read",
-				description: "Nothing was changed. Try again to read the routines.",
-			},
 			write: {
 				title: "The routine could not be changed",
 				description:
