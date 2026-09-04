@@ -407,6 +407,53 @@ const chat = {
 					"{{operator}} ne convient pas à un champ déclaré {{fieldType}}.",
 			},
 		},
+		detail: {
+			title: "Routine",
+			back: "Retour à la routine",
+			runNow: {
+				action: "Exécuter maintenant",
+				refusal: {
+					disabled: "Cette routine est éteinte, aucune exécution n'a démarré.",
+					filter:
+						"Le filtre de cette routine n'a rien laissé passer, aucune exécution n'a démarré.",
+					dedupeValueMissing:
+						"Ce déclencheur ne porte rien qui distingue un événement d'un autre, aucune exécution n'a démarré.",
+					alreadySeen:
+						"Cet événement a déjà été exécuté, aucune exécution n'a démarré.",
+				},
+			},
+			history: {
+				label: "Historique des exécutions",
+				reading: "Lecture des exécutions de cette routine.",
+				counted_one: "{{count}} exécution",
+				counted_many: "{{count}} exécutions",
+				counted_other: "{{count}} exécutions",
+				page_one: "{{count}} dernière exécution lue",
+				page_many: "{{count}} dernières exécutions lues",
+				page_other: "{{count}} dernières exécutions lues",
+				reported_one: "{{count}} rapport",
+				reported_many: "{{count}} rapports",
+				reported_other: "{{count}} rapports",
+				latest: "La plus récente {{when}}",
+				outcome: {
+					reported: "Rapportée",
+					nothing: "Rien à rapporter",
+					skipped: "Ignorée",
+					failed: "Échouée",
+					running: "En cours",
+				},
+				empty: {
+					title: "Aucune exécution enregistrée",
+					description:
+						"Aucune exécution de cette routine n'a été enregistrée. Les exécutions apparaissent ici au fil de l'eau.",
+				},
+				failure: {
+					title: "Les exécutions n'ont pas pu être lues",
+					description:
+						"Rien n'a été modifié. Réessayez pour lire les exécutions de cette routine.",
+				},
+			},
+		},
 		row: {
 			delete: "Supprimer {{title}}",
 			stopped: "S'est arrêtée",

@@ -4,6 +4,7 @@ import type { RoutineTriggerSource } from "@workspace/ui/components/routine-form
 import type { RoutineRowModel } from "@workspace/ui/components/routine-row"
 import type {
 	RoutinesFailure,
+	RoutinesPanelDetail,
 	RoutinesPanelForm,
 } from "@workspace/ui/components/routines-panel"
 
@@ -18,6 +19,7 @@ import {
 import { routinesTransport } from "./routines-transport"
 import type { TriggerSource } from "./trigger-contract"
 import { triggerSourcesTransport } from "./trigger-sources-transport"
+import { useRoutineDetail } from "./use-routine-detail"
 import { useRoutineForm } from "./use-routine-form"
 
 const withoutWriteFailure = (current: RoutinesFailure | null) =>
@@ -34,6 +36,7 @@ export type ConversationRoutines = {
 	setEnabled: (id: string, isEnabled: boolean) => void
 	remove: (id: string) => Promise<void>
 	form: RoutinesPanelForm
+	detail: RoutinesPanelDetail
 }
 
 type Declaration = { botId: string; sources: TriggerSource[] }
@@ -151,8 +154,16 @@ export const useRoutines = (
 
 	const raiseWriteFailure = useCallback(() => setFailure("write"), [])
 
+	const routines = useMemo(() => toRoutineRows(held, known), [held, known])
+
+	const detail = useRoutineDetail({
+		routines,
+		onWriteFailure: raiseWriteFailure,
+	})
+
 	const form = useRoutineForm({
 		conversationId,
+		isOverDetail: detail.open !== null,
 		leadBotId,
 		sources,
 		known,
@@ -161,10 +172,8 @@ export const useRoutines = (
 		onWriteFailure: raiseWriteFailure,
 	})
 
-	const routines = useMemo(() => toRoutineRows(held, known), [held, known])
-
 	return useMemo(
-		() => ({ routines, failure, reload, setEnabled, remove, form }),
-		[routines, failure, reload, setEnabled, remove, form],
+		() => ({ routines, failure, reload, setEnabled, remove, form, detail }),
+		[routines, failure, reload, setEnabled, remove, form, detail],
 	)
 }

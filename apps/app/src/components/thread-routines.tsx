@@ -16,13 +16,12 @@ const ThreadRoutines = ({
 	children,
 }: ThreadRoutinesProps) => {
 	const [isOpen, setOpen] = useState(false)
-	const { routines, failure, reload, setEnabled, remove, form } = useRoutines(
-		conversationId,
-		leadBotId,
-	)
+	const { routines, failure, reload, setEnabled, remove, form, detail } =
+		useRoutines(conversationId, leadBotId)
 
 	return (
 		<RoutinesPanel
+			detail={detail}
 			failure={failure}
 			form={form}
 			isOpen={isOpen}

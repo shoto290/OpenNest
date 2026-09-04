@@ -15,13 +15,16 @@ import type { TriggerSource } from "./trigger-contract"
 import { triggerSourcesTransport } from "./trigger-sources-transport"
 import { type ConversationRoutines, useRoutines } from "./use-routines"
 
-vi.mock("./routines-transport", () => ({
+vi.mock("./routines-transport", async (importOriginal) => ({
+	...(await importOriginal<typeof import("./routines-transport")>()),
 	routinesTransport: {
 		list: vi.fn(),
 		update: vi.fn(),
 		delete: vi.fn(),
 		create: vi.fn(),
 		key: vi.fn(),
+		runs: vi.fn(),
+		runNow: vi.fn(),
 	},
 }))
 vi.mock("./trigger-sources-transport", () => ({
@@ -33,6 +36,7 @@ const update = vi.mocked(routinesTransport.update)
 const remove = vi.mocked(routinesTransport.delete)
 const create = vi.mocked(routinesTransport.create)
 const readKey = vi.mocked(routinesTransport.key)
+const readRuns = vi.mocked(routinesTransport.runs)
 const sources = vi.mocked(triggerSourcesTransport.sources)
 
 const ROUTINE: Routine = {
@@ -710,4 +714,46 @@ it("writes a renamed path in the type the row was read with", async () => {
 		{ field: "unreadCounts", operator: "gt", value: 7 },
 		{ field: "subject", operator: "contains", value: "invoice" },
 	])
+})
+
+it("lands back on the detail when the form it opened is saved", async () => {
+	const result = await mountLeadRoutines([ROUTINE])
+	readRuns.mockResolvedValue([])
+
+	await act(async () => {
+		result.current.detail.onOpen(ROUTINE.id)
+	})
+	act(() => {
+		result.current.form.onOpen(ROUTINE.id)
+	})
+
+	update.mockResolvedValueOnce({ ...ROUTINE, title: "Morning report" })
+	await act(async () => {
+		result.current.form.onSave(
+			entered({ ...A_SCHEDULE_FORM, title: "Morning report" }),
+		)
+	})
+
+	expect(result.current.form.open).toBeNull()
+	expect(result.current.detail.open?.title).toBe("Morning report")
+})
+
+it("leaves the routines list reachable when the runs cannot be read", async () => {
+	const result = await mountLeadRoutines([ROUTINE])
+	readRuns.mockRejectedValueOnce(new Error("the runs are unreadable"))
+
+	await act(async () => {
+		result.current.detail.onOpen(ROUTINE.id)
+	})
+
+	await waitFor(() =>
+		expect(result.current.detail.open?.hasFailedToReadRuns).toBe(true),
+	)
+	expect(result.current.failure).toBeNull()
+
+	act(() => {
+		result.current.detail.onClose()
+	})
+	expect(result.current.detail.open).toBeNull()
+	expect(result.current.routines).toHaveLength(1)
 })

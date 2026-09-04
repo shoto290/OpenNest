@@ -1,3 +1,7 @@
+import type {
+	RoutineDetailModel,
+	RoutineRunModel,
+} from "@workspace/ui/components/routine-detail"
 import {
 	EMPTY_ROUTINE_FILTER,
 	type RoutineFormModel,
@@ -34,6 +38,70 @@ export const ROUTINES: RoutineRowModel[] = [
 	RELEASE_WATCH,
 	SOURCE_NAMED_BY_ID,
 ]
+
+export const RUNS_READ_AT = Date.parse("2026-03-04T09:30:00Z")
+
+export const DIGEST_RUNS: RoutineRunModel[] = [
+	{ id: "run-digest-f", outcome: null, startedAt: RUNS_READ_AT - 240_000 },
+	{
+		id: "run-digest-e",
+		outcome: "reported",
+		startedAt: RUNS_READ_AT - 7_200_000,
+	},
+	{
+		id: "run-digest-d",
+		outcome: "nothing",
+		startedAt: RUNS_READ_AT - 18_000_000,
+	},
+	{
+		id: "run-digest-c",
+		outcome: "skipped",
+		reason: "hourly cap",
+		startedAt: RUNS_READ_AT - 32_400_000,
+	},
+	{
+		id: "run-digest-b",
+		outcome: "failed",
+		reason: "the run's turn ended with no structured output",
+		startedAt: RUNS_READ_AT - 93_600_000,
+	},
+	{
+		id: "run-digest-a",
+		outcome: "reported",
+		startedAt: RUNS_READ_AT - 180_000_000,
+	},
+]
+
+export const DIGEST_DETAIL: RoutineDetailModel = {
+	id: MORNING_DIGEST.id,
+	title: MORNING_DIGEST.title,
+	triggerSourceTitle: MORNING_DIGEST.triggerSourceTitle,
+	hasStoppedItself: MORNING_DIGEST.hasStoppedItself,
+	runs: DIGEST_RUNS,
+	isReadingRuns: false,
+	hasFailedToReadRuns: false,
+	hasReadFullPage: false,
+	isRunning: false,
+	now: RUNS_READ_AT,
+}
+
+export const WATCH_DETAIL: RoutineDetailModel = {
+	...DIGEST_DETAIL,
+	id: RELEASE_WATCH.id,
+	title: RELEASE_WATCH.title,
+	triggerSourceTitle: RELEASE_WATCH.triggerSourceTitle,
+	hasStoppedItself: RELEASE_WATCH.hasStoppedItself,
+	runs: [],
+}
+
+export const CLEANUP_DETAIL: RoutineDetailModel = {
+	...DIGEST_DETAIL,
+	id: SOURCE_NAMED_BY_ID.id,
+	title: SOURCE_NAMED_BY_ID.title,
+	triggerSourceTitle: SOURCE_NAMED_BY_ID.triggerSourceTitle,
+	hasStoppedItself: SOURCE_NAMED_BY_ID.hasStoppedItself,
+	runs: [],
+}
 
 export const TRIGGER_SOURCES: RoutineTriggerSource[] = [
 	{

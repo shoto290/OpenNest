@@ -26,6 +26,7 @@ import type { Filter } from "./trigger-contract"
 
 export type RoutineFormWiring = {
 	conversationId: string
+	isOverDetail: boolean
 	leadBotId: string | undefined
 	sources: RoutineTriggerSource[]
 	known: KnownSources
@@ -68,6 +69,7 @@ const sourcesOf = (
 
 export const useRoutineForm = ({
 	conversationId,
+	isOverDetail,
 	leadBotId,
 	sources,
 	known,
@@ -204,9 +206,14 @@ export const useRoutineForm = ({
 				.then(
 					(routine) => {
 						onWritten(routine)
-						if (isStillOpen()) {
-							show(routine)
+						if (!isStillOpen()) {
+							return
 						}
+						if (isOverDetail) {
+							place(null)
+							return
+						}
+						show(routine)
 					},
 					(reason) => {
 						const refusal = isStillOpen() ? toFormRefusal(reason) : null
@@ -222,7 +229,17 @@ export const useRoutineForm = ({
 					}
 				})
 		},
-		[open, create, edit, onWritten, onWriteFailure, revise, show],
+		[
+			open,
+			create,
+			edit,
+			isOverDetail,
+			onWritten,
+			onWriteFailure,
+			place,
+			revise,
+			show,
+		],
 	)
 
 	const openRoutine = useCallback(

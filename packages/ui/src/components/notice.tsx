@@ -38,6 +38,7 @@ interface NoticeRetry {
 	label?: ReactNode
 	attempt?: number
 	maxAttempts?: number
+	isBusy?: boolean
 }
 
 interface NoticeAction {
@@ -104,7 +105,14 @@ function Notice({
 				{retryAvailable || exhaustedAfter !== undefined || action ? (
 					<div className="flex flex-wrap items-center gap-2">
 						{retryAvailable ? (
-							<Button size="sm" variant="outline" onClick={retry.onRetry}>
+							<Button
+								aria-busy={retry.isBusy}
+								aria-disabled={retry.isBusy}
+								className="aria-disabled:opacity-50"
+								onClick={retry.isBusy ? undefined : retry.onRetry}
+								size="sm"
+								variant="outline"
+							>
 								{retry.label ?? t("notice.retry")}
 							</Button>
 						) : null}

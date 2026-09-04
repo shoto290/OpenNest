@@ -20,12 +20,16 @@ import {
 	AnimatedSidebarTrigger,
 } from "@workspace/ui/components/motion/animated-sidebar"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
+import type { RoutineDetailModel } from "@workspace/ui/components/routine-detail"
 import {
 	EMPTY_ROUTINE_VALUES,
 	type RoutineFormModel,
 } from "@workspace/ui/components/routine-form"
 import type { RoutineRowModel } from "@workspace/ui/components/routine-row"
 import {
+	CLEANUP_DETAIL,
+	DIGEST_DETAIL,
+	DIGEST_RUNS,
 	INBOX_FORM,
 	MORNING_DIGEST,
 	RELEASE_WATCH,
@@ -33,6 +37,7 @@ import {
 	SCHEDULED_FORM,
 	SOURCE_NAMED_BY_ID,
 	TRIGGER_SOURCES,
+	WATCH_DETAIL,
 	WATCHING_FORM,
 } from "@workspace/ui/components/routines.fixtures"
 import {
@@ -63,16 +68,26 @@ const FORMS: Record<string, RoutineFormModel> = {
 	[SOURCE_NAMED_BY_ID.id]: INBOX_FORM,
 }
 
+const DETAILS: Record<string, RoutineDetailModel> = {
+	[MORNING_DIGEST.id]: DIGEST_DETAIL,
+	[RELEASE_WATCH.id]: WATCH_DETAIL,
+	[SOURCE_NAMED_BY_ID.id]: CLEANUP_DETAIL,
+}
+
 const PanelHost = ({
 	isOpen,
 	routines,
 	form,
+	detail,
 	...props
 }: RoutinesPanelProps) => {
 	const [open, setOpen] = useState(isOpen)
 	const [held, setHeld] = useState(routines)
 	const [shown, setShown] = useState<RoutineFormModel | null>(
 		form?.open ?? null,
+	)
+	const [opened, setOpened] = useState<RoutineDetailModel | null>(
+		detail?.open ?? null,
 	)
 
 	const answer = (id: string, isEnabled: boolean) =>
@@ -91,6 +106,20 @@ const PanelHost = ({
 	return (
 		<RoutinesPanel
 			{...props}
+			detail={
+				detail && {
+					...detail,
+					onClose: () => {
+						detail.onClose()
+						setOpened(null)
+					},
+					onOpen: (routineId) => {
+						detail.onOpen(routineId)
+						setOpened(DETAILS[routineId] ?? null)
+					},
+					open: opened,
+				}
+			}
 			form={
 				form && {
 					...form,
@@ -109,6 +138,9 @@ const PanelHost = ({
 					onSave: (values) => {
 						form.onSave(values)
 						setShown(null)
+						setOpened((current) =>
+							current ? { ...current, title: values.title } : current,
+						)
 					},
 					open: shown,
 				}
@@ -169,6 +201,13 @@ const meta = preview.meta({
 	},
 	args: {
 		children: THREAD,
+		detail: {
+			onClose: fn(),
+			onOpen: fn(),
+			onRetryRuns: fn(),
+			onRunNow: fn(),
+			open: null,
+		},
 		failure: null,
 		form: {
 			canCreate: true,
@@ -382,18 +421,53 @@ export const Creating = meta.story({
 	},
 })
 
+export const Opening = meta.story({
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"A row picked from the list. Check that the detail takes the place of the list inside the panel, that it repeats the title and the trigger source the row carried rather than a shortened version of them, that the runs are read as it opens, and that leaving returns focus to the row that opened it. Pick `Editing` for the form reached from here.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		await userEvent.click(canvas.getByText("Morning digest"))
+		await expect(args.detail?.onOpen).toHaveBeenCalledWith(MORNING_DIGEST.id)
+
+		const detail = slotIn(canvasElement, "routine-detail")
+		await waitFor(() => expect(detail).toHaveFocus(), FRAME_POLL)
+		await expect(slotsIn(canvasElement, "routine-row")).toHaveLength(0)
+		await expect(canvas.getByText("Every day at 08:00")).toBeVisible()
+		await expect(slotsIn(canvasElement, "routine-run")).toHaveLength(
+			DIGEST_RUNS.length,
+		)
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Back to the routines" }),
+		)
+		const rows = slotsIn(canvasElement, "routine-row")
+		await expect(rows).toHaveLength(ROUTINES.length)
+		await waitFor(
+			() => expect(rows[0]?.querySelector("button[data-opens]")).toHaveFocus(),
+			FRAME_POLL,
+		)
+	},
+})
+
 export const Editing = meta.story({
 	parameters: {
 		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:
-					"A row picked from the list. Check that the form opens filled with that routine — its title, its instruction, the expression it was read with — that its trigger reads as text rather than a list, and that leaving returns focus to the row that opened it rather than to the header.",
+					"The form as it is really reached: from the detail, not from the list. Check that it opens filled with that routine — its title, its expression, its trigger read as text rather than a list — that leaving it lands back on the detail rather than on the list two screens down, and that focus returns to the edit control that opened it. Pick `Saving` for what the detail shows once the form is submitted.",
 			},
 		},
 	},
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
 		await userEvent.click(canvas.getByText("Morning digest"))
+		await userEvent.click(canvas.getByRole("button", { name: "Edit routine" }))
 		await expect(args.form?.onOpen).toHaveBeenCalledWith(MORNING_DIGEST.id)
 
 		await expect(canvas.getByDisplayValue("Morning digest")).toBeVisible()
@@ -403,12 +477,71 @@ export const Editing = meta.story({
 		)
 
 		await userEvent.click(
-			canvas.getByRole("button", { name: "Back to the routines" }),
+			canvas.getByRole("button", { name: "Back to the routine" }),
 		)
-		const row = slotsIn(canvasElement, "routine-row")[0]
+		await expect(slotIn(canvasElement, "routine-detail")).toBeVisible()
 		await waitFor(
-			() => expect(row?.querySelector("button[data-opens]")).toHaveFocus(),
+			() =>
+				expect(
+					canvas.getByRole("button", { name: "Edit routine" }),
+				).toHaveFocus(),
 			FRAME_POLL,
+		)
+	},
+})
+
+export const Saving = meta.story({
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"A routine renamed from the form the detail opened. Check that saving lands back on the detail rather than leaving the form on screen, and that the detail reads the title just saved while keeping the trigger source, which a written routine cannot change.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		await userEvent.click(canvas.getByText("Morning digest"))
+		await userEvent.click(canvas.getByRole("button", { name: "Edit routine" }))
+
+		const title = canvas.getByLabelText("Title")
+		await userEvent.clear(title)
+		await userEvent.type(title, "Overnight digest")
+		await userEvent.click(canvas.getByRole("button", { name: "Save routine" }))
+
+		const detail = within(slotIn(canvasElement, "routine-detail"))
+		await expect(detail.getByText("Overnight digest")).toBeVisible()
+		await expect(detail.getByText("Every day at 08:00")).toBeVisible()
+	},
+})
+
+export const RunNowFailed = meta.story({
+	args: {
+		detail: {
+			onClose: fn(),
+			onOpen: fn(),
+			onRetryRuns: fn(),
+			onRunNow: fn(),
+			open: DIGEST_DETAIL,
+		},
+		failure: "write",
+	},
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"A Run now the app could not even send. Check that the detail borrows the write failure the panel already carries rather than growing a notice of its own, that the notice sits above the detail with the history left as it was, and that the runs are not blamed for a failure that never reached them. Pick the `Error` story of `RoutineDetail` for the runs that could not be read.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		await expect(
+			canvas.getByText("The routine could not be changed"),
+		).toBeVisible()
+		await expect(slotIn(canvasElement, "routine-detail")).toBeVisible()
+		await expect(slotsIn(canvasElement, "routine-run")).toHaveLength(
+			DIGEST_RUNS.length,
 		)
 	},
 })
