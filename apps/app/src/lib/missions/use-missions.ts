@@ -52,26 +52,19 @@ export const useMissions = (
 
 	useEffect(reload, [reload])
 
-	const read = useRef(reload)
 	useEffect(() => {
-		read.current = reload
-	}, [reload])
-
-	useEffect(() => {
-		const listening = missionsTransport
-			.onChanged(() => read.current())
-			.catch((reason) => {
-				console.error(
-					"activity panel: mission changes could not be listened to",
-					reason,
-				)
-				return () => undefined
-			})
+		const listening = missionsTransport.onChanged(reload).catch((reason) => {
+			console.error(
+				"activity panel: mission changes could not be listened to",
+				reason,
+			)
+			return () => undefined
+		})
 
 		return () => {
 			void listening.then((unsubscribe) => unsubscribe())
 		}
-	}, [])
+	}, [reload])
 
 	return useMemo(
 		() => ({
