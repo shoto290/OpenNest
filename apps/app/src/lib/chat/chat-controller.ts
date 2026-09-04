@@ -1,4 +1,3 @@
-import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import type { SubmittedAttachment } from "./attachments-contract"
@@ -54,22 +53,24 @@ import type {
 	MessageReference,
 } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
-import type {
-	TerminalCompletion,
-	TranscriptMessage,
-} from "../conversations/transcript-contract"
+import type { TerminalCompletion } from "../conversations/transcript-contract"
 import { createTranscriptController } from "../conversations/transcript-controller"
 import {
 	selectHasMore,
 	selectMessages,
 } from "../conversations/transcript-state"
 import { createReportedRunsReader } from "../routines/create-run-port"
-import {
-	indexedByTurnId,
-	type ReportedRun,
-	type RunReportDraft,
+import type {
+	ReportedRun,
+	ReportedRunsByTurnId,
+	RunReportDraft,
 } from "../routines/routine-contract"
 import type { ReportedRunsReader } from "../routines/run-port"
+import {
+	causeOf,
+	readReportedCauses,
+	writeReportTurn,
+} from "../routines/run-report"
 
 export type ChatController = {
 	getState: () => ChatState
@@ -654,31 +655,25 @@ export function createChatController(
 			() => undefined,
 		)
 
+	const setCauses = (bot: BotChat, causes: ReportedRunsByTurnId) =>
+		dispatch(bot, { type: "causesChanged", causes })
+
 	const rememberCause = (bot: BotChat, reported: ReportedRun) =>
-		dispatch(bot, {
-			type: "causesChanged",
-			causes: new Map(bot.state.reportedCauses).set(reported.turnId, reported),
-		})
+		setCauses(
+			bot,
+			new Map(bot.state.reportedCauses).set(reported.turnId, reported),
+		)
 
 	const readCauses = async (bot: BotChat, conversationId: string) => {
-		try {
-			const reported = await readReportedRuns(conversationId)
-			if (reported.length === 0) {
-				return
-			}
-			dispatch(bot, {
-				type: "causesChanged",
-				causes: new Map([
-					...indexedByTurnId(reported),
-					...bot.state.reportedCauses,
-				]),
-			})
-		} catch {
-			raiseFailureNotice({
-				title: i18n.t("chat:transcript.cause.unavailable.title"),
-				description: i18n.t("chat:transcript.cause.unavailable.description"),
-			})
+		const reported = await readReportedCauses({
+			read: readReportedRuns,
+			conversationId,
+			description: i18n.t("chat:transcript.cause.unavailable.soloDescription"),
+		})
+		if (!reported || reported.size === 0) {
+			return
 		}
+		setCauses(bot, new Map([...reported, ...bot.state.reportedCauses]))
 	}
 
 	const openConversation = async (bot: BotChat) => {
@@ -695,52 +690,18 @@ export function createChatController(
 		}
 	}
 
-	const storeReport = async (reported: TranscriptMessage) => {
-		await store.startTurn({
-			id: reported.turnId,
-			conversationId: reported.conversationId,
-			startedAt: reported.createdAt,
-		})
-		await store.openAssistantMessage({
-			id: reported.id,
-			conversationId: reported.conversationId,
-			turnId: reported.turnId,
-			authorBotId: reported.authorBotId,
-			repliedToMessageId: null,
-			createdAt: reported.createdAt,
-		})
-		await store.appendText(reported.id, reported.content)
-		await store.finalizeMessage(reported.id, "complete")
-		await store.completeTurn(reported.turnId, now())
-	}
-
 	const openChatOf = ({ botId, conversationId }: RunReportDraft) => {
 		const bot = bots.get(botId)
 		return bot?.state.conversationId === conversationId ? bot : null
 	}
 
 	const reportRun = async (draft: RunReportDraft) => {
-		const reported: TranscriptMessage = {
-			id: newId(),
-			conversationId: draft.conversationId,
-			turnId: newId(),
-			seq: 0,
-			role: "assistant",
-			content: draft.text,
-			completion: "complete",
-			createdAt: now(),
-			authorBotId: draft.botId,
-			repliedToMessageId: null,
-			runtimeSessionId: draft.runtimeSessionId,
-		}
-		await enqueue(() => storeReport(reported))
+		const reported = await enqueue(() =>
+			writeReportTurn({ store, draft, newId, now }),
+		)
 		const bot = openChatOf(draft)
 		if (bot) {
-			rememberCause(bot, {
-				turnId: reported.turnId,
-				routineTitle: draft.routineTitle,
-				triggerSourceId: draft.triggerSourceId,
-			})
+			rememberCause(bot, causeOf(draft, reported.turnId))
 			transcript.append(reported)
 		}
 		return reported.turnId

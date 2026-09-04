@@ -51,6 +51,8 @@ const chat = {
 				title: "Routine reports could not be read",
 				description:
 					"The conversation is intact. What opened each report is missing until the next read.",
+				soloDescription:
+					"The thread is intact. What opened each report is missing until the next read.",
 			},
 		},
 		mention: {

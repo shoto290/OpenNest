@@ -73,10 +73,8 @@ const createHarness = async (
 			return scripted.startOrResumeSession(scope, resume, cwd, outputSchema)
 		},
 	}
-	const store: TranscriptStore = {
-		...createFakeTranscriptStore(),
-		...overrides,
-	}
+	const base = createFakeTranscriptStore()
+	const store: TranscriptStore = { ...base, ...overrides }
 	const [bot] = await seatBots(store, SPACE, ["Ada"])
 	const conversation = await store.createConversation({
 		spaceId: SPACE,
@@ -84,7 +82,7 @@ const createHarness = async (
 		title: "Walls",
 		botIds: [bot.id],
 	})
-	const mainChat = await store.mainChat(bot.id)
+	const mainChat = await base.mainChat(bot.id)
 	const runtimes = createConversationRuntimes(driver, store)
 	const chat = createChatController(driver, store)
 	const runs = createFakeRunPort()
@@ -415,6 +413,20 @@ describe("startRunDriver", () => {
 			}),
 		])
 		expect(harness.state().messages).toEqual([])
+	})
+
+	it("reports into the conversation when the main chat cannot be read", async () => {
+		harness.stop()
+		harness = await createHarness({
+			mainChat: () => Promise.reject(new Error("refused")),
+		})
+		await harness.openOnScreen()
+		harness.runs.request(harness.requested())
+		await settled()
+		await harness.endTurn(reported("Two tickets closed."))
+
+		expect(harness.shown()).toEqual([[harness.botId, "Two tickets closed."]])
+		expect(harness.runs.closings[0].closing.outcome).toBe("ok")
 	})
 
 	it("marks the reported turn of a solo thread with its routine", async () => {

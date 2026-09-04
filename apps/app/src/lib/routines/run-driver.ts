@@ -74,6 +74,8 @@ const reporting = (command: string) => (reason: unknown) => {
 	console.error(`run driver: ${command} failed`, reason)
 }
 
+const reportMainChatFailure = reporting("conversation_main_chat")
+
 const listening = (
 	opening: Promise<RunUnsubscribe>,
 	label: string,
@@ -175,9 +177,18 @@ export const startRunDriver = ({
 		}
 	}
 
+	const mainChatIdOf = (botId: string) =>
+		store
+			.mainChat(botId)
+			.then(({ id }) => id)
+			.catch((reason) => {
+				reportMainChatFailure(reason)
+				return null
+			})
+
 	const reporterOf = async ({ conversationId, botId }: RunReportDraft) => {
-		const mainChat = await store.mainChat(botId)
-		return mainChat.id === conversationId
+		const mainChatId = await mainChatIdOf(botId)
+		return mainChatId === conversationId
 			? chat
 			: runtimes.runtimeFor(conversationId)
 	}

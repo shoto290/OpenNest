@@ -1,4 +1,3 @@
-import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { addresseesIn, toMentionTokens } from "./mentions"
@@ -61,13 +60,17 @@ import {
 } from "../chat/working-kind"
 import { createReportedRunsReader } from "../routines/create-run-port"
 import {
-	indexedByTurnId,
 	NO_REPORTED_RUNS,
 	type ReportedRun,
 	type ReportedRunsByTurnId,
 	type RunReportDraft,
 } from "../routines/routine-contract"
 import type { ReportedRunsReader } from "../routines/run-port"
+import {
+	causeOf,
+	readReportedCauses,
+	writeReportTurn,
+} from "../routines/run-report"
 
 export type RefusedMessage = {
 	id: string
@@ -808,68 +811,27 @@ export const createConversationController = (
 			: Promise.resolve()
 	}
 
-	const storeReport = async (reported: TranscriptMessage) => {
-		await store.startTurn({
-			id: reported.turnId,
-			conversationId: reported.conversationId,
-			startedAt: reported.createdAt,
-		})
-		await store.openAssistantMessage({
-			id: reported.id,
-			conversationId: reported.conversationId,
-			turnId: reported.turnId,
-			authorBotId: reported.authorBotId,
-			repliedToMessageId: null,
-			createdAt: reported.createdAt,
-		})
-		await store.appendText(reported.id, reported.content)
-		await store.finalizeMessage(reported.id, "complete")
-		await store.completeTurn(reported.turnId, now())
-	}
-
 	const rememberCause = (reported: ReportedRun) => {
 		reportedCauses = new Map(reportedCauses).set(reported.turnId, reported)
 	}
 
 	const readCauses = async (conversationId: string) => {
-		try {
-			const reported = await readReportedRuns(conversationId)
-			reportedCauses = new Map([
-				...indexedByTurnId(reported),
-				...reportedCauses,
-			])
-		} catch {
-			raiseFailureNotice({
-				title: i18n.t("chat:transcript.cause.unavailable.title"),
-				description: i18n.t("chat:transcript.cause.unavailable.description"),
-			})
+		const reported = await readReportedCauses({
+			read: readReportedRuns,
+			conversationId,
+			description: i18n.t("chat:transcript.cause.unavailable.description"),
+		})
+		if (reported) {
+			reportedCauses = new Map([...reported, ...reportedCauses])
 		}
 		sync()
 	}
 
-	const reportRun = async ({
-		conversationId,
-		botId,
-		runtimeSessionId,
-		text,
-		routineTitle,
-		triggerSourceId,
-	}: RunReportDraft) => {
-		const reported: TranscriptMessage = {
-			id: newId(),
-			conversationId,
-			turnId: newId(),
-			seq: 0,
-			role: "assistant",
-			content: text,
-			completion: "complete",
-			createdAt: now(),
-			authorBotId: botId,
-			repliedToMessageId: null,
-			runtimeSessionId,
-		}
-		await enqueue(() => storeReport(reported))
-		rememberCause({ turnId: reported.turnId, routineTitle, triggerSourceId })
+	const reportRun = async (draft: RunReportDraft) => {
+		const reported = await enqueue(() =>
+			writeReportTurn({ store, draft, newId, now }),
+		)
+		rememberCause(causeOf(draft, reported.turnId))
 		transcript.append(reported)
 		return reported.turnId
 	}

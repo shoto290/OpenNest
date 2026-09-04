@@ -91,6 +91,9 @@ const ROUTINE_TITLE = "Nightly report"
 
 const CAUSES_TITLE = "Routine reports could not be read"
 
+const CAUSES_SOLO_DESCRIPTION =
+	"The thread is intact. What opened each report is missing until the next read."
+
 const BOT_TITLE = "Release manager"
 
 const A_MINUTE = 60_000
@@ -926,6 +929,9 @@ describe("ThreadScreen", () => {
 		expect(screen.getByText(REPORT_TEXT)).toBeTruthy()
 		expect(screen.queryByText(ROUTINE_TITLE)).toBeNull()
 		expect(screen.getAllByText(CAUSES_TITLE).length).toBeGreaterThan(0)
+		expect(screen.getAllByText(CAUSES_SOLO_DESCRIPTION).length).toBeGreaterThan(
+			0,
+		)
 	})
 
 	it("stops the bot whose working row carries the stop, and no other", async () => {
