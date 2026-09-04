@@ -580,6 +580,7 @@ export function App() {
 				<WorkspaceBody
 					attachments={attachments}
 					bot={selected}
+					bots={bots}
 					chat={chat}
 					conversation={selectedConversation}
 					conversationRuntimes={conversationRuntimes}

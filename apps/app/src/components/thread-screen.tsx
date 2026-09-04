@@ -107,6 +107,7 @@ import {
 import type { WorkingState } from "@/lib/chat/working-kind"
 import type { SpeakingBot } from "@/lib/conversations/conversation-controller"
 import { leadOf } from "@/lib/conversations/roster-conversations"
+import type { Bot } from "@/lib/conversations/store-contract"
 import { useConversation } from "@/lib/conversations/use-conversation"
 import type { ReportedRunsByTurnId } from "@/lib/routines/routine-contract"
 
@@ -663,6 +664,7 @@ const ThreadNotices = ({
 
 type ThreadViewProps = {
 	thread: LoadedThread
+	bots: Bot[]
 	attachments: AttachmentsController
 	drafts: DraftsController
 	readerName: string
@@ -670,6 +672,7 @@ type ThreadViewProps = {
 
 function ThreadView({
 	thread,
+	bots: known,
 	attachments,
 	drafts,
 	readerName,
@@ -686,7 +689,7 @@ function ThreadView({
 	const composerPlaceholder = facts.bot
 		? t("screen.placeholder", { name: facts.bot.name })
 		: t("composer.placeholder")
-	const roster = useThreadRoster(facts)
+	const roster = useThreadRoster({ ...facts, bots: known })
 	const { bots, present, authors, botFace } = roster
 	const botImage = botFace?.image
 	const isSoloThread = facts.bot !== null
@@ -910,6 +913,7 @@ function ThreadView({
 
 type ThreadScreenProps = {
 	thread: Thread
+	bots: Bot[]
 	attachments: AttachmentsController
 	drafts: DraftsController
 	readerName: string
@@ -921,6 +925,7 @@ type ConversationThreadViewProps = Omit<ThreadScreenProps, "thread"> & {
 
 function ConversationThreadView({
 	thread,
+	bots,
 	attachments,
 	drafts,
 	readerName,
@@ -933,6 +938,7 @@ function ConversationThreadView({
 	return (
 		<ThreadView
 			attachments={attachments}
+			bots={bots}
 			drafts={drafts}
 			readerName={readerName}
 			thread={{ ...thread, state, controller }}
@@ -946,6 +952,7 @@ type BotThreadViewProps = Omit<ThreadScreenProps, "thread"> & {
 
 function BotThreadView({
 	thread,
+	bots,
 	attachments,
 	drafts,
 	readerName,
@@ -958,6 +965,7 @@ function BotThreadView({
 	return (
 		<ThreadView
 			attachments={attachments}
+			bots={bots}
 			drafts={drafts}
 			readerName={readerName}
 			thread={{ ...thread, state: thread.chat.state, controller }}
@@ -967,6 +975,7 @@ function BotThreadView({
 
 export function ThreadScreen({
 	thread,
+	bots,
 	attachments,
 	drafts,
 	readerName,
@@ -975,6 +984,7 @@ export function ThreadScreen({
 		return (
 			<ConversationThreadView
 				attachments={attachments}
+				bots={bots}
 				drafts={drafts}
 				key={thread.conversation.id}
 				readerName={readerName}
@@ -986,6 +996,7 @@ export function ThreadScreen({
 	return (
 		<BotThreadView
 			attachments={attachments}
+			bots={bots}
 			drafts={drafts}
 			key={thread.bot.id}
 			readerName={readerName}

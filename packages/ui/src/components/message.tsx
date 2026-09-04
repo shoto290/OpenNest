@@ -182,7 +182,13 @@ export function MessageAuthor({
 			>
 				{author.name}
 			</span>
-			<BotTitleBadge title={author.title} />
+			<BotTitleBadge
+				className={cn(
+					"max-w-24",
+					author.isDeleted && "bg-muted text-muted-foreground",
+				)}
+				title={author.title}
+			/>
 			{author.isLead ? (
 				<>
 					<Icons.Crown

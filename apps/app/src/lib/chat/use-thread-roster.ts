@@ -32,11 +32,13 @@ export type ThreadRoster = {
 
 type ThreadSeats = {
 	bot: Bot | null
+	bots: Bot[]
 	conversation: Conversation | null
 }
 
 export function useThreadRoster({
 	bot,
+	bots: records,
 	conversation,
 }: ThreadSeats): ThreadRoster {
 	const bots = useMemo(
@@ -52,8 +54,8 @@ export function useThreadRoster({
 		[conversation],
 	)
 	const authors = useMemo<ThreadAuthors>(
-		() => (conversation ? authorsOf(conversation) : NO_AUTHORS),
-		[conversation],
+		() => (conversation ? authorsOf(conversation, records) : NO_AUTHORS),
+		[conversation, records],
 	)
 	const botFace = useMemo<ThreadFace | null>(
 		() => (bot ? faceOfBot(bot) : null),

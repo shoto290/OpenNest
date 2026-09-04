@@ -102,7 +102,7 @@ const BotBadgeDot = ({
 )
 
 const BOT_TITLE_BADGE =
-	"max-w-16 shrink-0 truncate rounded-full bg-foreground/10 px-1.5 py-0.5 font-medium text-[10px] text-foreground/80 leading-none"
+	"shrink-0 truncate rounded-full bg-foreground/10 px-1.5 py-0.5 font-medium text-[10px] text-foreground/80 leading-none"
 
 type BotTitleBadgeProps = Omit<ComponentPropsWithRef<"span">, "title"> & {
 	title?: string

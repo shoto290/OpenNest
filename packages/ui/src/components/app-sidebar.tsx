@@ -632,7 +632,11 @@ const BotRosterRow = ({
 								<span className="truncate" data-slot="roster-row-name">
 									{bot.name}
 								</span>
-								<BotTitleBadge data-slot="roster-row-badge" title={bot.title} />
+								<BotTitleBadge
+									className="max-w-16"
+									data-slot="roster-row-badge"
+									title={bot.title}
+								/>
 								<span
 									className={TIMESTAMP_SLOT}
 									data-slot="roster-row-timestamp"

@@ -107,6 +107,8 @@ const GONE: MessageAuthor = {
 
 const ROOM: RosterBot[] = [LEAD, SECOND]
 
+const RELEASE_MANAGER = "Release manager"
+
 const TITLED_ROOM: { author: MessageAuthor; message: string }[] = [
 	{
 		author: { ...LEAD, title: "Ops" },
@@ -121,11 +123,25 @@ const TITLED_ROOM: { author: MessageAuthor; message: string }[] = [
 			id: "bot-elia",
 			name: "Elia of the Migration and Release Desk",
 			animal: "mouse",
-			title: "Release manager",
+			title: RELEASE_MANAGER,
 		},
 		message: "I am holding the tag until both of you sign off.",
 	},
+	{
+		author: {
+			id: "bot-nyx",
+			name: "Nyx",
+			animal: "bear",
+			title: "Release manager for the whole platform",
+		},
+		message: "I will publish once the tag is cut.",
+	},
 ]
+
+const DELETED_TITLED: MessageAuthor = {
+	...GONE,
+	title: RELEASE_MANAGER,
+}
 
 const firstCharacterLeft = (element: HTMLElement) =>
 	element.getBoundingClientRect().left +
@@ -829,7 +845,7 @@ export const Titled = meta.story({
 		docs: {
 			description: {
 				story:
-					"The same conversation, where two of the three bots carry a title. The title is written in a pill right after the name, the same pill the roster row wears, so a reader tells an ops bot from a release bot without opening the roster. A bot with no title keeps the bare name — no pill, no gap held for one. The column here is 320px wide on purpose: the name gives way first and the pill keeps its width, and a title too long for the pill is cut with an ellipsis rather than pushing the crown or the header out of the column.",
+					"A conversation where three of the four bots carry a title. The title is written in a pill right after the name, the same pill the roster row wears, so a reader tells an ops bot from a release bot without opening the roster. A bot with no title keeps the bare name, no pill and no gap held for one. The column here is 320px wide on purpose: a title of fifteen characters is written whole, the name gives way before the pill does, and a title longer than the pill allows is cut with an ellipsis rather than pushing the crown or the header out of the column.",
 			},
 		},
 	},
@@ -844,20 +860,24 @@ export const Titled = meta.story({
 	),
 	play: async ({ canvasElement }) => {
 		const headers = slotsIn(canvasElement, "message-author")
-		const [titled, untitled, overflowing] = headers
+		const [titled, untitled, longName, longTitle] = headers
 
-		await expect(headers).toHaveLength(3)
+		await expect(headers).toHaveLength(4)
 		await expect(slotIn(titled, "bot-title-badge")).toHaveTextContent("Ops")
 		await expect(
 			untitled.querySelector('[data-slot="bot-title-badge"]'),
 		).toBeNull()
 
-		const badge = slotIn(overflowing, "bot-title-badge")
-		const name = overflowing.firstElementChild as HTMLElement
+		const whole = slotIn(longName, "bot-title-badge")
+		const name = longName.firstElementChild as HTMLElement
 
-		await expect(badge.scrollWidth).toBeGreaterThan(badge.clientWidth)
-		await expect(badge.getBoundingClientRect().width).toBe(64)
+		await expect(whole).toHaveTextContent(RELEASE_MANAGER)
+		await expect(whole.scrollWidth).toBe(whole.clientWidth)
 		await expect(name.scrollWidth).toBeGreaterThan(name.clientWidth)
+
+		const cut = slotIn(longTitle, "bot-title-badge")
+
+		await expect(cut.scrollWidth).toBeGreaterThan(cut.clientWidth)
 
 		const column = slotIn(canvasElement, "message").parentElement as HTMLElement
 
@@ -866,6 +886,35 @@ export const Titled = meta.story({
 				column.getBoundingClientRect().right,
 			)
 		}
+	},
+})
+
+export const TitledDeleted = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"An author deleted since it wrote, still carrying its title. The name dims, and the pill dims with it, so the two read as one line written by someone who has left rather than a dead name next to a live label. Check that the pill sits at the same weight as the name, before the bin, and that the message under it stays as readable as any other.",
+			},
+		},
+	},
+	render: () => (
+		<div className="mx-auto flex max-w-2xl flex-col gap-6">
+			<AssistantTurn author={DELETED_TITLED} copyText={ANSWER}>
+				{ANSWER}
+			</AssistantTurn>
+		</div>
+	),
+	play: async ({ canvasElement }) => {
+		const header = slotIn(canvasElement, "message-author")
+		const badge = slotIn(header, "bot-title-badge")
+		const name = header.firstElementChild as HTMLElement
+
+		await expect(badge).toHaveTextContent(RELEASE_MANAGER)
+		await expect(getComputedStyle(badge).color).toBe(
+			getComputedStyle(name).color,
+		)
+		await expect(slotIn(header, "message-author-deleted")).toBeVisible()
 	},
 })
 

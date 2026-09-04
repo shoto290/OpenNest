@@ -38,8 +38,12 @@ const toBotRow = (id: string, face: BotFace): AppSidebarBot => ({
 const toParticipantRow = (participant: Participant): AppSidebarBot =>
 	toBotRow(participant.botId, participant)
 
-const toAuthor = (participant: Participant): MessageAuthor => ({
+const toAuthor = (
+	participant: Participant,
+	title: string | undefined,
+): MessageAuthor => ({
 	...toParticipantRow(participant),
+	title: title || undefined,
 	isLead: participant.role === "lead",
 	isDeleted: participant.isDeleted,
 })
@@ -49,13 +53,17 @@ export const toConversationBots = (participants: Participant[]): RosterBot[] =>
 
 export const authorsOf = (
 	conversation: Conversation,
-): Map<string, MessageAuthor> =>
-	new Map(
+	bots: Bot[],
+): Map<string, MessageAuthor> => {
+	const titles = new Map(bots.map((bot) => [bot.id, bot.title]))
+
+	return new Map(
 		conversation.participants.map((participant) => [
 			participant.botId,
-			toAuthor(participant),
+			toAuthor(participant, titles.get(participant.botId)),
 		]),
 	)
+}
 
 export const leadOf = (conversation: Conversation): string | undefined =>
 	conversation.participants.find(
