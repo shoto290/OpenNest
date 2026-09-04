@@ -46,28 +46,28 @@ impl<R: Runtime> RoutineHost<R> {
 		match operation {
 			Operation::List => {
 				let _: Listed = read(payload)?;
-				answered(routine_list(self.state()?, self.conversation_id.clone()).await?)
+				answered(routine_list(state, self.conversation_id.clone()).await?)
 			}
 			Operation::Create => {
 				let asked: Created = read(payload)?;
 				let draft = self.draft(asked);
-				answered(routine_create(self.app.clone(), self.state()?, draft).await?)
+				answered(routine_create(self.app.clone(), state, draft).await?)
 			}
 			Operation::Update => {
 				let asked: Edited = read(payload)?;
 				self.refuse_a_routine_it_does_not_own(database, &asked.id).await?;
 				let id = asked.id.clone();
-				answered(routine_update(self.app.clone(), self.state()?, id, edit(asked)).await?)
+				answered(routine_update(self.app.clone(), state, id, edit(asked)).await?)
 			}
 			Operation::RunNow => {
 				let asked: Named = read(payload)?;
 				self.refuse_a_routine_it_does_not_own(database, &asked.id).await?;
-				answered(routine_run_now(self.app.clone(), self.state()?, asked.id).await?)
+				answered(routine_run_now(self.app.clone(), state, asked.id).await?)
 			}
 			Operation::Delete => {
 				let asked: Named = read(payload)?;
 				self.refuse_a_routine_it_does_not_own(database, &asked.id).await?;
-				routine_delete(self.app.clone(), self.state()?, asked.id).await?;
+				routine_delete(self.app.clone(), state, asked.id).await?;
 				Ok(Value::Null)
 			}
 		}
