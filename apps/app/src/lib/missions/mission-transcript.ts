@@ -10,11 +10,14 @@ export type PlacedMission = {
 const NOT_PLACED = -1
 
 const openingRunIndex = (runs: TranscriptRow[][], mission: Mission): number => {
-	const index = runs.findLastIndex(
-		([opening]) => opening.timestamp <= mission.openedAt,
+	const spoken = runs.flatMap(([opening], index) =>
+		opening.authorBotId === mission.botId
+			? [{ index, at: opening.timestamp }]
+			: [],
 	)
+	const opened = spoken.filter(({ at }) => at <= mission.openedAt)
 
-	return runs[index]?.[0].authorBotId === mission.botId ? index : NOT_PLACED
+	return (opened.at(-1) ?? spoken[0])?.index ?? NOT_PLACED
 }
 
 export const placeMissions = (

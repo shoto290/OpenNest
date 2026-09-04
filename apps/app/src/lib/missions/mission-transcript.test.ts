@@ -41,6 +41,7 @@ const missionOf = (id: string, openedAt: number, botId = "bot-1"): Mission => ({
 const PROMPT = [rowOf(null, 0)]
 const ANSWER = [rowOf("bot-1", 100)]
 const LATER_PROMPT = [rowOf(null, 400)]
+const LATER_ANSWER = [rowOf("bot-1", 500)]
 
 describe("placeMissions", () => {
 	it("places a mission after the run of the bot that opened it", () => {
@@ -61,17 +62,22 @@ describe("placeMissions", () => {
 		])
 	})
 
-	it("holds a mission whose run has published no block yet", () => {
-		expect(placeMissions([PROMPT], [missionOf("m-1", 200)])).toEqual([])
+	it("places a mission opened before its bot wrote after the first run of that bot", () => {
+		expect(
+			placeMissions(
+				[PROMPT, ANSWER, LATER_PROMPT, LATER_ANSWER],
+				[missionOf("m-1", 50)],
+			),
+		).toEqual([{ mission: missionOf("m-1", 50), runIndex: 1 }])
 	})
 
-	it("holds a mission opened by a bot that did not speak last", () => {
+	it("holds a mission of a bot the transcript carries no run of", () => {
 		expect(
 			placeMissions([PROMPT, ANSWER], [missionOf("m-1", 200, "bot-2")]),
 		).toEqual([])
 	})
 
-	it("holds every mission of a transcript with no run", () => {
+	it("holds every mission of a transcript with no run at all", () => {
 		expect(placeMissions([], [missionOf("m-1", 200)])).toEqual([])
 	})
 })

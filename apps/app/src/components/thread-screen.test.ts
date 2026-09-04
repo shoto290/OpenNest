@@ -463,6 +463,8 @@ const SOLO_MISSION: Mission = {
 	closedAt: null,
 }
 
+const TWO_HOURS_MS = 2 * 60 * 60 * 1000
+
 const CLOSED_SOLO_MISSION: Mission = {
 	...SOLO_MISSION,
 	id: "m-2",
@@ -730,6 +732,19 @@ describe("ThreadScreen", () => {
 		const card = within(missionCard()).getByRole("button")
 		expect(card.getAttribute("data-closed")).toBe("true")
 		expect(within(card).getByText("Done")).toBeTruthy()
+	})
+
+	it("dates the missions of the Activity panel by the roster clock", async () => {
+		listMissions.mockResolvedValue({
+			open: [{ ...SOLO_MISSION, openedAt: Date.now() - TWO_HOURS_MS }],
+			done: [],
+		})
+		render(screenOf(threadOf({ id: "bot-1", name: "Nyx", said: "held" })))
+		await settle()
+
+		await openRoutinesPanel()
+
+		expect(within(missionsSection()).getByText("2 hours ago")).toBeTruthy()
 	})
 
 	it("leaves the transcript without a mission card when the missions could not be read", async () => {

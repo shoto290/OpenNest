@@ -6,12 +6,15 @@ import type { Mission } from "./mission-contract"
 import { toMissionRows } from "./missions-model"
 import { missionsTransport } from "./missions-transport"
 
-import { useRosterClock } from "@/lib/bots/use-roster-clock"
-
 const NO_MISSIONS: Mission[] = []
 
+export type ConversationMissionRows = Omit<
+	RoutinesPanelMissions,
+	"now" | "onOpen"
+>
+
 export type ConversationMissionsRead = {
-	panel: RoutinesPanelMissions
+	rows: ConversationMissionRows
 	missions: Mission[]
 	hasFailed: boolean
 	reload: () => void
@@ -24,7 +27,6 @@ export const useMissions = (
 	const [closed, setClosed] = useState<Mission[]>(NO_MISSIONS)
 	const [hasFailed, setFailed] = useState(false)
 	const reads = useRef(0)
-	const now = useRosterClock()
 
 	const reload = useCallback(() => {
 		if (!conversationId) {
@@ -68,18 +70,17 @@ export const useMissions = (
 		}
 	}, [reload])
 
-	const panel = useMemo<RoutinesPanelMissions>(
+	const rows = useMemo<ConversationMissionRows>(
 		() => ({
 			running: toMissionRows(running),
 			closed: toMissionRows(closed),
-			now,
 		}),
-		[running, closed, now],
+		[running, closed],
 	)
 	const missions = useMemo(() => [...running, ...closed], [running, closed])
 
 	return useMemo(
-		() => ({ panel, missions, hasFailed, reload }),
-		[panel, missions, hasFailed, reload],
+		() => ({ rows, missions, hasFailed, reload }),
+		[rows, missions, hasFailed, reload],
 	)
 }
