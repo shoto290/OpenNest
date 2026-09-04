@@ -23,6 +23,8 @@ import {
 import {
 	type BotBadge,
 	BotBadgeDot,
+	BotMissionChip,
+	type BotMissionState,
 	BotTitleBadge,
 } from "@workspace/ui/components/badge"
 import {
@@ -101,7 +103,9 @@ const NO_WINDOW_CONTROLS_INSET = "pl-2.5"
 const ROW_AVATAR_SIZE = 40
 
 const TIMESTAMP_SLOT =
-	"ml-auto h-5 w-11 shrink-0 truncate text-right text-[11px] text-muted-foreground leading-5 tabular-nums"
+	"h-5 w-11 shrink-0 truncate text-right text-[11px] text-muted-foreground leading-5 tabular-nums"
+
+const TRAILING_SLOT = "ml-auto flex shrink-0 items-center gap-1.5"
 
 const NAME_LINE = "flex h-5 min-w-0 items-center gap-1.5"
 
@@ -222,7 +226,7 @@ const CAROUSEL_HELD = "overflow-x-hidden"
 const CAROUSEL_PANEL =
 	"flex w-full flex-none snap-start snap-always flex-col gap-1.5 overflow-y-auto overscroll-y-contain px-[9px] pt-0 pb-1.5 group-data-[state=collapsed]/sidebar:px-0"
 
-type AppSidebarStatus = "idle" | "working" | "onMission"
+type AppSidebarStatus = "idle" | "working"
 
 const NO_BOTS: AppSidebarBot[] = []
 
@@ -240,6 +244,11 @@ interface AppSidebarSection {
 	position: number
 }
 
+interface AppSidebarBotMission {
+	state: BotMissionState
+	count: number
+}
+
 interface AppSidebarBot {
 	id: string
 	name: string
@@ -255,6 +264,7 @@ interface AppSidebarBot {
 	status?: AppSidebarStatus
 	pose?: ActivityIndicatorKind
 	badge?: BotBadge
+	mission?: AppSidebarBotMission
 }
 
 interface AppSidebarConversation {
@@ -273,11 +283,8 @@ interface AppSidebarConversation {
 
 const poseOf = (bot: AppSidebarBot) => bot.pose ?? "thinking"
 
-const isOnMission = (held: { status?: AppSidebarStatus }) =>
-	held.status === "onMission"
-
 const isBusy = (held: { status?: AppSidebarStatus }) =>
-	held.status === "working" || isOnMission(held)
+	held.status === "working"
 
 const badgeOf = (conversation: AppSidebarConversation) =>
 	conversation.participants.find(
@@ -485,6 +492,7 @@ const useRosterBadgePlacement = (badge?: BotBadge) => {
 	const isCollapsed = state === "collapsed"
 
 	return {
+		isCollapsed,
 		avatarBadge: isCollapsed ? badge : undefined,
 		rowBadge: isCollapsed ? undefined : badge,
 	}
@@ -607,7 +615,9 @@ const BotRosterRow = ({
 	const { t } = useTranslation("bots")
 	const pose = poseOf(bot)
 	const working = isBusy(bot)
-	const { avatarBadge, rowBadge } = useRosterBadgePlacement(bot.badge)
+	const { isCollapsed, avatarBadge, rowBadge } = useRosterBadgePlacement(
+		bot.badge,
+	)
 
 	return (
 		<AnimatedSidebarMenuItem
@@ -640,15 +650,23 @@ const BotRosterRow = ({
 									data-slot="roster-row-badge"
 									title={bot.title}
 								/>
-								<span
-									className={TIMESTAMP_SLOT}
-									data-slot="roster-row-timestamp"
-								>
-									{bot.timestamp}
+								<span className={TRAILING_SLOT}>
+									{bot.mission && !isCollapsed ? (
+										<BotMissionChip
+											count={bot.mission.count}
+											state={bot.mission.state}
+										/>
+									) : null}
+									<span
+										className={TIMESTAMP_SLOT}
+										data-slot="roster-row-timestamp"
+									>
+										{bot.timestamp}
+									</span>
 								</span>
 							</span>
 							<RowPreview isWorking={working}>
-								{working && !isOnMission(bot)
+								{working
 									? t("roster.working", { pose: t(`roster.pose.${pose}`) })
 									: bot.lastMessage && toPlainText(bot.lastMessage)}
 							</RowPreview>
@@ -793,11 +811,13 @@ const ConversationRosterRow = ({
 								<span className="truncate" data-slot="roster-row-name">
 									{conversation.name}
 								</span>
-								<span
-									className={TIMESTAMP_SLOT}
-									data-slot="roster-row-timestamp"
-								>
-									{conversation.timestamp}
+								<span className={TRAILING_SLOT}>
+									<span
+										className={TIMESTAMP_SLOT}
+										data-slot="roster-row-timestamp"
+									>
+										{conversation.timestamp}
+									</span>
 								</span>
 							</span>
 							<RowPreview isWorking={Boolean(workingBotOf(conversation))}>
@@ -2181,6 +2201,7 @@ const AppSidebar = memo(AppSidebarBase)
 export {
 	AppSidebar,
 	type AppSidebarBot,
+	type AppSidebarBotMission,
 	type AppSidebarConversation,
 	type AppSidebarProps,
 	type AppSidebarSection,

@@ -16,12 +16,6 @@ type Badged<Row> = Row & BadgeCarrier
 
 const STRONGEST_FIRST: ShownBadge[] = ["attention", "failed", "done"]
 
-export const strongerBadge = (
-	one: ShownBadge | undefined,
-	other: ShownBadge | undefined,
-): ShownBadge | undefined =>
-	STRONGEST_FIRST.find((badge) => badge === one || badge === other)
-
 const shownBadge = (badge: BotBadge | undefined): ShownBadge | undefined =>
 	badge === undefined || badge === "none" ? undefined : badge
 
@@ -35,19 +29,14 @@ const strongestBadge = (rows: BadgeCarrier[]): ShownBadge | undefined =>
 	STRONGEST_FIRST.find((badge) => rows.some((row) => row.badge === badge))
 
 export const toSpaceBadges = (
-	botsBySpaceId: BadgeCarriersBySpaceId,
-	conversationsBySpaceId: BadgeCarriersBySpaceId,
+	...groups: BadgeCarriersBySpaceId[]
 ): Record<string, ShownBadge> => {
-	const spaceIds = new Set([
-		...Object.keys(botsBySpaceId),
-		...Object.keys(conversationsBySpaceId),
-	])
+	const spaceIds = new Set(groups.flatMap((group) => Object.keys(group)))
 	const badges: Record<string, ShownBadge> = {}
 	for (const spaceId of spaceIds) {
-		const badge = strongestBadge([
-			...(botsBySpaceId[spaceId] ?? []),
-			...(conversationsBySpaceId[spaceId] ?? []),
-		])
+		const badge = strongestBadge(
+			groups.flatMap((group) => group[spaceId] ?? []),
+		)
 		if (badge) {
 			badges[spaceId] = badge
 		}

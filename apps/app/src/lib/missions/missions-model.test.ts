@@ -10,7 +10,8 @@ import type {
 	MissionState,
 } from "./mission-contract"
 import {
-	drivingMissions,
+	missionRingBadges,
+	missionsByBot,
 	toMissionEventModels,
 	toMissionRows,
 	withMissions,
@@ -125,7 +126,7 @@ const mission = (over: Partial<Mission>): Mission => ({
 	},
 	tools: [],
 	state: "working",
-	openedAt: NOW - 2 * HOUR_MS,
+	openedAt: 1,
 	closedAt: null,
 	...over,
 })
@@ -164,131 +165,100 @@ const row = (over: Partial<AppSidebarBot>): AppSidebarBot => ({
 	...over,
 })
 
-const drivenIds = (board: MissionOnBoard[]) =>
-	Object.entries(drivingMissions(board)).map(([botId, held]) => [
-		botId,
-		held.id,
-	])
+const chipFor = (...states: MissionState[]) =>
+	missionsByBot(states.map((state) => onBoard({ state })))["b-1"]
 
-describe("drivingMissions", () => {
-	it("keeps the mission whose state ranks first", () => {
-		expect(
-			drivenIds([
-				onBoard({ id: "m-working", state: "working" }),
-				onBoard({ id: "m-ready", state: "ready_to_merge" }),
-				onBoard({ id: "m-waiting", state: "waiting_human" }),
-				onBoard({ id: "m-failed", state: "failed" }),
-			]),
-		).toEqual([["b-1", "m-waiting"]])
+describe("missionsByBot", () => {
+	it("counts every open mission a bot carries", () => {
+		expect(chipFor("working")).toEqual({ state: "working", count: 1 })
+		expect(chipFor("working", "working", "ready_to_merge")).toEqual({
+			state: "ready",
+			count: 3,
+		})
 	})
 
-	it("ranks failed over ready to merge and ready to merge over working", () => {
-		expect(
-			drivenIds([
-				onBoard({ id: "m-working", state: "working" }),
-				onBoard({ id: "m-ready", state: "ready_to_merge" }),
-				onBoard({ id: "m-failed", state: "failed" }),
-			]),
-		).toEqual([["b-1", "m-failed"]])
-
-		expect(
-			drivenIds([
-				onBoard({ id: "m-waiting-bot", state: "waiting_bot" }),
-				onBoard({ id: "m-ready", state: "ready_to_merge" }),
-			]),
-		).toEqual([["b-1", "m-ready"]])
+	it("shows the most urgent state of the bot", () => {
+		expect(chipFor("working", "failed", "waiting_human").state).toBe("waiting")
+		expect(chipFor("working", "ready_to_merge", "failed").state).toBe("failed")
+		expect(chipFor("working", "ready_to_merge").state).toBe("ready")
 	})
 
-	it("drives every bot of every space from its own mission", () => {
+	it("reads waiting for its bot as working", () => {
+		expect(chipFor("waiting_bot")).toEqual({ state: "working", count: 1 })
+	})
+
+	it("gives every bot its own chip", () => {
 		expect(
-			drivenIds([
-				onBoard({ id: "m-one", botId: "b-1" }),
-				onBoard({ id: "m-two", botId: "b-2" }),
+			missionsByBot([
+				onBoard({ botId: "b-1", state: "failed" }),
+				onBoard({ botId: "b-2", state: "working" }),
+				onBoard({ botId: "b-2", state: "working" }),
 			]),
-		).toEqual([
-			["b-1", "m-one"],
-			["b-2", "m-two"],
-		])
+		).toEqual({
+			"b-1": { state: "failed", count: 1 },
+			"b-2": { state: "working", count: 2 },
+		})
 	})
 })
 
 describe("withMissions", () => {
-	const lineFor = (state: MissionState) =>
-		withMissions([row({})], { "b-1": mission({ state }) }, NOW)[0]
+	const held = row({ badge: "attention", status: "working", pose: "writing" })
 
-	it("fills the pill, the preview and the timestamp from the mission", () => {
-		expect(lineFor("waiting_human")).toMatchObject({
-			title: "OPE-29",
-			lastMessage: "Drive every roster line from its mission.",
-			timestamp: "2h",
+	it("leaves the chat signals of the row untouched", () => {
+		const carried = withMissions([held], {
+			"b-1": { state: "waiting", count: 2 },
+		})[0]
+
+		expect(carried).toMatchObject({
+			badge: "attention",
+			title: "Research",
+			lastMessage: "Pulled the three papers.",
+			timestamp: "3m",
+			status: "working",
+			mission: { state: "waiting", count: 2 },
 		})
 	})
 
-	it("carries the badge its mission state calls for", () => {
-		expect(lineFor("waiting_human").badge).toBe("attention")
-		expect(lineFor("ready_to_merge").badge).toBe("done")
-		expect(lineFor("failed").badge).toBe("failed")
-		expect(lineFor("working").badge).toBeUndefined()
-		expect(lineFor("waiting_bot").badge).toBeUndefined()
+	it("leaves a row without a mission exactly as it reads", () => {
+		expect(withMissions([held], {})).toEqual([held])
 	})
 
-	const badgeUnder = (state: MissionState, held: AppSidebarBot["badge"]) =>
-		withMissions([row({ badge: held })], { "b-1": mission({ state }) }, NOW)[0]
-			.badge
-
-	it("keeps the chat badge when its mission carries none", () => {
-		expect(badgeUnder("working", "attention")).toBe("attention")
-		expect(badgeUnder("waiting_bot", "done")).toBe("done")
-	})
-
-	it("shows the stronger of the chat badge and the mission badge", () => {
-		expect(badgeUnder("waiting_human", "done")).toBe("attention")
-		expect(badgeUnder("ready_to_merge", "attention")).toBe("attention")
-		expect(badgeUnder("failed", "done")).toBe("failed")
-	})
-
-	it("shows the mission badge when the chat carries none", () => {
-		expect(badgeUnder("waiting_human", undefined)).toBe("attention")
-		expect(badgeUnder("working", undefined)).toBeUndefined()
-	})
-
-	it("shimmers the line its mission still moves", () => {
-		expect(lineFor("working").status).toBe("onMission")
-		expect(lineFor("waiting_bot").status).toBe("onMission")
-		expect(lineFor("waiting_human").status).toBe("idle")
-	})
-
-	it("leaves a line without a mission exactly as it reads", () => {
-		const held = row({ id: "b-2", status: "working", badge: "done" })
-
-		expect(withMissions([held], {}, NOW)).toEqual([held])
-	})
-
-	it("raises a line waiting for a human above the lines without a mission", () => {
+	it("raises a row waiting for a human above the rest", () => {
 		const rows = [row({ id: "b-2" }), row({ id: "b-1" }), row({ id: "b-3" })]
 
 		expect(
-			withMissions(
-				rows,
-				{ "b-1": mission({ state: "waiting_human" }) },
-				NOW,
-			).map((held) => held.id),
+			withMissions(rows, { "b-1": { state: "waiting", count: 1 } }).map(
+				(carried) => carried.id,
+			),
 		).toEqual(["b-1", "b-2", "b-3"])
 	})
 
-	it("leaves the order of the pinned lines untouched", () => {
+	it("leaves a pinned row where it is", () => {
 		const rows = [
 			row({ id: "b-2", pinPosition: 0 }),
 			row({ id: "b-1", pinPosition: 1 }),
-			row({ id: "b-3", pinPosition: 2 }),
 		]
 
 		expect(
-			withMissions(
-				rows,
-				{ "b-1": mission({ state: "waiting_human" }) },
-				NOW,
-			).map((held) => held.id),
-		).toEqual(["b-2", "b-1", "b-3"])
+			withMissions(rows, { "b-1": { state: "waiting", count: 1 } }).map(
+				(carried) => carried.id,
+			),
+		).toEqual(["b-2", "b-1"])
+	})
+})
+
+describe("missionRingBadges", () => {
+	const ringOf = (mission?: AppSidebarBot["mission"]) =>
+		missionRingBadges([row({ mission })])[0].badge
+
+	it("lights the ring for a mission a person has to answer", () => {
+		expect(ringOf({ state: "waiting", count: 1 })).toBe("attention")
+		expect(ringOf({ state: "failed", count: 1 })).toBe("failed")
+		expect(ringOf({ state: "ready", count: 1 })).toBe("done")
+	})
+
+	it("leaves the ring dark for a mission that is still moving", () => {
+		expect(ringOf({ state: "working", count: 1 })).toBeUndefined()
+		expect(ringOf(undefined)).toBeUndefined()
 	})
 })

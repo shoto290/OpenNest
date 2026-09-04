@@ -57,7 +57,7 @@ import { toEnvironmentRows } from "@/lib/environment/environment-rows"
 import { useEnvironment } from "@/lib/environment/use-environment"
 import { hasOverlayWindowControls, isSidebarResizable } from "@/lib/host"
 import { useExternalLinks } from "@/lib/links/use-external-links"
-import { withMissions } from "@/lib/missions/missions-model"
+import { missionRingBadges, withMissions } from "@/lib/missions/missions-model"
 import { useMissionBoard } from "@/lib/missions/use-mission-board"
 import { useNotifications } from "@/lib/notifications/use-notifications"
 import { useRunDriver } from "@/lib/routines/use-run-driver"
@@ -380,7 +380,6 @@ export function App() {
 		return withMissions(
 			withBadges(toRosterBots(bots, { working, previews }, now), badges),
 			missions,
-			now,
 		)
 	}, [bots, working, previews, now, badges, missions])
 
@@ -416,7 +415,6 @@ export function App() {
 						badges,
 					),
 					missions,
-					now,
 				),
 			]),
 		)
@@ -500,9 +498,25 @@ export function App() {
 		],
 	)
 
+	const missionBadgesBySpace = useMemo(
+		() =>
+			Object.fromEntries(
+				Object.entries(rosterBotsBySpace).map(([spaceId, spaceRows]) => [
+					spaceId,
+					missionRingBadges(spaceRows),
+				]),
+			),
+		[rosterBotsBySpace],
+	)
+
 	const badgesBySpaceId = useMemo(
-		() => toSpaceBadges(rosterBotsBySpace, rosterConversationsBySpace),
-		[rosterBotsBySpace, rosterConversationsBySpace],
+		() =>
+			toSpaceBadges(
+				rosterBotsBySpace,
+				rosterConversationsBySpace,
+				missionBadgesBySpace,
+			),
+		[rosterBotsBySpace, rosterConversationsBySpace, missionBadgesBySpace],
 	)
 
 	const isOverlayOpen =

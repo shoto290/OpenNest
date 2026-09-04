@@ -1,5 +1,8 @@
-import type { AppSidebarBot } from "@workspace/ui/components/app-sidebar"
-import type { BotBadge } from "@workspace/ui/components/badge"
+import type {
+	AppSidebarBot,
+	AppSidebarBotMission,
+} from "@workspace/ui/components/app-sidebar"
+import type { BotBadge, BotMissionState } from "@workspace/ui/components/badge"
 import type { MissionEventModel } from "@workspace/ui/components/mission"
 import type { MissionRowModel } from "@workspace/ui/components/mission-row"
 
@@ -9,9 +12,6 @@ import type {
 	MissionOnBoard,
 	MissionState,
 } from "./mission-contract"
-
-import { rosterTimestamp } from "../bots/roster-timestamp"
-import { strongerBadge } from "../chat/sidebar-badges"
 
 const BADGE_BY_STATE: Record<MissionState, BotBadge | null> = {
 	working: null,
@@ -53,65 +53,70 @@ export const toMissionEventModels = (
 		text: spokenTextOf(event.payload),
 	}))
 
-export type DrivingMissions = Record<string, Mission>
+export type MissionsByBot = Record<string, AppSidebarBotMission>
 
-export const NO_MISSIONS: DrivingMissions = {}
+export const NO_MISSIONS: MissionsByBot = {}
 
-const DRIVING_RANK: Record<MissionState, number> = {
-	waiting_human: 0,
-	failed: 1,
-	ready_to_merge: 2,
-	working: 3,
-	waiting_bot: 3,
-	done: 4,
-}
-
-const BADGE_OF: Partial<Record<MissionState, BotBadge>> = {
-	waiting_human: "attention",
-	ready_to_merge: "done",
+const CHIP_STATE_OF: Partial<Record<MissionState, BotMissionState>> = {
+	waiting_human: "waiting",
 	failed: "failed",
+	ready_to_merge: "ready",
+	working: "working",
+	waiting_bot: "working",
 }
 
-const isBotTurn = (state: MissionState) =>
-	state === "working" || state === "waiting_bot"
+const MOST_URGENT_FIRST: BotMissionState[] = [
+	"waiting",
+	"failed",
+	"ready",
+	"working",
+]
 
-const drives = (mission: Mission, held: Mission | undefined) =>
-	held === undefined || DRIVING_RANK[mission.state] < DRIVING_RANK[held.state]
+const RING_BADGE_OF: Partial<Record<BotMissionState, BotBadge>> = {
+	waiting: "attention",
+	failed: "failed",
+	ready: "done",
+}
 
-export const drivingMissions = (board: MissionOnBoard[]): DrivingMissions => {
-	const driving: DrivingMissions = {}
+const mostUrgent = (states: BotMissionState[]): BotMissionState =>
+	MOST_URGENT_FIRST.find((state) => states.includes(state)) ?? "working"
+
+export const missionsByBot = (board: MissionOnBoard[]): MissionsByBot => {
+	const states: Record<string, BotMissionState[]> = {}
 	for (const { mission } of board) {
-		if (drives(mission, driving[mission.botId])) {
-			driving[mission.botId] = mission
+		const state = CHIP_STATE_OF[mission.state]
+		if (state) {
+			states[mission.botId] = [...(states[mission.botId] ?? []), state]
 		}
 	}
-	return driving
-}
 
-const drivenBy = <Row extends AppSidebarBot>(
-	row: Row,
-	mission: Mission | undefined,
-	now: number,
-): Row =>
-	mission
-		? {
-				...row,
-				title: mission.ticket.externalId,
-				lastMessage: mission.objective,
-				timestamp: rosterTimestamp(mission.openedAt, now),
-				status: isBotTurn(mission.state) ? "onMission" : "idle",
-				badge: strongerBadge(row.badge, BADGE_OF[mission.state]),
-			}
-		: row
+	return Object.fromEntries(
+		Object.entries(states).map(([botId, held]) => [
+			botId,
+			{ state: mostUrgent(held), count: held.length },
+		]),
+	)
+}
 
 export const withMissions = <Row extends AppSidebarBot>(
 	rows: Row[],
-	driving: DrivingMissions,
-	now: number,
+	missions: MissionsByBot,
 ): Row[] => {
+	const carried = rows.map((row) =>
+		missions[row.id] ? { ...row, mission: missions[row.id] } : row,
+	)
 	const isRaised = (row: Row) =>
-		driving[row.id]?.state === "waiting_human" && row.pinPosition == null
-	const driven = rows.map((row) => drivenBy(row, driving[row.id], now))
+		missions[row.id]?.state === "waiting" && row.pinPosition == null
 
-	return [...driven.filter(isRaised), ...driven.filter((row) => !isRaised(row))]
+	return [
+		...carried.filter(isRaised),
+		...carried.filter((row) => !isRaised(row)),
+	]
 }
+
+export const missionRingBadges = (
+	rows: AppSidebarBot[],
+): { badge?: BotBadge }[] =>
+	rows.map((row) => ({
+		badge: row.mission && RING_BADGE_OF[row.mission.state],
+	}))

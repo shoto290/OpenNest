@@ -155,46 +155,20 @@ const BADGED_ROSTER: AppSidebarBot[] = [
 	ROSTER[3],
 ]
 
-const MISSION_ROSTER: AppSidebarBot[] = [
-	{
-		...ROSTER[0],
-		title: "OPE-29",
-		lastMessage: "Drive every roster line from the mission its bot is on.",
-		timestamp: "2h",
-		status: "idle",
-		badge: "attention",
-	},
-	{
-		...ROSTER[1],
-		title: "OPE-30",
-		lastMessage: "Open the mission thread from the line that carries it.",
-		timestamp: "4h",
-		status: "idle",
-		badge: "done",
-	},
-	{
-		...ROSTER[2],
-		title: "OPE-28",
-		lastMessage: "List every mission event in the activity panel.",
-		timestamp: "6h",
-		status: "idle",
-		badge: "failed",
-	},
-	{
-		...ROSTER[3],
-		title: "OPE-31",
-		lastMessage: "Mirror the mission board into the tray menu.",
-		timestamp: "9h",
-		status: "onMission",
-	},
+const MISSION_CHIP_ROSTER: AppSidebarBot[] = [
+	{ ...ROSTER[0], mission: { state: "waiting", count: 1 } },
+	{ ...ROSTER[1], mission: { state: "failed", count: 1 } },
+	{ ...ROSTER[4], mission: { state: "ready", count: 1 } },
+	{ ...ROSTER[5], mission: { state: "working", count: 1 } },
+	ROSTER[6],
 ]
 
-const RAISED_MISSION_ROSTER: AppSidebarBot[] = [
-	MISSION_ROSTER[0],
-	{ ...ROSTER[4], timestamp: "now" },
-	{ ...ROSTER[5], timestamp: "3m" },
-	{ ...ROSTER[6], timestamp: "12m" },
-]
+const chipIn = (row: HTMLElement) =>
+	row.querySelector<HTMLElement>('[data-slot="bot-mission-chip"]')
+
+const chipStateIn = (row: HTMLElement) => chipIn(row)?.dataset.state
+
+const dotIn = (row: HTMLElement) => slotIn(row, "bot-mission-dot")
 
 const IDENTITY_BLOTS: BotAvatarBlot[] = [
 	"red",
@@ -979,60 +953,100 @@ export const BadgesOnRail = meta.story({
 	},
 })
 
-export const MissionLines = meta.story({
-	args: { bots: MISSION_ROSTER, selectedBotId: "beacon" },
+export const MissionChips = meta.story({
+	args: { bots: MISSION_CHIP_ROSTER, selectedBotId: "beacon" },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Four rows driven by the mission their bot is on, one per state a mission can hold on a line. The waiting row asks for the reader and carries attention, the ready row carries done, the failed row carries failed, and the row whose bot still has the ball carries no dot at all and shimmers its line instead. Check the title pill reads the ticket the mission was opened on rather than the bot's own title, that the preview reads the objective rather than the last thing said in the room, and that the time is the time the mission opened. Check the running row shimmers the objective itself: a mission says what it is about even while it moves, so the pose verb never takes the line back. Pick `Badges` for the same three dots derived from a chat instead of a mission, `MissionRaised` for what a waiting mission does to the order of the list.",
+					"Four bots each carrying one open mission, one per state a mission can be in, over a fifth carrying none. The mission speaks in a pill on the name line and never in the dot on the preview line: the chip is the state of the work, the dot is the state of the conversation, and the two shapes are never confused. Check the pill sits between the title badge and the time, that its inner dot takes the attention, failed and done colours the panel already uses and the muted grey of a resting row while the mission simply runs, and that the row with no mission carries no pill at all. Check the pill never moves: it is the one mark in the row that does not pulse, because a mission is a fact and not an alarm. Check each pill is named for a screen reader — the number of missions and the state — so the colour is never the only carrier. Check the four chat signals of every row are exactly what the host passed: badge, title, message and time are untouched by the mission. Pick `MissionChipCounts` for the pill that carries a number, `MissionChipWithChatBadge` for a row that carries both marks at once.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
 		const rows = rowsIn(canvasElement)
 
-		await expect(rows.map(badgeIn)).toEqual([
-			"attention",
-			"done",
+		await expect(rows.map(chipStateIn)).toEqual([
+			"waiting",
 			"failed",
+			"ready",
+			"working",
 			undefined,
 		])
+		await expect(chipIn(rows[0])).toHaveAccessibleName(
+			"1 mission, waiting for you",
+		)
+		await expect(chipIn(rows[3])).toHaveAccessibleName("1 mission, working")
 
+		const muted = tokenColor(canvasElement, "--muted-foreground")
+		const dotColours = rows
+			.slice(0, 4)
+			.map((row) => getComputedStyle(dotIn(row)).backgroundColor)
+		await expect(uniqueCount(dotColours)).toBe(4)
+		await expect(dotColours[3]).toBe(muted)
+		for (const row of rows.slice(0, 4)) {
+			await expect(getComputedStyle(dotIn(row)).animationName).toBe("none")
+		}
+
+		await expect(rows.map(badgeIn)).toEqual(rows.map(() => undefined))
 		await expect(slotIn(rows[0], "roster-row-badge")).toHaveTextContent(
-			"OPE-29",
+			"Research",
 		)
 		await expect(slotIn(rows[0], "roster-row-preview")).toHaveTextContent(
-			"Drive every roster line from the mission its bot is on.",
+			"Pulled the three papers and summarised each one for you.",
 		)
 		await expect(slotIn(rows[0], "roster-row-timestamp")).toHaveTextContent(
-			"2h",
+			"09:24",
 		)
-
-		const running = rows[3]
-		await expect(slotIn(running, "roster-row-preview")).toHaveTextContent(
-			"Mirror the mission board into the tray menu.",
-		)
-		await expect(slotIn(running, "text-shimmer")).toBeInTheDocument()
-		await expect(
-			running.querySelector('[data-slot="bot-activity-dot"]'),
-		).toBeNull()
-
 		await expectAlignedRows(rows)
-		await expect(uniqueCount(rowHeights(rows))).toBe(1)
 	},
 })
 
-export const MissionUnderChatBadge = meta.story({
+export const MissionChipCounts = meta.story({
 	args: {
-		bots: [{ ...MISSION_ROSTER[3], badge: "attention" }, ROSTER[4]],
-		selectedBotId: "beacon",
+		bots: [
+			MISSION_CHIP_ROSTER[0],
+			{ ...ROSTER[1], mission: { state: "working", count: 3 } },
+		],
+		selectedBotId: "atlas",
 	},
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"A bot running a mission that has asked for nothing, on a row its chat has flagged for the reader anyway. Check the row keeps the attention dot: a mission with the ball says nothing about the badge, so it never takes back a mark the conversation put there. Check the row still reads as a mission line under it — the ticket pill, the objective shimmering, the time the mission opened — so the dot and the line answer two different questions at once. Pick `MissionLines` for the four states alone, `MissionBadgeOverChatBadge` for the case where the mission has the stronger news.",
+					"One bot on a single mission over one bot juggling three. Check the first pill is the dot alone in its background — a count of one is the count the reader assumes, so printing it is noise — and that the second prints the number beside the dot in tabular figures, so a pill that counts up does not shift the time beside it. Check both pills read the same height and hang off the same trailing edge whatever they carry, and that the accessible name says one mission in the first and three in the second, since the digit alone would leave the single mission unnamed. Pick `MissionChips` for the states behind the colours.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const rows = rowsIn(canvasElement)
+
+		await expect(chipIn(rows[0])).toHaveTextContent("")
+		await expect(chipIn(rows[1])).toHaveTextContent("3")
+		await expect(chipIn(rows[0])).toHaveAccessibleName(
+			"1 mission, waiting for you",
+		)
+		await expect(chipIn(rows[1])).toHaveAccessibleName("3 missions, working")
+
+		const chips = rows.map((row) => chipIn(row) as HTMLElement)
+		await expect(uniqueCount(rowHeights(chips))).toBe(1)
+		await expect(uniqueCount(endOffsets(rows, "roster-row-timestamp"))).toBe(1)
+	},
+})
+
+export const MissionChipWithChatBadge = meta.story({
+	args: {
+		bots: [
+			{ ...MISSION_CHIP_ROSTER[0], badge: "attention" },
+			MISSION_CHIP_ROSTER[4],
+		],
+		selectedBotId: "grove",
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A bot whose mission waits on the reader and whose conversation is asking for them too. Check both marks are drawn: the chat dot at the trailing edge of the preview line, the mission pill on the name line above it, each answering a different question. A mission never eats the badge a conversation put there and a conversation never dims a mission, so the row can say two things at once without either mark moving. Check the row keeps the height and the columns the list holds throughout. Pick `Badges` for the dot alone, `MissionChips` for the pill alone.",
 			},
 		},
 	},
@@ -1040,64 +1054,38 @@ export const MissionUnderChatBadge = meta.story({
 		const rows = rowsIn(canvasElement)
 
 		await expect(badgeIn(rows[0])).toBe("attention")
-		await expect(slotIn(rows[0], "roster-row-badge")).toHaveTextContent(
-			"OPE-31",
+		await expect(chipStateIn(rows[0])).toBe("waiting")
+
+		const nameLine = slotIn(rows[0], "roster-row-name").parentElement
+		await expect(nameLine?.contains(chipIn(rows[0]))).toBe(true)
+		await expect(nameLine?.contains(slotIn(rows[0], "bot-activity-dot"))).toBe(
+			false,
 		)
-		await expect(slotIn(rows[0], "text-shimmer")).toBeInTheDocument()
-		await expect(slotIn(rows[0], "roster-row-preview")).toHaveTextContent(
-			"Mirror the mission board into the tray menu.",
-		)
-	},
-})
 
-export const MissionBadgeOverChatBadge = meta.story({
-	args: {
-		bots: [MISSION_ROSTER[0], MISSION_ROSTER[2]],
-		selectedBotId: "beacon",
-	},
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"Two rows where the mission has louder news than the chat under it: the first waits on the reader, the second failed, and both rooms had only something done to report. Check each row shows the stronger of the two marks under the one order the panel already uses — attention, then failed, then done — and never two dots at once. A row carries a single badge whatever it has to say, so the reader runs one column of marks down the list and takes the worst news per bot from it. Pick `MissionUnderChatBadge` for the mission that yields to the chat, `Badges` for the same three marks from a chat alone.",
-			},
-		},
-	},
-	play: async ({ canvasElement }) => {
-		const rows = rowsIn(canvasElement)
-
-		await expect(rows.map(badgeIn)).toEqual(["attention", "failed"])
-		for (const row of rows) {
-			await expect(slotsIn(row, "bot-activity-dot")).toHaveLength(1)
-		}
-	},
-})
-
-export const MissionRaised = meta.story({
-	args: { bots: RAISED_MISSION_ROSTER, selectedBotId: "flint" },
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"One bot held up by a mission waiting for the reader, over three bots holding no mission at all. Check the waiting row sits at the top even though the three under it spoke more recently — a mission that cannot move without a person outranks a room that is merely fresh — and that the three rows below read exactly as they do without any mission: their own title where they have one, their last message, the time they last spoke, no dot. Check nothing else about the raised row changes shape: it keeps the row height, the columns and the trailing badge edge the list holds throughout. Pick `MissionLines` for the four states a mission puts on a line, `Roster` for the same list ordered by the last word alone.",
-			},
-		},
-	},
-	play: async ({ canvasElement }) => {
-		const rows = rowsIn(canvasElement)
-
-		await expect(slotIn(rows[0], "roster-row-name")).toHaveTextContent("Atlas")
-		await expect(rows.map(badgeIn)).toEqual([
-			"attention",
-			undefined,
-			undefined,
-			undefined,
-		])
-		await expect(slotIn(rows[1], "roster-row-timestamp")).toHaveTextContent(
-			"now",
-		)
-		await expectAlignedRows(rows)
 		await expect(uniqueCount(rowHeights(rows))).toBe(1)
+		await expectAlignedRows(rows)
+	},
+})
+
+export const MissionChipOnRail = meta.story({
+	args: { bots: MISSION_CHIP_ROSTER, selectedBotId: "beacon" },
+	render: renderShell(false),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same four missions once the panel is down to its icon rail. Check no pill is drawn at all: the rail is the avatar and nothing else, and a chip squeezed onto it would collide with the badge that already rides the corner there. The mission is not lost, it is deferred to the open panel — what a collapsed reader still needs is the bot asking for them, and that is the dot. Pick `MissionChips` for the open panel, `BadgesOnRail` for the mark the rail does keep.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const panel = canvas.getByRole("complementary", { name: "Conversations" })
+		const rail = railWidth()
+		await waitFor(async () => {
+			await expect(panel.getBoundingClientRect().width).toBeCloseTo(rail, 0)
+		}, FRAME_POLL)
+
+		await expect(slotsIn(canvasElement, "bot-mission-chip")).toHaveLength(0)
 	},
 })
 
@@ -2090,7 +2078,11 @@ export const MissionSpaceRing = meta.story({
 	args: {
 		spaces: FIVE_SPACES,
 		selectedSpaceId: "vocca",
-		botsBySpaceId: { ...FIVE_ROSTERS, vocca: MISSION_ROSTER.slice(3) },
+		botsBySpaceId: {
+			...FIVE_ROSTERS,
+			perso: [{ ...ROSTER[0], mission: { state: "working", count: 2 } }],
+			atelier: [{ ...ROSTER[1], mission: { state: "waiting", count: 1 } }],
+		},
 		badgesBySpaceId: { atelier: "attention" },
 		user: READER,
 	},
@@ -2098,7 +2090,7 @@ export const MissionSpaceRing = meta.story({
 		docs: {
 			description: {
 				story:
-					"A mission waiting for the reader in a space they are not looking at. Check the dot for that space takes the attention ring while every other space in the strip is drawn exactly as it is without one, and that the switcher above the roster repeats the mark, so a reader deep in one space still learns another one is blocked on them. Check the open roster stays as it reads: its own bot is on a mission that has not asked for anything, so it shimmers its objective and carries no dot of its own — the ring is the only thing lit. Pick `SpaceBadges` for three rings at once from three different states, `MissionLines` for what the mission puts on the rows themselves.",
+					"Two spaces the reader is not in, each with a bot on a mission, and only one of them lit. The space whose mission waits on a person takes the attention ring; the space whose mission is simply running stays exactly as a space with nothing to say, because a bot at work is not news. Check the switcher above the roster repeats the lit mark and only that one, so a reader deep in one space learns another is blocked on them without being pulled by every mission in the app. Check no bot row anywhere carries a mission badge on its preview line: the ring is derived from the missions, not from a dot written onto a row. Pick `SpaceBadges` for the rings a chat lights, `MissionChips` for what the mission puts on a row.",
 			},
 		},
 	},
@@ -2122,9 +2114,6 @@ export const MissionSpaceRing = meta.story({
 		).toBe("attention")
 
 		await expect(slotsIn(canvasElement, "bot-activity-dot")).toHaveLength(0)
-		await expect(
-			canvas.getAllByText("Mirror the mission board into the tray menu.")[0],
-		).toBeInTheDocument()
 	},
 })
 

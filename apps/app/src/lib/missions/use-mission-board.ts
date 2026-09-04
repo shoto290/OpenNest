@@ -4,18 +4,18 @@ import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import {
-	type DrivingMissions,
-	drivingMissions,
+	type MissionsByBot,
+	missionsByBot,
 	NO_MISSIONS,
 } from "./missions-model"
 import { missionsTransport } from "./missions-transport"
 
-export const useMissionBoard = (): DrivingMissions => {
-	const [driving, setDriving] = useState<DrivingMissions>(NO_MISSIONS)
+export const useMissionBoard = (): MissionsByBot => {
+	const [driving, setDriving] = useState<MissionsByBot>(NO_MISSIONS)
 
 	const read = useCallback(() => {
 		void missionsTransport.board().then(
-			(board) => setDriving(drivingMissions(board)),
+			(board) => setDriving(missionsByBot(board)),
 			() => {
 				setDriving(NO_MISSIONS)
 				raiseFailureNotice({
