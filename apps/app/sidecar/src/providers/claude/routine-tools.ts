@@ -98,7 +98,7 @@ const asked = async (
 	}
 }
 
-export type RoutineTool = SdkMcpToolDefinition<ToolInput>
+type RoutineTool = SdkMcpToolDefinition<ToolInput>
 
 export const routineTools = (session: string | undefined): RoutineTool[] => [
 	tool("routine_list", LIST, NOTHING, () => asked(session, "list", {})),

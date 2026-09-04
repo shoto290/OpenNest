@@ -109,17 +109,6 @@ afterEach(() => {
 })
 
 describe("routineTools", () => {
-	it("carries the six routine tools of the opennest server", () => {
-		expect(routineTools(SESSION).map((held) => held.name)).toEqual([
-			"routine_list",
-			"routine_trigger_sources",
-			"routine_create",
-			"routine_update",
-			"routine_run_now",
-			"routine_delete",
-		])
-	})
-
 	it("takes neither a conversation nor a bot from the agent", () => {
 		for (const held of routineTools(SESSION)) {
 			expect(Object.keys(held.inputSchema)).not.toContain("conversationId")

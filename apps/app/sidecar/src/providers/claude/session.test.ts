@@ -234,14 +234,7 @@ describe("buildOptions", () => {
 		).toEqual([OPENNEST_SERVER])
 	})
 
-	it("leaves an unbundled session without a server of any kind", () => {
-		expect(
-			buildOptions({ cwd: "/tmp", partialMessages: false }, undefined)
-				.mcpServers,
-		).toBeUndefined()
-	})
-
-	it("leaves a session without the opennest server free of any routine", () => {
+	it("leaves an unbundled session without a server or a routine of any kind", () => {
 		const options = buildOptions(
 			{ cwd: "/tmp", partialMessages: false },
 			undefined,
