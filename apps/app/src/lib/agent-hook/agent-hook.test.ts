@@ -175,6 +175,7 @@ describe("the OpenNest agent hook", () => {
 				.toString("utf8")
 				.trim(),
 			excerpt: "the last word",
+			message: "",
 		})
 		expect(Buffer.byteLength(call.body)).toBeLessThan(64 * 1024)
 	})
@@ -200,7 +201,7 @@ describe("the OpenNest agent hook", () => {
 		expect(JSON.parse(calls[0].body).excerpt).toBe("z".repeat(500))
 	})
 
-	it("sends an empty excerpt on a Notification event without a transcript", async () => {
+	it("sends the message and an empty excerpt on a Notification event without a transcript", async () => {
 		const { server, calls, url } = await listeningOn(202)
 		writeConfig({ url, key: "routine-key" })
 
@@ -212,6 +213,7 @@ describe("the OpenNest agent hook", () => {
 				session_id: "session-3",
 				cwd: REPO_ROOT,
 				transcript_path: join(home, "nowhere.jsonl"),
+				message: "Claude needs your permission to use Bash",
 			},
 		})
 		await closing(server)
@@ -222,6 +224,7 @@ describe("the OpenNest agent hook", () => {
 			event: "Notification",
 			sessionId: "session-3",
 			excerpt: "",
+			message: "Claude needs your permission to use Bash",
 		})
 	})
 

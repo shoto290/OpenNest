@@ -3,7 +3,7 @@ import os
 import sys
 import uuid
 
-MAX_EXCERPT_CHARACTERS = 500
+MAX_TEXT_CHARACTERS = 500
 MAX_BODY_BYTES = 64 * 1024
 DEFAULT_CONFIG = os.path.join(".opennest", "agent-hook.json")
 BRANCH_PREFIX = "ref: refs/heads/"
@@ -78,7 +78,7 @@ def excerpt(path):
 					latest = spoken
 	except OSError:
 		return ""
-	return latest[:MAX_EXCERPT_CHARACTERS]
+	return latest[:MAX_TEXT_CHARACTERS]
 
 
 def git_directory(start):
@@ -121,6 +121,7 @@ def call():
 		"cwd": directory,
 		"branch": branch(directory),
 		"excerpt": excerpt(hook.get("transcript_path")),
+		"message": text(hook.get("message"))[:MAX_TEXT_CHARACTERS],
 	}
 	body = json.dumps(payload)
 	if len(body.encode("utf-8")) > MAX_BODY_BYTES:
