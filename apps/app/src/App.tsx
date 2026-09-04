@@ -137,7 +137,12 @@ export function App() {
 
 	useExternalLinks()
 
-	useRunDriver({ driver, store, runtimes: conversationRuntimes })
+	useRunDriver({
+		driver,
+		store,
+		runtimes: conversationRuntimes,
+		chat: chat.controller,
+	})
 
 	useNotifications({
 		chat: chat.controller,

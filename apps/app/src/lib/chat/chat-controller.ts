@@ -1,3 +1,6 @@
+import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
+import { i18n } from "@workspace/ui/lib/i18n"
+
 import type { SubmittedAttachment } from "./attachments-contract"
 import {
 	type ChatAction,
@@ -51,12 +54,22 @@ import type {
 	MessageReference,
 } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
-import type { TerminalCompletion } from "../conversations/transcript-contract"
+import type {
+	TerminalCompletion,
+	TranscriptMessage,
+} from "../conversations/transcript-contract"
 import { createTranscriptController } from "../conversations/transcript-controller"
 import {
 	selectHasMore,
 	selectMessages,
 } from "../conversations/transcript-state"
+import { createReportedRunsReader } from "../routines/create-run-port"
+import {
+	indexedByTurnId,
+	type ReportedRun,
+	type RunReportDraft,
+} from "../routines/routine-contract"
+import type { ReportedRunsReader } from "../routines/run-port"
 
 export type ChatController = {
 	getState: () => ChatState
@@ -84,6 +97,7 @@ export type ChatController = {
 	pin: (messageId: string, blockIndex: number) => Promise<void>
 	unpin: (messageId: string, blockIndex: number) => Promise<void>
 	pins: () => Promise<MessagePin[]>
+	reportRun: (draft: RunReportDraft) => Promise<string>
 	storeAttachments: (
 		botId: string,
 		attachments: SubmittedAttachment[],
@@ -101,6 +115,7 @@ export type ChatControllerOptions = {
 	newId?: () => string
 	now?: () => number
 	promptsPerRun?: number
+	readReportedRuns?: ReportedRunsReader
 }
 
 const INTERRUPTED: TerminalCompletion = "interrupted"
@@ -139,6 +154,8 @@ export function createChatController(
 	const newId = options.newId ?? (() => crypto.randomUUID())
 	const now = options.now ?? (() => Date.now())
 	const promptsPerRun = options.promptsPerRun ?? PROMPTS_PER_RUN
+	const readReportedRuns =
+		options.readReportedRuns ?? createReportedRunsReader()
 	const transcript = createTranscriptController(store)
 
 	const bots = new Map<string, BotChat>()
@@ -637,17 +654,96 @@ export function createChatController(
 			() => undefined,
 		)
 
+	const rememberCause = (bot: BotChat, reported: ReportedRun) =>
+		dispatch(bot, {
+			type: "causesChanged",
+			causes: new Map(bot.state.reportedCauses).set(reported.turnId, reported),
+		})
+
+	const readCauses = async (bot: BotChat, conversationId: string) => {
+		try {
+			const reported = await readReportedRuns(conversationId)
+			if (reported.length === 0) {
+				return
+			}
+			dispatch(bot, {
+				type: "causesChanged",
+				causes: new Map([
+					...indexedByTurnId(reported),
+					...bot.state.reportedCauses,
+				]),
+			})
+		} catch {
+			raiseFailureNotice({
+				title: i18n.t("chat:transcript.cause.unavailable.title"),
+				description: i18n.t("chat:transcript.cause.unavailable.description"),
+			})
+		}
+	}
+
 	const openConversation = async (bot: BotChat) => {
 		try {
 			const chat = await store.mainChat(bot.id)
 			dispatch(bot, { type: "conversationOpened", conversationId: chat.id })
 			void recallCommands(bot)
+			void readCauses(bot, chat.id)
 			syncBot(bot)
 			await enqueue(() => transcript.load(chat.id))
 			syncBot(bot)
 		} catch (reason) {
 			reportStore(bot, reason)
 		}
+	}
+
+	const storeReport = async (reported: TranscriptMessage) => {
+		await store.startTurn({
+			id: reported.turnId,
+			conversationId: reported.conversationId,
+			startedAt: reported.createdAt,
+		})
+		await store.openAssistantMessage({
+			id: reported.id,
+			conversationId: reported.conversationId,
+			turnId: reported.turnId,
+			authorBotId: reported.authorBotId,
+			repliedToMessageId: null,
+			createdAt: reported.createdAt,
+		})
+		await store.appendText(reported.id, reported.content)
+		await store.finalizeMessage(reported.id, "complete")
+		await store.completeTurn(reported.turnId, now())
+	}
+
+	const openChatOf = ({ botId, conversationId }: RunReportDraft) => {
+		const bot = bots.get(botId)
+		return bot?.state.conversationId === conversationId ? bot : null
+	}
+
+	const reportRun = async (draft: RunReportDraft) => {
+		const reported: TranscriptMessage = {
+			id: newId(),
+			conversationId: draft.conversationId,
+			turnId: newId(),
+			seq: 0,
+			role: "assistant",
+			content: draft.text,
+			completion: "complete",
+			createdAt: now(),
+			authorBotId: draft.botId,
+			repliedToMessageId: null,
+			runtimeSessionId: draft.runtimeSessionId,
+		}
+		await enqueue(() => storeReport(reported))
+		const bot = openChatOf(draft)
+		if (bot) {
+			rememberCause(bot, {
+				turnId: reported.turnId,
+				routineTitle: draft.routineTitle,
+				triggerSourceId: draft.triggerSourceId,
+			})
+			transcript.append(reported)
+		}
+		return reported.turnId
 	}
 
 	const redescribe = (botId: string) => {
@@ -1236,6 +1332,7 @@ export function createChatController(
 		unpin: (messageId, blockIndex) =>
 			onSelected((bot) => unpinFor(bot, messageId, blockIndex), undefined),
 		pins: () => onSelected(pinsOf, NO_PINS),
+		reportRun,
 		storeAttachments,
 		stop: () => onSelected(stop, undefined),
 		discard: (id) =>

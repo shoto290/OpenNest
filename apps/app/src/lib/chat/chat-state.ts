@@ -16,6 +16,10 @@ import type {
 	TurnState,
 } from "../agent/contract"
 import type { TranscriptMessage } from "../conversations/transcript-contract"
+import {
+	NO_REPORTED_RUNS,
+	type ReportedRunsByTurnId,
+} from "../routines/routine-contract"
 
 export type ChatError = {
 	id: string
@@ -47,6 +51,7 @@ export type ChatState = {
 	question: QuestionRequest | null
 	errors: ChatError[]
 	errorCount: number
+	reportedCauses: ReportedRunsByTurnId
 }
 
 export type ChatAction =
@@ -71,6 +76,7 @@ export type ChatAction =
 	| { type: "stopRejected"; error: TransportError }
 	| { type: "errorDismissed"; id: string }
 	| { type: "binaryVersion"; version: string | null }
+	| { type: "causesChanged"; causes: ReportedRunsByTurnId }
 
 export const initialChatState: ChatState = {
 	runtime: null,
@@ -91,6 +97,7 @@ export const initialChatState: ChatState = {
 	question: null,
 	errors: [],
 	errorCount: 0,
+	reportedCauses: NO_REPORTED_RUNS,
 }
 
 const TRANSPORT_KINDS: Record<TransportError["kind"], true> = {
@@ -440,6 +447,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 			return state.conversationId === action.conversationId
 				? state
 				: { ...state, conversationId: action.conversationId }
+		case "causesChanged":
+			return { ...state, reportedCauses: action.causes }
 		case "transcriptChanged":
 			return applyTranscriptChanged(state, action.messages, action.hasOlder)
 		case "olderLoading":

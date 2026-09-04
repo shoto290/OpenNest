@@ -19,10 +19,7 @@ import type {
 import type { ConversationRuntimes } from "../conversations/conversation-runtimes"
 import { presentParticipants } from "../conversations/roster-conversations"
 import type { Bot, Conversation } from "../conversations/store-contract"
-import {
-	NO_REPORTED_RUNS,
-	type ReportedRunsByTurnId,
-} from "../routines/routine-contract"
+import type { ReportedRunsByTurnId } from "../routines/routine-contract"
 
 export type ThreadFace = RosterBot
 
@@ -132,7 +129,7 @@ const botFactsOf = (thread: LoadedBotThread): ThreadFacts => {
 		rejectedPromptId: thread.state.rejectedPromptId,
 		workingBotIds: NO_WORKING_BOT_IDS,
 		loopingPair: null,
-		causes: NO_REPORTED_RUNS,
+		causes: thread.state.reportedCauses,
 	}
 }
 

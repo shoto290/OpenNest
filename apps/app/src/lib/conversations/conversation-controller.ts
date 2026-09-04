@@ -61,9 +61,11 @@ import {
 } from "../chat/working-kind"
 import { createReportedRunsReader } from "../routines/create-run-port"
 import {
+	indexedByTurnId,
 	NO_REPORTED_RUNS,
 	type ReportedRun,
 	type ReportedRunsByTurnId,
+	type RunReportDraft,
 } from "../routines/routine-contract"
 import type { ReportedRunsReader } from "../routines/run-port"
 
@@ -76,15 +78,6 @@ export type RefusedMessage = {
 export type PendingPrompt =
 	| { kind: "question"; botId: string; request: QuestionRequest }
 	| { kind: "permission"; botId: string; request: PermissionRequest }
-
-export type RunReportDraft = {
-	conversationId: string
-	botId: string
-	runtimeSessionId: string
-	text: string
-	routineTitle: string
-	triggerSourceId: string
-}
 
 export type SpeakingBot = {
 	botId: string
@@ -207,9 +200,6 @@ const promptWork = (pending: PendingPrompt): WorkingState => ({
 			? pending.request.questions[0]?.header
 			: pending.request.title,
 })
-
-const indexedByTurnId = (reported: ReportedRun[]): ReportedRunsByTurnId =>
-	new Map(reported.map((run) => [run.turnId, run]))
 
 const initialState: ConversationState = {
 	conversationId: null,
