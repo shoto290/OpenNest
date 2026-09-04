@@ -29,6 +29,8 @@ const API_VERSION: &str = "2022-11-28";
 
 const RATE_LIMIT_RESET_HEADER: &str = "x-ratelimit-reset";
 
+const RATE_LIMIT_REMAINING_HEADER: &str = "x-ratelimit-remaining";
+
 const RETRY_AFTER_HEADER: &str = "retry-after";
 
 const FAILED_CONCLUSIONS: [&str; 5] =
@@ -131,6 +133,12 @@ impl Kept {
 	fn hold_until(&mut self, until_ms: i64) {
 		self.held_until_ms = Some(until_ms);
 	}
+
+	fn remember(&mut self, mission_id: &str, etag: Option<String>) {
+		if let Some(etag) = etag {
+			self.etags.insert(mission_id.to_owned(), etag);
+		}
+	}
 }
 
 enum Answer<T> {
@@ -201,6 +209,12 @@ enum Checks {
 	Failed,
 }
 
+impl Checks {
+	fn settled(self) -> bool {
+		matches!(self, Checks::Passed | Checks::Failed)
+	}
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Fingerprint {
@@ -261,42 +275,94 @@ async fn seen(
 	kept: &mut Kept,
 	mission: WatchedMission,
 ) -> Result<(), Failure> {
-	let etag = kept.etags.get(&mission.id).cloned();
-	let answered = reach.pulls(&mission, etag.as_deref()).await?;
-	let (etag, pulls) = match answered {
-		Answer::Unchanged => return Ok(()),
+	let held = Fingerprint::held(&mission.fingerprint)?;
+	let sent = kept.etags.get(&mission.id).cloned();
+	match reach.pulls(&mission, sent.as_deref()).await? {
 		Answer::Held { until_ms } => {
 			kept.hold_until(until_ms);
-			return Ok(());
+			Ok(())
 		}
-		Answer::Read { etag, held } => (etag, held),
-	};
-	if let Some(etag) = etag {
-		kept.etags.insert(mission.id.clone(), etag);
+		Answer::Unchanged => settling(reach, database, kept, &mission, held).await,
+		Answer::Read { etag, held: pulls } => {
+			listed(reach, database, kept, &mission, held, etag, pulls).await
+		}
 	}
-	let Some(pull) = pulls.into_iter().next() else {
+}
+
+async fn settling(
+	reach: &Reach,
+	database: &db::Database,
+	kept: &mut Kept,
+	mission: &WatchedMission,
+	held: Option<Fingerprint>,
+) -> Result<(), Failure> {
+	let Some(standing) = held.filter(|held| !held.checks.settled()) else {
 		return Ok(());
 	};
-	let held = Fingerprint::held(&mission.fingerprint)?;
+	let Some(checks) = learned_checks(reach, kept, &mission.repository, &standing.head_sha).await?
+	else {
+		return Ok(());
+	};
+	let fresh = Fingerprint { checks, ..standing.clone() };
+	recorded(database, mission, Some(&standing), fresh, None).await
+}
+
+async fn listed(
+	reach: &Reach,
+	database: &db::Database,
+	kept: &mut Kept,
+	mission: &WatchedMission,
+	held: Option<Fingerprint>,
+	etag: Option<String>,
+	pulls: Vec<Pull>,
+) -> Result<(), Failure> {
+	let Some(pull) = pulls.into_iter().next() else {
+		kept.remember(&mission.id, etag);
+		return Ok(());
+	};
 	let checks = match asks_for_checks(held.as_ref(), &pull) {
 		false => kept_checks(held.as_ref()),
-		true => match reach.checks(&mission.repository, &pull.head.sha).await? {
-			Answer::Unchanged => kept_checks(held.as_ref()),
-			Answer::Held { until_ms } => {
-				kept.hold_until(until_ms);
-				return Ok(());
-			}
-			Answer::Read { held: runs, .. } => concluded(&runs),
+		true => match learned_checks(reach, kept, &mission.repository, &pull.head.sha).await? {
+			Some(checks) => checks,
+			None => return Ok(()),
 		},
 	};
 	let fresh = Fingerprint::of(&pull, checks);
-	if held.as_ref() == Some(&fresh) {
+	recorded(database, mission, held.as_ref(), fresh, Some(&pull.html_url)).await?;
+	kept.remember(&mission.id, etag);
+	Ok(())
+}
+
+async fn learned_checks(
+	reach: &Reach,
+	kept: &mut Kept,
+	repository: &str,
+	head_sha: &str,
+) -> Result<Option<Checks>, Failure> {
+	match reach.checks(repository, head_sha).await? {
+		Answer::Read { held: runs, .. } => Ok(Some(concluded(&runs))),
+		Answer::Unchanged => Ok(None),
+		Answer::Held { until_ms } => {
+			kept.hold_until(until_ms);
+			Ok(None)
+		}
+	}
+}
+
+async fn recorded(
+	database: &db::Database,
+	mission: &WatchedMission,
+	held: Option<&Fingerprint>,
+	fresh: Fingerprint,
+	url: Option<&str>,
+) -> Result<(), Failure> {
+	if held == Some(&fresh) {
 		return Ok(());
 	}
-	let entries = appended(held.as_ref(), &fresh, &pull);
+	let entries = appended(held, &fresh, url);
 	let stored = serde_json::to_string(&fresh)
 		.map_err(|error| Failure::Unreadable(format!("no fingerprint: {error}")))?;
-	database.missions().record_github(mission.id, entries, stored).await?;
+	database.missions().record_github(mission.id.clone(), entries, stored).await?;
 	Ok(())
 }
 
@@ -305,17 +371,24 @@ fn kept_checks(held: Option<&Fingerprint>) -> Checks {
 }
 
 fn asks_for_checks(held: Option<&Fingerprint>, pull: &Pull) -> bool {
-	held.is_some_and(|held| {
-		held.number == pull.number && (held.head_sha != pull.head.sha || held.state != pull.state)
+	held.is_none_or(|held| {
+		held.number != pull.number
+			|| !held.checks.settled()
+			|| held.head_sha != pull.head.sha
+			|| held.state != pull.state
 	})
 }
 
-fn appended(held: Option<&Fingerprint>, fresh: &Fingerprint, pull: &Pull) -> Vec<MissionEntry> {
+fn appended(
+	held: Option<&Fingerprint>,
+	fresh: &Fingerprint,
+	url: Option<&str>,
+) -> Vec<MissionEntry> {
 	let mut entries = Vec::new();
-	if held.is_none_or(|held| held.number != fresh.number) {
+	if let Some(url) = url.filter(|_| held.is_none_or(|held| held.number != fresh.number)) {
 		entries.push(entry(
 			MissionEventKind::Note,
-			json!({ "pullRequest": fresh.number, "url": pull.html_url }),
+			json!({ "pullRequest": fresh.number, "url": url }),
 		));
 	}
 	if let Some(kind) = moved_checks(held, fresh) {
@@ -386,7 +459,8 @@ fn held_until(answer: &Response) -> Option<i64> {
 		return None;
 	}
 	let headers = answer.headers();
-	if let Some(reset) = seconds(headers, RATE_LIMIT_RESET_HEADER) {
+	let spent = seconds(headers, RATE_LIMIT_REMAINING_HEADER) == Some(0);
+	if let Some(reset) = seconds(headers, RATE_LIMIT_RESET_HEADER).filter(|_| spent) {
 		return Some(reset * 1000);
 	}
 	seconds(headers, RETRY_AFTER_HEADER).map(|after| SystemClock.now_ms() + after.max(0) * 1000)
@@ -434,7 +508,7 @@ mod tests {
 	use std::sync::atomic::{AtomicI64, Ordering};
 	use std::sync::Arc;
 
-	use axum::extract::State as Extracted;
+	use axum::extract::{Path as AxumPath, State as Extracted};
 	use axum::response::{IntoResponse, Response as Answered};
 	use axum::routing::get;
 	use axum::Router;
@@ -454,6 +528,8 @@ mod tests {
 	const A_BRANCH: &str = "feature/ope-27";
 
 	const A_REPOSITORY: &str = "shoto290/OpenNest";
+
+	const HIDDEN_REPOSITORY: &str = "shoto290/Hidden";
 
 	const A_PULL_URL: &str = "https://github.test/shoto290/OpenNest/pull/7";
 
@@ -483,6 +559,7 @@ mod tests {
 	#[derive(Clone, Debug, PartialEq, Eq)]
 	struct Asked {
 		path: String,
+		repository: String,
 		conditional_on: Option<String>,
 		bearing: bool,
 	}
@@ -492,6 +569,7 @@ mod tests {
 		checks: Value,
 		etag: String,
 		reset_at_s: Option<i64>,
+		refused_repository: Option<String>,
 		asked: Vec<Asked>,
 	}
 
@@ -508,6 +586,7 @@ mod tests {
 				checks: json!({ "check_runs": [] }),
 				etag: etag.to_owned(),
 				reset_at_s: None,
+				refused_repository: None,
 				asked: Vec::new(),
 			}));
 			let listener = tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
@@ -544,6 +623,19 @@ mod tests {
 			self.answers.lock().await.reset_at_s = Some(reset_at_s);
 		}
 
+		async fn refusing(&self, repository: &str) {
+			self.answers.lock().await.refused_repository = Some(repository.to_owned());
+		}
+
+		async fn asked_about(&self, path: &str) -> Vec<String> {
+			self.asked()
+				.await
+				.into_iter()
+				.filter(|asked| asked.path == path)
+				.map(|asked| asked.repository)
+				.collect()
+		}
+
 		async fn asked(&self) -> Vec<Asked> {
 			self.answers.lock().await.asked.clone()
 		}
@@ -555,23 +647,29 @@ mod tests {
 
 	async fn pulls_of(
 		Extracted(answers): Extracted<Arc<Mutex<Answers>>>,
+		AxumPath((owner, name)): AxumPath<(String, String)>,
 		headers: HeaderMap,
 	) -> Answered {
 		let mut held = answers.lock().await;
+		let repository = format!("{owner}/{name}");
 		let conditional_on =
 			headers.get(IF_NONE_MATCH).and_then(|held| held.to_str().ok()).map(str::to_owned);
 		held.asked.push(Asked {
 			path: "pulls".to_owned(),
+			repository: repository.clone(),
 			conditional_on: conditional_on.clone(),
-			bearing: headers
-				.get(AUTHORIZATION)
-				.and_then(|held| held.to_str().ok())
-				.is_some_and(|held| held.starts_with("Bearer ")),
+			bearing: bearing(&headers),
 		});
+		if held.refused_repository.as_deref() == Some(repository.as_str()) {
+			return (StatusCode::FORBIDDEN, String::new()).into_response();
+		}
 		if let Some(reset_at_s) = held.reset_at_s {
 			return (
 				StatusCode::FORBIDDEN,
-				[(RATE_LIMIT_RESET_HEADER, reset_at_s.to_string())],
+				[
+					(RATE_LIMIT_REMAINING_HEADER, "0".to_owned()),
+					(RATE_LIMIT_RESET_HEADER, reset_at_s.to_string()),
+				],
 				String::new(),
 			)
 				.into_response();
@@ -582,10 +680,26 @@ mod tests {
 		as_json(Some(&held.etag), &held.pulls)
 	}
 
-	async fn checks_of(Extracted(answers): Extracted<Arc<Mutex<Answers>>>) -> Answered {
+	async fn checks_of(
+		Extracted(answers): Extracted<Arc<Mutex<Answers>>>,
+		AxumPath((owner, name, _)): AxumPath<(String, String, String)>,
+		headers: HeaderMap,
+	) -> Answered {
 		let mut held = answers.lock().await;
-		held.asked.push(Asked { path: "checks".to_owned(), conditional_on: None, bearing: false });
+		held.asked.push(Asked {
+			path: "checks".to_owned(),
+			repository: format!("{owner}/{name}"),
+			conditional_on: None,
+			bearing: bearing(&headers),
+		});
 		as_json(None, &held.checks)
+	}
+
+	fn bearing(headers: &HeaderMap) -> bool {
+		headers
+			.get(AUTHORIZATION)
+			.and_then(|held| held.to_str().ok())
+			.is_some_and(|held| held.starts_with("Bearer "))
 	}
 
 	fn as_json(etag: Option<&str>, held: &Value) -> Answered {
@@ -623,6 +737,10 @@ mod tests {
 	}
 
 	async fn an_armed_mission(database: &Database) -> Mission {
+		an_armed_mission_on(database, A_REPOSITORY).await
+	}
+
+	async fn an_armed_mission_on(database: &Database, repository: &str) -> Mission {
 		let opened = database
 			.missions()
 			.open(MissionDraft {
@@ -646,10 +764,10 @@ mod tests {
 				opened.id,
 				MissionWatch {
 					branch: A_BRANCH.to_owned(),
-					repository: A_REPOSITORY.to_owned(),
+					repository: repository.to_owned(),
 					workspace_path: None,
 				},
-				"the-delivery-key".to_owned(),
+				uuid::Uuid::new_v4().to_string(),
 			)
 			.await
 			.expect("the mission is armed");
@@ -690,7 +808,7 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn a_pull_request_seen_for_the_first_time_appends_one_note_and_asks_for_no_check() {
+	async fn a_pull_request_seen_for_the_first_time_appends_one_note_and_reads_its_check_runs() {
 		let (database, dir) = planted().await;
 		let mission = an_armed_mission(&database).await;
 		let stub = Stub::holding(a_pull("open", "abc", false), "\"one\"").await;
@@ -701,21 +819,134 @@ mod tests {
 
 		assert_eq!(
 			from_github(&database, &mission.id).await,
-			vec![(MissionEventKind::Note, json!({ "pullRequest": 7, "url": A_PULL_URL }),)],
+			vec![(MissionEventKind::Note, json!({ "pullRequest": 7, "url": A_PULL_URL }))],
 		);
 		assert_eq!(
-			stub.asked().await,
-			vec![Asked { path: "pulls".to_owned(), conditional_on: None, bearing: false }],
-			"the first pass asked github for more than the pull requests of the branch"
+			stub.asked().await.iter().map(|asked| asked.path.clone()).collect::<Vec<_>>(),
+			vec!["pulls".to_owned(), "checks".to_owned()],
+			"the first pass did not read the check runs of the pull request it found"
 		);
 
 		walked(&stub, &database, &mut kept, &clock).await;
 
 		assert_eq!(from_github(&database, &mission.id).await.len(), 1, "the second pass appended");
 		assert_eq!(
-			stub.asked().await.last().and_then(|asked| asked.conditional_on.clone()),
+			stub.asked_about("pulls").await.len(),
+			2,
+			"the second pass did not list the pull requests once"
+		);
+		assert_eq!(
+			stub.asked().await[2].conditional_on,
 			Some("\"one\"".to_owned()),
 			"the second pass was not conditional on the entity tag it kept"
+		);
+
+		stub.stop.send_replace(true);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_listing_answered_not_modified_still_carries_the_checks_to_passed_and_appends_ready()
+	{
+		let (database, dir) = planted().await;
+		let mission = an_armed_mission(&database).await;
+		let stub = Stub::holding(a_pull("open", "abc", false), "\"one\"").await;
+		let clock = Ticking::at(NOON);
+		let mut kept = Kept::default();
+		walked(&stub, &database, &mut kept, &clock).await;
+		stub.checking(a_run("completed", Some("success"))).await;
+
+		walked(&stub, &database, &mut kept, &clock).await;
+
+		assert_eq!(
+			stub.asked().await[2].conditional_on,
+			Some("\"one\"".to_owned()),
+			"the pass that settled the checks was not answered not modified"
+		);
+		assert_eq!(
+			from_github(&database, &mission.id).await,
+			vec![
+				(MissionEventKind::Note, json!({ "pullRequest": 7, "url": A_PULL_URL })),
+				(MissionEventKind::Ready, json!({ "pullRequest": 7 })),
+			],
+		);
+		assert_eq!(state_of(&database, &mission.id).await, (MissionState::ReadyToMerge, false));
+
+		stub.stop.send_replace(true);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_listing_answered_not_modified_carries_the_checks_to_failed_and_appends_failed() {
+		let (database, dir) = planted().await;
+		let mission = an_armed_mission(&database).await;
+		let stub = Stub::holding(a_pull("open", "abc", false), "\"one\"").await;
+		let clock = Ticking::at(NOON);
+		let mut kept = Kept::default();
+		walked(&stub, &database, &mut kept, &clock).await;
+		stub.checking(a_run("completed", Some("failure"))).await;
+
+		walked(&stub, &database, &mut kept, &clock).await;
+
+		assert_eq!(
+			from_github(&database, &mission.id).await.last(),
+			Some(&(MissionEventKind::Failed, json!({ "pullRequest": 7 }))),
+		);
+		assert_eq!(state_of(&database, &mission.id).await, (MissionState::Failed, false));
+
+		stub.stop.send_replace(true);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_settled_check_state_on_an_unmoved_head_sha_reads_no_check_runs() {
+		let (database, dir) = planted().await;
+		let mission = an_armed_mission(&database).await;
+		let stub = Stub::holding(a_pull("open", "abc", false), "\"one\"").await;
+		let clock = Ticking::at(NOON);
+		let mut kept = Kept::default();
+		stub.checking(a_run("completed", Some("success"))).await;
+		walked(&stub, &database, &mut kept, &clock).await;
+		assert_eq!(state_of(&database, &mission.id).await, (MissionState::ReadyToMerge, false));
+		let read_checks = stub.asked_about("checks").await.len();
+
+		stub.answering(a_pull("open", "abc", false), "\"two\"").await;
+		walked(&stub, &database, &mut kept, &clock).await;
+		walked(&stub, &database, &mut kept, &clock).await;
+
+		assert_eq!(
+			stub.asked_about("checks").await.len(),
+			read_checks,
+			"a settled check state on an unmoved head sha was read again"
+		);
+		assert_eq!(from_github(&database, &mission.id).await.len(), 2);
+
+		stub.stop.send_replace(true);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_refusal_carrying_no_rate_limit_leaves_the_other_watched_mission_read_on_that_pass() {
+		let (database, dir) = planted().await;
+		let hidden = an_armed_mission_on(&database, HIDDEN_REPOSITORY).await;
+		let read = an_armed_mission_on(&database, A_REPOSITORY).await;
+		let stub = Stub::holding(a_pull("open", "abc", false), "\"one\"").await;
+		let clock = Ticking::at(NOON);
+		let mut kept = Kept::default();
+		stub.refusing(HIDDEN_REPOSITORY).await;
+
+		walked(&stub, &database, &mut kept, &clock).await;
+
+		let listed = stub.asked_about("pulls").await;
+		assert!(listed.contains(&HIDDEN_REPOSITORY.to_owned()), "got {listed:?}");
+		assert!(
+			listed.contains(&A_REPOSITORY.to_owned()),
+			"the refused repository ended the pass: {listed:?}"
+		);
+		assert!(from_github(&database, &hidden.id).await.is_empty());
+		assert_eq!(
+			from_github(&database, &read.id).await.first(),
+			Some(&(MissionEventKind::Note, json!({ "pullRequest": 7, "url": A_PULL_URL }))),
 		);
 
 		stub.stop.send_replace(true);
@@ -733,7 +964,8 @@ mod tests {
 
 		assert_eq!(
 			stub.asked().await.iter().map(|asked| asked.bearing).collect::<Vec<_>>(),
-			vec![false, true],
+			vec![false, false, true, true],
+			"a request was made without the bearer the pass was given"
 		);
 
 		stub.stop.send_replace(true);
