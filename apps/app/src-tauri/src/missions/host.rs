@@ -557,7 +557,7 @@ mod tests {
 		let app = a_host("listed").await;
 		let mine = a_mission_of(&app, "c1", "b1").await;
 		let closed = a_mission_of(&app, "c1", "b1").await;
-		let theirs = a_mission_of(&app, "c1", "b2").await;
+		a_mission_of(&app, "c1", "b2").await;
 		let host = serving(&app, "c1");
 		host.answer(asking(
 			"close",
@@ -569,8 +569,7 @@ mod tests {
 		let answered =
 			host.answer(asking("list", json!({}))).await.expect("the missions are listed");
 
-		assert_eq!(ids(&answered), vec![mine.id.clone()], "got {answered}");
-		assert!(!ids(&answered).contains(&closed.id) && !ids(&answered).contains(&theirs.id));
+		assert_eq!(ids(&answered), vec![mine.id], "got {answered}");
 		let row = &answered.as_array().expect("a list")[0];
 		assert_eq!(row["ticket"]["externalId"], json!("OPE-1"));
 		assert_eq!(row["state"], json!("working"));
