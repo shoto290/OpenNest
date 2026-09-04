@@ -2146,13 +2146,10 @@ fn titles_of(window: &WebviewWindow<MockRuntime>, bot_id: &str) -> Vec<Value> {
 		.collect()
 }
 
-fn an_owner(bot_id: &str, space_id: &str) -> EnvOwner {
-	EnvOwner::Bot { id: bot_id.to_owned(), space_id: space_id.to_owned() }
-}
-
 fn env_of(app: &App<MockRuntime>, bot_id: &str, space_id: &str) -> ResolvedEnv {
 	let root = store::root(app.handle()).expect("the environment root");
-	store::resolve(&root, &an_owner(bot_id, space_id)).expect("the store reads")
+	let owner = EnvOwner::Bot { id: bot_id.to_owned(), space_id: space_id.to_owned() };
+	store::resolve(&root, &owner).expect("the store reads")
 }
 
 fn names_under(root: &Path, kind: &str) -> Vec<String> {
