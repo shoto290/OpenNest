@@ -270,9 +270,7 @@ export const Closed = meta.story({
 		},
 	},
 	play: async ({ canvas, canvasElement }) => {
-		const control = canvas.getByRole("button", {
-			name: "Routines",
-		})
+		const control = canvas.getByRole("button", { name: "Routines" })
 		await expect(control).toHaveAttribute("aria-expanded", "false")
 		await expect(control).toHaveAttribute("aria-controls", "routines-panel")
 
@@ -300,9 +298,7 @@ export const Toggling = meta.story({
 		},
 	},
 	play: async ({ args, canvas, userEvent }) => {
-		const control = canvas.getByRole("button", {
-			name: "Routines",
-		})
+		const control = canvas.getByRole("button", { name: "Routines" })
 
 		await userEvent.click(control)
 		await expect(args.onOpenChange).toHaveBeenCalledWith(true)
