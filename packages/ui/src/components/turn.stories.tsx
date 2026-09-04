@@ -107,6 +107,26 @@ const GONE: MessageAuthor = {
 
 const ROOM: RosterBot[] = [LEAD, SECOND]
 
+const TITLED_ROOM: { author: MessageAuthor; message: string }[] = [
+	{
+		author: { ...LEAD, title: "Ops" },
+		message: "The release notes are ready to read.",
+	},
+	{
+		author: SECOND,
+		message: "The migration is green on a fresh database.",
+	},
+	{
+		author: {
+			id: "bot-elia",
+			name: "Elia of the Migration and Release Desk",
+			animal: "mouse",
+			title: "Release manager",
+		},
+		message: "I am holding the tag until both of you sign off.",
+	},
+]
+
 const firstCharacterLeft = (element: HTMLElement) =>
 	element.getBoundingClientRect().left +
 	Number.parseFloat(getComputedStyle(element).paddingInlineStart)
@@ -801,6 +821,51 @@ export const Authored = meta.story({
 			firstCharacterLeft(bubble),
 			0,
 		)
+	},
+})
+
+export const Titled = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same conversation, where two of the three bots carry a title. The title is written in a pill right after the name, the same pill the roster row wears, so a reader tells an ops bot from a release bot without opening the roster. A bot with no title keeps the bare name — no pill, no gap held for one. The column here is 320px wide on purpose: the name gives way first and the pill keeps its width, and a title too long for the pill is cut with an ellipsis rather than pushing the crown or the header out of the column.",
+			},
+		},
+	},
+	render: () => (
+		<div className="flex w-80 flex-col gap-6">
+			{TITLED_ROOM.map(({ author, message }) => (
+				<AssistantTurn author={author} copyText={message} key={author.id}>
+					{message}
+				</AssistantTurn>
+			))}
+		</div>
+	),
+	play: async ({ canvasElement }) => {
+		const headers = slotsIn(canvasElement, "message-author")
+		const [titled, untitled, overflowing] = headers
+
+		await expect(headers).toHaveLength(3)
+		await expect(slotIn(titled, "bot-title-badge")).toHaveTextContent("Ops")
+		await expect(
+			untitled.querySelector('[data-slot="bot-title-badge"]'),
+		).toBeNull()
+
+		const badge = slotIn(overflowing, "bot-title-badge")
+		const name = overflowing.firstElementChild as HTMLElement
+
+		await expect(badge.scrollWidth).toBeGreaterThan(badge.clientWidth)
+		await expect(badge.getBoundingClientRect().width).toBe(64)
+		await expect(name.scrollWidth).toBeGreaterThan(name.clientWidth)
+
+		const column = slotIn(canvasElement, "message").parentElement as HTMLElement
+
+		for (const header of headers) {
+			await expect(header.getBoundingClientRect().right).toBeLessThanOrEqual(
+				column.getBoundingClientRect().right,
+			)
+		}
 	},
 })
 

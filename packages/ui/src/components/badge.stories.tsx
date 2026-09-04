@@ -12,6 +12,7 @@ import {
 	Badge,
 	BOT_BADGES,
 	BotBadgeDot,
+	BotTitleBadge,
 	type badgeVariants,
 } from "@workspace/ui/components/badge"
 
@@ -37,6 +38,12 @@ const RAIL_HOST =
 	"group/sidebar relative flex size-7 items-center justify-center rounded-2xl bg-sidebar"
 
 const ROW_HOST = "relative flex h-9 w-40 flex-col justify-center text-sm"
+
+const TITLE_HOST = "flex w-40 items-center gap-1.5 text-sm"
+
+const BOT_TITLES = ["Ops", "Release manager for the platform", ""]
+
+const TITLE_BADGE_MAX_WIDTH = 64
 
 const CARD_HOST =
 	"relative block size-10 rounded-full bg-card [--badge-ring:var(--color-card)]"
@@ -209,5 +216,36 @@ export const OnAnotherSurface = meta.story({
 		await expect(getComputedStyle(dot).boxShadow).toContain(
 			getComputedStyle(surface).backgroundColor,
 		)
+	},
+})
+
+export const BotTitles = meta.story({
+	render: () => (
+		<Row>
+			{BOT_TITLES.map((title) => (
+				<span className={TITLE_HOST} key={title || "untitled"}>
+					<span className="truncate font-medium">Atlas</span>
+					<BotTitleBadge title={title} />
+				</span>
+			))}
+		</Row>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The one pill a bot title is drawn in, worn by the roster row and by the message header alike. It holds its width against a name that grows, cuts a title too long for it with an ellipsis, and disappears node and all when a bot carries no title, so a name without one keeps the line it always had. Check the three cases read as one component, and that the pill stays legible on both themes.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const badges = slotsIn(canvasElement, "bot-title-badge")
+
+		await expect(badges).toHaveLength(2)
+		await expect(badges[0].scrollWidth).toBe(badges[0].clientWidth)
+		await expect(badges[1].scrollWidth).toBeGreaterThan(badges[1].clientWidth)
+		await expect(
+			badges.every((badge) => boxOf(badge).width <= TITLE_BADGE_MAX_WIDTH),
+		).toBe(true)
 	},
 })
