@@ -109,6 +109,7 @@ export default definePreview({
 					"Conversation/Prompt",
 					"Conversation/Markdown",
 					"Conversation/Tools",
+					"Conversation/Missions",
 					"Conversation/Routines",
 					"Settings/Overview",
 					"Settings/Bot",

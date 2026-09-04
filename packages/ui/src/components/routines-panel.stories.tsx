@@ -11,6 +11,13 @@ import {
 import { AppHeader } from "@workspace/ui/components/app-header"
 import { Icons } from "@workspace/ui/components/icons"
 import {
+	CLOSED_MISSIONS,
+	MISSIONS_READ_AT,
+	NO_MISSIONS,
+	RUNNING_MISSIONS,
+	WAITING_HUMAN_MISSION,
+} from "@workspace/ui/components/missions.fixtures"
+import {
 	AnimatedSidebar,
 	AnimatedSidebarContent,
 	AnimatedSidebarHeader,
@@ -165,6 +172,13 @@ const PanelHost = ({
 
 const NO_ROUTINES: RoutineRowModel[] = []
 
+const NO_MISSION_AT_ALL = {
+	running: NO_MISSIONS,
+	closed: NO_MISSIONS,
+	now: MISSIONS_READ_AT,
+	onOpen: fn(),
+}
+
 const WORKSPACE_SIDEBAR = (
 	<AnimatedSidebar ariaLabel="Workspace" variant="inset">
 		<AnimatedSidebarHeader>
@@ -195,7 +209,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The routines of one conversation, on the trailing edge of its thread. It carries a sidebar provider of its own, so opening or resizing it says nothing to the workspace sidebar on the other side of the window, and it owns no shortcut — the control in the thread header is the only way in and out. Closed, it takes no room at all and the transcript spans the thread. The list is the whole surface: no routine at all gets an empty state rather than a bare list, a read that failed gets the failure and a retry rather than a list that looks empty, and a change that could not be written says so in its own words rather than borrowing the read's.",
+					"The activity of one conversation, on the trailing edge of its thread: the missions running on it above the routines watching it, each list under its own section head. It carries a sidebar provider of its own, so opening or resizing it says nothing to the workspace sidebar on the other side of the window, and it owns no shortcut — the control in the thread header is the only way in and out. Closed, it takes no room at all and the transcript spans the thread. The lists are the whole surface: no mission running gets a dotted line rather than a gap, nothing at all gets an empty state rather than a bare list, a read that failed gets the failure and a retry rather than a list that looks empty, and a change that could not be written says so in its own words rather than borrowing the read's.",
 			},
 		},
 	},
@@ -219,6 +233,12 @@ const meta = preview.meta({
 			sources: TRIGGER_SOURCES,
 		},
 		isOpen: true,
+		missions: {
+			running: RUNNING_MISSIONS,
+			closed: CLOSED_MISSIONS,
+			now: MISSIONS_READ_AT,
+			onOpen: fn(),
+		},
 		onDelete: fn(),
 		onEnabledChange: fn(),
 		onOpenChange: fn(),
@@ -234,16 +254,24 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"The panel open beside a live thread, one row per routine. Check that every row names its routine and the source that fires it — including the routine whose source no read named, which falls back to the source id rather than leaving the line blank — that the transcript keeps its own scroll while the panel stays put, and that flipping a switch reports the routine it belongs to.",
+					"The panel open beside a live thread: the missions running on the conversation first, the routines watching it under them. Check that the two lists read in that order under their own heads, that every routine row names its routine and the source that fires it — including the routine whose source no read named, which falls back to the source id rather than leaving the line blank — that the transcript keeps its own scroll while the panel stays put, and that flipping a switch reports the routine it belongs to.",
 			},
 		},
 	},
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
-		const panel = canvas.getByRole("complementary", { name: "Routines" })
+		const panel = canvas.getByRole("complementary", { name: "Activity" })
 		await expect(panel).toBeVisible()
+		await expect(slotsIn(canvasElement, "mission-row")).toHaveLength(
+			RUNNING_MISSIONS.length,
+		)
 		await expect(slotsIn(canvasElement, "routine-row")).toHaveLength(
 			ROUTINES.length,
 		)
+		await expect(
+			slotIn(canvasElement, "missions-section").compareDocumentPosition(
+				slotIn(canvasElement, "routines-section"),
+			),
+		).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
 		await expect(canvas.getByText("Every day at 08:00")).toBeVisible()
 		await expect(
 			canvas.getByText(SOURCE_NAMED_BY_ID.triggerSourceTitle),
@@ -270,12 +298,12 @@ export const Closed = meta.story({
 		},
 	},
 	play: async ({ canvas, canvasElement }) => {
-		const control = canvas.getByRole("button", { name: "Routines" })
+		const control = canvas.getByRole("button", { name: "Activity" })
 		await expect(control).toHaveAttribute("aria-expanded", "false")
 		await expect(control).toHaveAttribute("aria-controls", "routines-panel")
 
 		const thread = slotIn(canvasElement, "sidebar-inset")
-		const panel = canvas.getByRole("complementary", { name: "Routines" })
+		const panel = canvas.getByRole("complementary", { name: "Activity" })
 		await waitFor(
 			() => expect(panel.getBoundingClientRect().width).toBe(0),
 			FRAME_POLL,
@@ -298,13 +326,13 @@ export const Toggling = meta.story({
 		},
 	},
 	play: async ({ args, canvas, userEvent }) => {
-		const control = canvas.getByRole("button", { name: "Routines" })
+		const control = canvas.getByRole("button", { name: "Activity" })
 
 		await userEvent.click(control)
 		await expect(args.onOpenChange).toHaveBeenCalledWith(true)
 		await expect(control).toHaveAttribute("aria-expanded", "true")
 
-		const panel = canvas.getByRole("complementary", { name: "Routines" })
+		const panel = canvas.getByRole("complementary", { name: "Activity" })
 		await waitFor(
 			() => expect(panel.getBoundingClientRect().width).toBeGreaterThan(0),
 			FRAME_POLL,
@@ -318,39 +346,122 @@ export const Toggling = meta.story({
 })
 
 export const Empty = meta.story({
-	args: { routines: NO_ROUTINES },
+	args: { missions: NO_MISSION_AT_ALL, routines: NO_ROUTINES },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"A conversation nothing runs on yet. Check that the panel says so in a sentence a reader can act on, that the way to write the first routine is offered in the empty state itself rather than only in the header, and that no list, however short, is drawn under it. Pick `ReadFailed` for the case where routines exist but could not be read.",
+					"A conversation nothing runs on yet, neither mission nor routine. Check that the panel keeps the empty state it has always shown rather than a missions head over a dotted line, that no list, however short, is drawn under it, and that the way to write the first routine is the one control of the routines head. Pick `NoMissionRunning` for a conversation whose routines are written but whose missions are all closed.",
 			},
 		},
 	},
 	play: async ({ canvas, canvasElement, userEvent }) => {
 		await expect(canvas.getByText("No routine yet")).toBeVisible()
 		await expect(slotsIn(canvasElement, "routines-list")).toHaveLength(0)
+		await expect(slotsIn(canvasElement, "missions-none")).toHaveLength(0)
 		await expect(slotsIn(canvasElement, "routine-row")).toHaveLength(0)
 
-		const empty = within(slotIn(canvasElement, "routines-empty"))
-		await userEvent.click(empty.getByRole("button", { name: "New routine" }))
+		await userEvent.click(canvas.getByRole("button", { name: "New routine" }))
 		await expect(slotIn(canvasElement, "routine-form")).toBeVisible()
 	},
 })
 
+export const NoMissionRunning = meta.story({
+	args: {
+		missions: { ...NO_MISSION_AT_ALL, closed: CLOSED_MISSIONS },
+	},
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"A conversation whose routines are written and whose missions are all closed. Check that the missions head stays with one dotted line under it rather than collapsing into the routines, and that the routines below read exactly as they do with missions above them.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		await expect(canvas.getByText("No mission running")).toBeVisible()
+		await expect(slotsIn(canvasElement, "missions-list")).toHaveLength(0)
+		await expect(slotsIn(canvasElement, "routine-row")).toHaveLength(
+			ROUTINES.length,
+		)
+	},
+})
+
+export const ClosedMissions = meta.story({
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"The missions this conversation is done with, one screen away. Check that the control of the missions head pushes them over the panel rather than growing the running list, that the running missions and the routines are gone while it is up, and that coming back hands the keyboard to the control that opened it.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Closed missions" }),
+		)
+
+		await expect(slotsIn(canvasElement, "mission-row")).toHaveLength(
+			CLOSED_MISSIONS.length,
+		)
+		await expect(slotsIn(canvasElement, "routine-row")).toHaveLength(0)
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Back to the activity" }),
+		)
+		await expect(slotsIn(canvasElement, "mission-row")).toHaveLength(
+			RUNNING_MISSIONS.length,
+		)
+		await waitFor(
+			() =>
+				expect(
+					canvas.getByRole("button", { name: "Closed missions" }),
+				).toHaveFocus(),
+			FRAME_POLL,
+		)
+	},
+})
+
+export const OpeningAMission = meta.story({
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"A mission picked from the running list. Check that the whole row is what answers the pointer and the keyboard — the row carries no control of its own — and that it reports the mission it belongs to rather than opening anything inside the panel.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		await userEvent.click(canvas.getByText(WAITING_HUMAN_MISSION.objective))
+		await expect(args.missions.onOpen).toHaveBeenCalledWith(
+			WAITING_HUMAN_MISSION.id,
+		)
+
+		await userEvent.keyboard("{Enter}")
+		await expect(args.missions.onOpen).toHaveBeenCalledTimes(2)
+		await expect(slotsIn(canvasElement, "routine-row")).toHaveLength(
+			ROUTINES.length,
+		)
+	},
+})
+
 export const ReadFailed = meta.story({
-	args: { failure: "read", routines: NO_ROUTINES },
+	args: { failure: "read", missions: NO_MISSION_AT_ALL, routines: NO_ROUTINES },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The read failed. Check that the failure takes the place of the empty state rather than sitting beside it — a conversation whose routines could not be read has not lost them — and that the retry is the only thing asked of the reader. Pick `WriteFailed` for the failure that follows a change the reader asked for.",
+					"A read that failed, whether the missions or the routines are the ones that could not be read. Check that the failure takes the place of the empty state rather than sitting beside it — a conversation whose activity could not be read has not lost it — and that the retry is the only thing asked of the reader. Pick `WriteFailed` for the failure that follows a change the reader asked for.",
 			},
 		},
 	},
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
 		await expect(canvas.getByText("Routines could not be read")).toBeVisible()
 		await expect(canvas.queryByText("No routine yet")).not.toBeInTheDocument()
+		await expect(slotsIn(canvasElement, "mission-row")).toHaveLength(0)
 		await expect(slotsIn(canvasElement, "routine-row")).toHaveLength(0)
 
 		await userEvent.click(canvas.getByRole("button", { name: "Retry" }))
@@ -591,8 +702,8 @@ export const InWorkspaceShell = meta.story({
 		const workspace = canvas.getByRole("complementary", { name: "Workspace" })
 		const widthBefore = workspace.getBoundingClientRect().width
 
-		await userEvent.click(canvas.getByRole("button", { name: "Routines" }))
-		const panel = canvas.getByRole("complementary", { name: "Routines" })
+		await userEvent.click(canvas.getByRole("button", { name: "Activity" }))
+		const panel = canvas.getByRole("complementary", { name: "Activity" })
 		await waitFor(
 			() => expect(panel.getBoundingClientRect().width).toBeGreaterThan(0),
 			FRAME_POLL,

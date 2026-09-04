@@ -63,6 +63,7 @@ const botBadgeVariants = cva("", {
 			failed: "bg-bot-badge-failed",
 		},
 		placement: {
+			inline: "",
 			avatar:
 				"absolute right-[6%] bottom-[6%] size-[34%] max-h-4 max-w-4 ring-2 ring-[var(--badge-ring,var(--color-sidebar))]",
 			switcher:

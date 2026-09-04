@@ -307,12 +307,31 @@ const chat = {
 			},
 		},
 	},
-	routines: {
+	activity: {
 		panel: {
-			label: "Routines",
-			toggle: "Routines",
+			label: "Activité",
+			toggle: "Activité",
+			title: "Activité",
+		},
+		missions: {
+			title: "Missions",
+			none: "Aucune mission en cours",
+			badge: {
+				attention: "En attente d'une personne",
+				done: "Prête à être fusionnée",
+				failed: "Échouée",
+			},
+			closed: {
+				open: "Missions terminées",
+				title: "Missions terminées",
+				back: "Retour à l'activité",
+			},
+		},
+		routines: {
 			title: "Routines",
 		},
+	},
+	routines: {
 		form: {
 			new: "Nouvelle routine",
 			edit: "Modifier la routine",

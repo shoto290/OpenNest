@@ -298,12 +298,31 @@ const chat = {
 			},
 		},
 	},
-	routines: {
+	activity: {
 		panel: {
-			label: "Routines",
-			toggle: "Routines",
+			label: "Activity",
+			toggle: "Activity",
+			title: "Activity",
+		},
+		missions: {
+			title: "Missions",
+			none: "No mission running",
+			badge: {
+				attention: "Waiting for a human",
+				done: "Ready to merge",
+				failed: "Failed",
+			},
+			closed: {
+				open: "Closed missions",
+				title: "Closed missions",
+				back: "Back to the activity",
+			},
+		},
+		routines: {
 			title: "Routines",
 		},
+	},
+	routines: {
 		form: {
 			new: "New routine",
 			edit: "Edit routine",

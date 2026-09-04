@@ -34,6 +34,8 @@ import {
 	message,
 	seatBots,
 } from "@/lib/conversations/transcript-fixtures"
+import type { Mission, MissionChanged } from "@/lib/missions/mission-contract"
+import { missionsTransport } from "@/lib/missions/missions-transport"
 import { type FakeLayout, fakeLayout } from "@/lib/perf/fake-layout"
 import type { Routine } from "@/lib/routines/routine-contract"
 import { routinesTransport } from "@/lib/routines/routines-transport"
@@ -56,10 +58,18 @@ vi.mock("@/lib/routines/routines-transport", async (importOriginal) => {
 vi.mock("@/lib/routines/trigger-sources-transport", () => ({
 	triggerSourcesTransport: { sources: vi.fn() },
 }))
+vi.mock("@/lib/missions/missions-transport", () => ({
+	missionsTransport: {
+		list: vi.fn(),
+		onChanged: vi.fn(),
+	},
+}))
 
 const listRoutines = vi.mocked(routinesTransport.list)
 const updateRoutine = vi.mocked(routinesTransport.update)
 const listSources = vi.mocked(triggerSourcesTransport.sources)
+const listMissions = vi.mocked(missionsTransport.list)
+const listenToMissions = vi.mocked(missionsTransport.onChanged)
 
 const CRASH: ChatError = {
 	id: "crashed-0",
@@ -423,6 +433,24 @@ const SOLO_ROUTINE: Routine = {
 	createdAt: 0,
 }
 
+const SOLO_MISSION: Mission = {
+	id: "m-1",
+	originConversationId: "c-bot-1",
+	botId: "bot-1",
+	threadConversationId: "c-mission-1",
+	objective: "Rewrite the changelog parser",
+	ticket: {
+		platform: "linear",
+		externalId: "OPE-42",
+		url: "https://linear.app/ope-42",
+		title: "Changelog parser",
+	},
+	tools: ["Read", "Write"],
+	state: "working",
+	openedAt: 0,
+	closedAt: null,
+}
+
 const SCHEDULE_SOURCE = {
 	id: "schedule",
 	title: "Schedule",
@@ -430,7 +458,7 @@ const SCHEDULE_SOURCE = {
 	dedupeKey: "occurrenceId",
 }
 
-const ROUTINES_TOGGLE = "Routines"
+const ROUTINES_TOGGLE = "Activity"
 
 const READ_ROUTINES_TITLE = "Routines could not be read"
 
@@ -515,6 +543,8 @@ describe("ThreadScreen", () => {
 		vi.clearAllMocks()
 		listRoutines.mockResolvedValue([SOLO_ROUTINE])
 		listSources.mockResolvedValue([SCHEDULE_SOURCE])
+		listMissions.mockResolvedValue({ open: [], done: [] })
+		listenToMissions.mockResolvedValue(() => undefined)
 	})
 
 	afterEach(() => {
@@ -581,6 +611,44 @@ describe("ThreadScreen", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Retry" }))
 		await settle()
 
+		expect(screen.getByText(SOLO_ROUTINE.title)).toBeTruthy()
+	})
+
+	it("reads the missions of a solo bot thread again when one of them changes", async () => {
+		const announce: { toPanel: ((changed: MissionChanged) => void) | null } = {
+			toPanel: null,
+		}
+		listenToMissions.mockImplementation((listener) => {
+			announce.toPanel = listener
+			return Promise.resolve(() => undefined)
+		})
+		listMissions.mockResolvedValue({ open: [SOLO_MISSION], done: [] })
+		render(screenOf(threadOf({ id: "bot-1", name: "Nyx", said: "held" })))
+		await settle()
+
+		await openRoutinesPanel()
+		expect(listMissions).toHaveBeenCalledWith("c-bot-1")
+		expect(screen.getByText(SOLO_MISSION.objective)).toBeTruthy()
+
+		announce.toPanel?.({ missionId: SOLO_MISSION.id, state: "waiting_human" })
+		await settle()
+
+		expect(listMissions).toHaveBeenCalledTimes(2)
+	})
+
+	it("tells the reader when the missions of a solo bot thread could not be read", async () => {
+		listMissions.mockRejectedValue(new Error("refused"))
+		render(screenOf(threadOf({ id: "bot-1", name: "Nyx", said: "held" })))
+		await settle()
+
+		await openRoutinesPanel()
+		expect(screen.getByText(READ_ROUTINES_TITLE)).toBeTruthy()
+
+		listMissions.mockResolvedValue({ open: [], done: [] })
+		fireEvent.click(screen.getByRole("button", { name: "Retry" }))
+		await settle()
+
+		expect(screen.queryByText(READ_ROUTINES_TITLE)).toBeNull()
 		expect(screen.getByText(SOLO_ROUTINE.title)).toBeTruthy()
 	})
 
