@@ -2,6 +2,7 @@ import { mergeProps } from "@base-ui/react/merge-props"
 import { useRender } from "@base-ui/react/use-render"
 import { cva, type VariantProps } from "class-variance-authority"
 import type { ComponentPropsWithRef } from "react"
+import { useTranslation } from "react-i18next"
 
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -102,6 +103,59 @@ const BotBadgeDot = ({
 	/>
 )
 
+const BOT_MISSION_STATES = ["waiting", "failed", "ready", "working"] as const
+
+type BotMissionState = (typeof BOT_MISSION_STATES)[number]
+
+const BOT_MISSION_CHIP =
+	"inline-flex h-4 shrink-0 items-center gap-1 rounded-full bg-foreground/10 px-1.5 text-[10px] font-medium text-foreground/80 leading-none tabular-nums"
+
+const botMissionDotVariants = cva("size-1.5 rounded-full", {
+	variants: {
+		state: {
+			waiting: "bg-bot-badge-attention",
+			failed: "bg-bot-badge-failed",
+			ready: "bg-bot-badge-done",
+			working: "bg-muted-foreground/40",
+		},
+	},
+})
+
+type BotMissionChipProps = Omit<ComponentPropsWithRef<"span">, "children"> & {
+	state: BotMissionState
+	count: number
+}
+
+const BotMissionChip = ({
+	state,
+	count,
+	className,
+	...props
+}: BotMissionChipProps) => {
+	const { t } = useTranslation("bots")
+
+	return (
+		<span
+			aria-label={t("roster.mission.chip", {
+				count,
+				state: t(`roster.mission.state.${state}`),
+			})}
+			className={cn(BOT_MISSION_CHIP, className)}
+			data-slot="bot-mission-chip"
+			data-state={state}
+			role="img"
+			{...props}
+		>
+			<span
+				aria-hidden="true"
+				className={botMissionDotVariants({ state })}
+				data-slot="bot-mission-dot"
+			/>
+			{count > 1 ? count : null}
+		</span>
+	)
+}
+
 const BOT_TITLE_BADGE =
 	"shrink-0 truncate rounded-full bg-foreground/10 px-1.5 py-0.5 font-medium text-[10px] text-foreground/80 leading-none"
 
@@ -123,9 +177,13 @@ const BotTitleBadge = ({ title, className, ...props }: BotTitleBadgeProps) =>
 export {
 	Badge,
 	BOT_BADGES,
+	BOT_MISSION_STATES,
 	type BotBadge,
 	BotBadgeDot,
 	type BotBadgeDotProps,
+	BotMissionChip,
+	type BotMissionChipProps,
+	type BotMissionState,
 	BotTitleBadge,
 	type BotTitleBadgeProps,
 	badgeVariants,

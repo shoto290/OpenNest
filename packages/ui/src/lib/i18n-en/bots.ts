@@ -19,6 +19,21 @@ const bots = {
 		},
 		empty: "No bots yet",
 		unavailable: "Your bots could not be read.",
+		mission: {
+			chip_one: "{{count}} mission, {{state}}",
+			chip_other: "{{count}} missions, {{state}}",
+			state: {
+				waiting: "waiting for you",
+				failed: "failed",
+				ready: "ready to merge",
+				working: "working",
+			},
+			unavailable: {
+				title: "Missions could not be read",
+				description:
+					"Your bots are intact. Each line reads without its mission until the next read.",
+			},
+		},
 		actions: "Actions for {{name}}",
 		settings: "Settings",
 		duplicate: "Duplicate",

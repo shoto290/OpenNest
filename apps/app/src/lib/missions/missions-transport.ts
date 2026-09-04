@@ -5,11 +5,13 @@ import type {
 	ConversationMissions,
 	MissionChanged,
 	MissionDetail,
+	MissionOnBoard,
 } from "./mission-contract"
 
 export const MISSION_CHANGED_EVENT = "mission://changed"
 
 export const missionsTransport = {
+	board: () => invoke<MissionOnBoard[]>("mission_board"),
 	detail: (missionId: string) =>
 		invoke<MissionDetail>("mission_detail", { missionId }),
 	list: (conversationId: string) =>

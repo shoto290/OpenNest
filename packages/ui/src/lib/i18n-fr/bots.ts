@@ -10,6 +10,22 @@ const bots = {
 		},
 		empty: "Aucun bot pour l'instant",
 		unavailable: "Vos bots n'ont pas pu être lus.",
+		mission: {
+			chip_one: "{{count}} mission, {{state}}",
+			chip_many: "{{count}} missions, {{state}}",
+			chip_other: "{{count}} missions, {{state}}",
+			state: {
+				waiting: "en attente de vous",
+				failed: "en échec",
+				ready: "prête à fusionner",
+				working: "en cours",
+			},
+			unavailable: {
+				title: "Les missions n'ont pas pu être lues",
+				description:
+					"Vos bots sont intacts. Chaque ligne s'affiche sans sa mission jusqu'à la prochaine lecture.",
+			},
+		},
 		actions: "Actions pour {{name}}",
 		settings: "Réglages",
 		duplicate: "Dupliquer",
