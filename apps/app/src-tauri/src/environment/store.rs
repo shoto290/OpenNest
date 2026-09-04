@@ -78,6 +78,25 @@ pub fn resolve(root: &Path, owner: &EnvOwner) -> Result<ResolvedEnv, EnvError> {
 	Ok(ResolvedEnv { base, per_server, failure: None })
 }
 
+pub fn copy_owner(root: &Path, source: &EnvOwner, target: &EnvOwner) -> Result<(), EnvError> {
+	copied_scope(root, &EnvScope::from(source), &EnvScope::from(target))?;
+	for name in server_names(root, source)? {
+		copied_scope(
+			root,
+			&EnvScope::Server { name: name.clone(), owner: source.clone() },
+			&EnvScope::Server { name, owner: target.clone() },
+		)?;
+	}
+	Ok(())
+}
+
+fn copied_scope(root: &Path, source: &EnvScope, target: &EnvScope) -> Result<(), EnvError> {
+	for (name, value) in stored(&file(root, source)?)? {
+		set(root, target, &name, &value)?;
+	}
+	Ok(())
+}
+
 fn owners(owner: &EnvOwner) -> Vec<EnvOwner> {
 	match owner {
 		EnvOwner::Space { .. } => vec![owner.clone()],
@@ -437,6 +456,25 @@ mod tests {
 			holding(&[("ONLY_SPACE", "space"), ("SHARED", "bot")])
 		);
 		assert_eq!(resolved.per_server["weather"], holding(&[("TOKEN", "space")]));
+	}
+
+	#[test]
+	fn a_copy_carries_what_the_bot_holds_of_its_own_and_none_of_what_it_inherits() {
+		let root = a_root("copy-owner");
+		let copy = EnvOwner::Bot { id: "b2".to_owned(), space_id: "s1".to_owned() };
+		set(&root, &a_space(), "ONLY_SPACE", "space").expect("the space keeps it");
+		set(&root, &a_bot(), "TOKEN", "bot").expect("the bot keeps it");
+		set(&root, &a_server(), "TOKEN", "server").expect("the bot server keeps it");
+
+		copy_owner(&root, &an_owner(), &copy).expect("the store copies");
+
+		let own = stored(&file(&root, &EnvScope::from(&copy)).expect("the path"))
+			.expect("the copy reads");
+		assert_eq!(own, vec![("TOKEN".to_owned(), "bot".to_owned())]);
+		let resolved = resolve(&root, &copy).expect("the store reads");
+		assert_eq!(resolved.base, holding(&[("ONLY_SPACE", "space"), ("TOKEN", "bot")]));
+		assert_eq!(resolved.per_server["clock"], holding(&[("TOKEN", "server")]));
+		assert_eq!(resolve(&root, &an_owner()).expect("the store reads"), resolved);
 	}
 
 	#[test]

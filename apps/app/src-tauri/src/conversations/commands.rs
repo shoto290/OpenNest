@@ -190,27 +190,28 @@ pub async fn conversation_duplicate_bot<R: Runtime>(
 		.into_iter()
 		.map(|bot| bot.name)
 		.collect();
+	let is_pinned = source.pin_position.is_some() && source.space_id == destination;
+	let source_of = owned_by(&source);
+	let memory = source.memory.clone();
 	let identity =
 		duplicated_identity(Bot::of(source, dir.as_deref(), bundle_root.as_deref()), &taken);
-	let output_style = identity.output_style.clone();
-	let permissions = identity.permissions.clone();
+	let carried = Carried {
+		source_id: bot_id.clone(),
+		source_of,
+		memory,
+		is_pinned,
+		output_style: identity.output_style.clone(),
+		permissions: identity.permissions.clone(),
+	};
 	let created =
 		database.conversations().create_bot(identity.into(), Some(destination), section).await?;
 	avatars::sweep_referenced(database, dir.as_deref()).await;
-	let ruled = match duplicated_bundle(
-		bundle_root.as_deref(),
-		database,
-		&bot_id,
-		&created,
-		&output_style,
-		&permissions,
-	)
-	.await
-	{
+	let ruled = match copied_onto(&app, database, &created, &carried).await {
 		Ok(ruled) => ruled,
 		Err(refusal) => {
 			let _ = database.conversations().delete_bot(created.id.clone()).await;
 			forget_bundle(bundle_root.as_deref(), database, &created.id).await;
+			environment::store::forget_bot(&app, &created.id);
 			avatars::sweep_referenced(database, dir.as_deref()).await;
 			return Err(refusal);
 		}
@@ -222,20 +223,51 @@ fn carried_section(source: &StoredBot, destination: &str) -> Option<String> {
 	source.section_id.clone().filter(|_| source.space_id == destination)
 }
 
-async fn duplicated_bundle(
-	root: Option<&Path>,
+struct Carried {
+	source_id: String,
+	source_of: EnvOwner,
+	memory: String,
+	is_pinned: bool,
+	output_style: String,
+	permissions: bundles::BotPermissions,
+}
+
+async fn copied_onto<R: Runtime>(
+	app: &AppHandle<R>,
 	database: &db::Database,
-	source_id: &str,
-	bot: &StoredBot,
-	output_style: &str,
-	permissions: &bundles::BotPermissions,
+	created: &StoredBot,
+	carried: &Carried,
 ) -> Result<StoredBot, TranscriptStoreError> {
-	if let Some(root) = root {
-		bundles::inherit(root, source_id, &bot.id).map_err(|error| {
-			TranscriptStoreError::UnwritableBundle { detail: error.to_string() }
-		})?;
+	let remembered =
+		database.conversations().set_memory(created.id.clone(), carried.memory.clone()).await?;
+	let placed = if carried.is_pinned {
+		database.conversations().pin_bot(created.id.clone()).await?
+	} else {
+		remembered
+	};
+	copied_environment(app, &carried.source_of, &placed)?;
+	let root = bundles::root(app);
+	if let Some(root) = root.as_deref() {
+		bundles::inherit(root, &carried.source_id, &placed.id).map_err(unwritable)?;
 	}
-	write_bundle(root, database, bot, output_style, permissions).await
+	write_bundle(root.as_deref(), database, &placed, &carried.output_style, &carried.permissions)
+		.await
+}
+
+fn copied_environment<R: Runtime>(
+	app: &AppHandle<R>,
+	source: &EnvOwner,
+	copy: &StoredBot,
+) -> Result<(), TranscriptStoreError> {
+	let Some(root) = environment::store::root(app) else {
+		return Ok(());
+	};
+	environment::store::copy_owner(&root, source, &owned_by(copy))
+		.map_err(|failure| TranscriptStoreError::UnwritableEnvironment { failure })
+}
+
+fn owned_by(bot: &StoredBot) -> EnvOwner {
+	EnvOwner::Bot { id: bot.id.clone(), space_id: bot.space_id.clone() }
 }
 
 fn duplicated_identity(source: Bot, taken: &[String]) -> BotIdentity {

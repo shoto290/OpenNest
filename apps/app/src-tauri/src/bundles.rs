@@ -225,7 +225,11 @@ pub fn agent_ref(bot: &Bot) -> String {
 }
 
 fn generated_agent(root: &Path, bot_id: &str) -> Option<PathBuf> {
-	fs::read_dir(dir(root, bot_id).join(AGENTS_DIR)).ok()?.flatten().find_map(|entry| {
+	owned_agent(&dir(root, bot_id), bot_id)
+}
+
+fn owned_agent(bundle: &Path, bot_id: &str) -> Option<PathBuf> {
+	fs::read_dir(bundle.join(AGENTS_DIR)).ok()?.flatten().find_map(|entry| {
 		let path = entry.path();
 		let text = fs::read_to_string(&path).ok()?;
 		(marked_bot_id(&text)? == bot_id).then_some(path)
@@ -460,9 +464,17 @@ pub fn inherit(root: &Path, source_id: &str, bot_id: &str) -> std::io::Result<()
 	let source = dir(root, source_id);
 	let target = dir(root, bot_id);
 	let _serialised = serialised_both(&source, &target);
-	copied_tree(&source.join(SKILLS_DIR), &target.join(SKILLS_DIR))?;
-	copied_tree(&source.join(HOOKS_DIR), &target.join(HOOKS_DIR))?;
-	copied_file(&source.join(MCP_NAME), &target.join(MCP_NAME))
+	copied_tree(&source, &target)?;
+	reowned(&target, source_id, bot_id)
+}
+
+fn reowned(bundle: &Path, source_id: &str, bot_id: &str) -> std::io::Result<()> {
+	let Some(path) = owned_agent(bundle, source_id) else {
+		return Ok(());
+	};
+	let mut parts = checked_front(&fs::read_to_string(&path)?)?;
+	parts.front = with_key(&parts.front, &[METADATA_KEY, OWNER_KEY], &quoted(bot_id));
+	private_files::replace(&path, rendered(&parts).as_bytes())
 }
 
 fn copied_tree(source: &Path, target: &Path) -> std::io::Result<()> {
@@ -3878,7 +3890,7 @@ mod tests {
 	}
 
 	#[test]
-	fn a_duplicate_inherits_the_bundle_without_the_memory_or_the_history() {
+	fn a_duplicate_inherits_the_bundle_with_the_memory_and_the_history() {
 		let root = a_root("inherit");
 		let bot = a_bot("Bean", "Answer briefly.");
 		write(&root, &bot).expect("the bundle is written");
@@ -3890,6 +3902,7 @@ mod tests {
 			.expect("the servers land");
 		private_files::replace(&source.join(LEARNED_NAME), b"Bean likes figs.")
 			.expect("the memory lands");
+		write_remembered(&root, &bot, "Bean bakes on Sundays.").expect("the block is written");
 
 		inherit(&root, &bot.id, "bot-copy").expect("the bundle is inherited");
 
@@ -3908,9 +3921,22 @@ mod tests {
 			fs::read_to_string(copy.join(MCP_NAME)).expect("the servers came over"),
 			"{\"mcpServers\":{}}"
 		);
-		assert!(!copy.join(LEARNED_NAME).exists(), "the memory came over");
-		assert!(!copy.join(".git").exists(), "the history came over");
+		assert_eq!(
+			fs::read_to_string(copy.join(LEARNED_NAME)).expect("the memory came over"),
+			"Bean likes figs."
+		);
+		assert_eq!(
+			generated(&root, "bot-copy").expect("the copy owns an agent file").memory,
+			"Bean bakes on Sundays.",
+			"the learned block did not come over"
+		);
+		assert_eq!(titles(&root, "bot-copy"), titles(&root, &bot.id), "the history came over");
 		assert!(source.join(LEARNED_NAME).exists(), "the source lost its memory");
+		assert_eq!(
+			generated(&root, &bot.id).expect("the source owns its agent file").memory,
+			"Bean bakes on Sundays.",
+			"the source lost its learned block"
+		);
 
 		let _ = fs::remove_dir_all(&root);
 	}
