@@ -159,7 +159,7 @@ enum Operation {
 	Close,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 enum Outcome {
 	Done,
@@ -424,7 +424,7 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn a_field_the_operation_does_not_declare_is_named_and_nothing_is_opened() {
+	async fn a_field_the_operation_does_not_declare_is_named_and_refused() {
 		let app = a_host("undeclared").await;
 		let host = serving(&app, "c1");
 
