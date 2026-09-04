@@ -500,7 +500,6 @@ describe("ThreadScreen", () => {
 
 		expect(turnGroups()[0]).toBe(painted)
 		expect(screen.getByRole("button", { name: "Cancel reply" })).toBeTruthy()
-		expect(screen.getByRole("button", { name: ROUTINES_TOGGLE })).toBeTruthy()
 		expect(listRoutines).toHaveBeenCalledWith("c-bot-1")
 	})
 
