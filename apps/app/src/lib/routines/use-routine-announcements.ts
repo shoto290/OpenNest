@@ -2,8 +2,6 @@ import { useEffect, useRef } from "react"
 
 import { routinesTransport } from "./routines-transport"
 
-const NO_UNSUBSCRIBE = () => undefined
-
 export const useRoutineAnnouncements = (
 	conversationId: string | null,
 	onAnnounced: () => void,
@@ -30,7 +28,7 @@ export const useRoutineAnnouncements = (
 					"routines panel: routine changes could not be listened to",
 					reason,
 				)
-				return NO_UNSUBSCRIBE
+				return () => undefined
 			})
 
 		return () => {

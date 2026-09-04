@@ -120,14 +120,13 @@ export const useRoutines = (
 
 		reads.current += 1
 		const ticket = reads.current
-		const isLatestRead = () => ticket === reads.current
 
 		void Promise.allSettled([
 			routinesTransport.list(conversationId),
 			declaredByLead(leadBotId),
 		]).then(async ([listing, declaring]) => {
 			const read = await readOf(listing, declaring, leadBotId)
-			if (!isLatestRead()) {
+			if (ticket !== reads.current) {
 				return
 			}
 
