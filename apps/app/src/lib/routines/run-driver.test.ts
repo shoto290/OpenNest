@@ -14,6 +14,8 @@ import type {
 	TransportError,
 	TurnEnded,
 } from "../agent/contract"
+import { createChatController } from "../chat/chat-controller"
+import type { ChatState } from "../chat/chat-state"
 import type { ConversationState } from "../conversations/conversation-controller"
 import { createConversationRuntimes } from "../conversations/conversation-runtimes"
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
@@ -49,11 +51,14 @@ type Harness = {
 	botId: string
 	stop: () => void
 	requested: (cause?: RunCause) => RunRequested
+	soloRun: () => RunRequested
 	state: () => ConversationState
+	soloState: () => ChatState
 	shown: () => [string | null, string][]
 	emitAtRun: (event: AgentEvent) => Promise<void>
 	endTurn: (ended: Partial<TurnEnded>) => Promise<void>
 	openOnScreen: () => Promise<void>
+	openSoloOnScreen: () => Promise<void>
 }
 
 const createHarness = async (
@@ -68,10 +73,8 @@ const createHarness = async (
 			return scripted.startOrResumeSession(scope, resume, cwd, outputSchema)
 		},
 	}
-	const store: TranscriptStore = {
-		...createFakeTranscriptStore(),
-		...overrides,
-	}
+	const base = createFakeTranscriptStore()
+	const store: TranscriptStore = { ...base, ...overrides }
 	const [bot] = await seatBots(store, SPACE, ["Ada"])
 	const conversation = await store.createConversation({
 		spaceId: SPACE,
@@ -79,9 +82,18 @@ const createHarness = async (
 		title: "Walls",
 		botIds: [bot.id],
 	})
+	const mainChat = await base.mainChat(bot.id)
 	const runtimes = createConversationRuntimes(driver, store)
+	const chat = createChatController(driver, store)
 	const runs = createFakeRunPort()
-	const stop = startRunDriver({ driver, store, runtimes, runs, now: () => 7 })
+	const stop = startRunDriver({
+		driver,
+		store,
+		runtimes,
+		chat,
+		runs,
+		now: () => 7,
+	})
 	await settled()
 
 	const requested = (cause: RunCause = "trigger"): RunRequested => ({
@@ -116,13 +128,25 @@ const createHarness = async (
 		await settled()
 	}
 
+	const openSoloOnScreen = async () => {
+		await chat.open(bot.id)
+		await settled()
+	}
+
 	const state = () => runtimes.runtimeFor(conversation.id).getState()
+
+	const soloState = () => chat.stateFor(bot.id)
 
 	const shown = () =>
 		state().messages.map(
 			({ authorBotId, content }) =>
 				[authorBotId, content] as [string | null, string],
 		)
+
+	const soloRun = (): RunRequested => ({
+		...requested(),
+		conversationId: mainChat.id,
+	})
 
 	return {
 		driver,
@@ -133,11 +157,14 @@ const createHarness = async (
 		botId: bot.id,
 		stop,
 		requested,
+		soloRun,
 		state,
+		soloState,
 		shown,
 		emitAtRun,
 		endTurn,
 		openOnScreen,
+		openSoloOnScreen,
 	}
 }
 
@@ -369,6 +396,100 @@ describe("startRunDriver", () => {
 		await harness.endTurn(reported("Two tickets closed."))
 
 		expect(harness.shown()).toEqual([[harness.botId, "Two tickets closed."]])
+	})
+
+	it("writes the report into the solo thread when the run is the main chat", async () => {
+		await harness.openSoloOnScreen()
+		harness.runs.request(harness.soloRun())
+		await settled()
+		await harness.endTurn(reported("Two tickets closed."))
+
+		expect(harness.soloState().messages).toEqual([
+			expect.objectContaining({
+				role: "assistant",
+				authorBotId: harness.botId,
+				content: "Two tickets closed.",
+				completion: "complete",
+			}),
+		])
+		expect(harness.state().messages).toEqual([])
+	})
+
+	it("reports into the conversation when the main chat cannot be read", async () => {
+		harness.stop()
+		harness = await createHarness({
+			mainChat: () => Promise.reject(new Error("refused")),
+		})
+		await harness.openOnScreen()
+		harness.runs.request(harness.requested())
+		await settled()
+		await harness.endTurn(reported("Two tickets closed."))
+
+		expect(harness.shown()).toEqual([[harness.botId, "Two tickets closed."]])
+		expect(harness.runs.closings[0].closing.outcome).toBe("ok")
+	})
+
+	it("marks the reported turn of a solo thread with its routine", async () => {
+		await harness.openSoloOnScreen()
+		harness.runs.request(harness.soloRun())
+		await settled()
+		await harness.endTurn(reported("Two tickets closed."))
+
+		const { turnId } = harness.soloState().messages[0]
+
+		expect(harness.soloState().reportedCauses.get(turnId)).toEqual({
+			turnId,
+			routineTitle: "Nightly report",
+			triggerSourceId: "schedule",
+		})
+	})
+
+	it("closes a solo run with the turn id of the published report", async () => {
+		await harness.openSoloOnScreen()
+		harness.runs.request(harness.soloRun())
+		await settled()
+		await harness.endTurn(reported("Two tickets closed."))
+
+		expect(harness.runs.closings[0].closing.reportedTurnId).toBe(
+			harness.soloState().messages[0].turnId,
+		)
+	})
+
+	it("settles a solo report in the store while its chat stays closed", async () => {
+		const run = harness.soloRun()
+		harness.runs.request(run)
+		await settled()
+		await harness.endTurn(reported("Two tickets closed."))
+
+		const page = await harness.store.loadPage(run.conversationId, null)
+
+		expect(harness.soloState().messages).toEqual([])
+		expect(page.messages.map(({ content }) => content)).toEqual([
+			"Two tickets closed.",
+		])
+	})
+
+	it("leaves the solo transcript unchanged when a run reports nothing", async () => {
+		await harness.openSoloOnScreen()
+		harness.runs.request(harness.soloRun())
+		await settled()
+		await harness.endTurn(reported("   "))
+
+		expect(harness.soloState().messages).toEqual([])
+		expect(harness.runs.closings[0].closing.outcome).toBe("nothing")
+	})
+
+	it("leaves the bot idle in its solo thread while a run is in flight", async () => {
+		await harness.openSoloOnScreen()
+		const idle = harness.soloState()
+		harness.runs.request(harness.soloRun())
+		await settled()
+
+		const running = harness.soloState()
+
+		expect(running.turn).toBe(idle.turn)
+		expect(running.messages).toEqual([])
+		expect(running.activities).toEqual(idle.activities)
 	})
 
 	it.each<RunCause>(["trigger", "runNow"])(

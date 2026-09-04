@@ -1,3 +1,5 @@
+import { i18n } from "@workspace/ui/lib/i18n"
+
 import type { SubmittedAttachment } from "./attachments-contract"
 import {
 	type ChatAction,
@@ -57,6 +59,18 @@ import {
 	selectHasMore,
 	selectMessages,
 } from "../conversations/transcript-state"
+import { createReportedRunsReader } from "../routines/create-run-port"
+import type {
+	ReportedRun,
+	ReportedRunsByTurnId,
+	RunReportDraft,
+} from "../routines/routine-contract"
+import type { ReportedRunsReader } from "../routines/run-port"
+import {
+	causeOf,
+	readReportedCauses,
+	writeReportTurn,
+} from "../routines/run-report"
 
 export type ChatController = {
 	getState: () => ChatState
@@ -84,6 +98,7 @@ export type ChatController = {
 	pin: (messageId: string, blockIndex: number) => Promise<void>
 	unpin: (messageId: string, blockIndex: number) => Promise<void>
 	pins: () => Promise<MessagePin[]>
+	reportRun: (draft: RunReportDraft) => Promise<string>
 	storeAttachments: (
 		botId: string,
 		attachments: SubmittedAttachment[],
@@ -101,6 +116,7 @@ export type ChatControllerOptions = {
 	newId?: () => string
 	now?: () => number
 	promptsPerRun?: number
+	readReportedRuns?: ReportedRunsReader
 }
 
 const INTERRUPTED: TerminalCompletion = "interrupted"
@@ -139,6 +155,8 @@ export function createChatController(
 	const newId = options.newId ?? (() => crypto.randomUUID())
 	const now = options.now ?? (() => Date.now())
 	const promptsPerRun = options.promptsPerRun ?? PROMPTS_PER_RUN
+	const readReportedRuns =
+		options.readReportedRuns ?? createReportedRunsReader()
 	const transcript = createTranscriptController(store)
 
 	const bots = new Map<string, BotChat>()
@@ -637,17 +655,56 @@ export function createChatController(
 			() => undefined,
 		)
 
+	const setCauses = (bot: BotChat, causes: ReportedRunsByTurnId) =>
+		dispatch(bot, { type: "causesChanged", causes })
+
+	const rememberCause = (bot: BotChat, reported: ReportedRun) =>
+		setCauses(
+			bot,
+			new Map(bot.state.reportedCauses).set(reported.turnId, reported),
+		)
+
+	const readCauses = async (bot: BotChat, conversationId: string) => {
+		const reported = await readReportedCauses({
+			read: readReportedRuns,
+			conversationId,
+			description: i18n.t("chat:transcript.cause.unavailable.soloDescription"),
+		})
+		if (!reported?.size) {
+			return
+		}
+		setCauses(bot, new Map([...reported, ...bot.state.reportedCauses]))
+	}
+
 	const openConversation = async (bot: BotChat) => {
 		try {
 			const chat = await store.mainChat(bot.id)
 			dispatch(bot, { type: "conversationOpened", conversationId: chat.id })
 			void recallCommands(bot)
+			void readCauses(bot, chat.id)
 			syncBot(bot)
 			await enqueue(() => transcript.load(chat.id))
 			syncBot(bot)
 		} catch (reason) {
 			reportStore(bot, reason)
 		}
+	}
+
+	const openChatOf = ({ botId, conversationId }: RunReportDraft) => {
+		const bot = bots.get(botId)
+		return bot?.state.conversationId === conversationId ? bot : null
+	}
+
+	const reportRun = async (draft: RunReportDraft) => {
+		const reported = await enqueue(() =>
+			writeReportTurn({ store, draft, newId, now }),
+		)
+		const bot = openChatOf(draft)
+		if (bot) {
+			rememberCause(bot, causeOf(draft, reported.turnId))
+			transcript.append(reported)
+		}
+		return reported.turnId
 	}
 
 	const redescribe = (botId: string) => {
@@ -1236,6 +1293,7 @@ export function createChatController(
 		unpin: (messageId, blockIndex) =>
 			onSelected((bot) => unpinFor(bot, messageId, blockIndex), undefined),
 		pins: () => onSelected(pinsOf, NO_PINS),
+		reportRun,
 		storeAttachments,
 		stop: () => onSelected(stop, undefined),
 		discard: (id) =>

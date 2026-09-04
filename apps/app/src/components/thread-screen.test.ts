@@ -10,7 +10,10 @@ import "@workspace/ui/lib/i18n"
 import { ThreadScreen } from "@/components/thread-screen"
 import type { AgentEvent } from "@/lib/agent/contract"
 import { createAttachmentsController } from "@/lib/chat/attachments-controller"
-import type { ChatController } from "@/lib/chat/chat-controller"
+import {
+	type ChatController,
+	createChatController,
+} from "@/lib/chat/chat-controller"
 import {
 	type ChatError,
 	chatReducer,
@@ -88,6 +91,9 @@ const ROUTINE_TITLE = "Nightly report"
 
 const CAUSES_TITLE = "Routine reports could not be read"
 
+const CAUSES_SOLO_DESCRIPTION =
+	"The thread is intact. What opened each report is missing until the next read."
+
 const BOT_TITLE = "Release manager"
 
 const A_MINUTE = 60_000
@@ -158,6 +164,7 @@ const stubController = (
 	pin: async () => undefined,
 	unpin: async () => undefined,
 	pins: async () => [],
+	reportRun: async () => "",
 	storeAttachments: async () => [],
 	stop: async () => undefined,
 	discard: () => undefined,
@@ -441,6 +448,58 @@ const turnGroups = () =>
 const openRoutinesPanel = async () => {
 	fireEvent.click(screen.getByRole("button", { name: ROUTINES_TOGGLE }))
 	await settle()
+}
+
+type SoloFixture = {
+	readReportedRuns?: ReportedRunsReader
+	spoken?: SpokenTurn[]
+}
+
+type Solo = {
+	thread: () => BotThread
+	report: (text: string) => Promise<void>
+}
+
+const soloOf = async ({
+	readReportedRuns,
+	spoken = [],
+}: SoloFixture): Promise<Solo> => {
+	const store = createFakeTranscriptStore()
+	const [bot] = await seatBots(store, SPACE, ["Ada"])
+	const chat = await store.mainChat(bot.id)
+	for (const turn of spoken) {
+		await writeTurn(store, chat.id, bot.id, turn)
+	}
+	const controller = createChatController(createScriptedDriver(), store, {
+		readReportedRuns,
+	})
+	await act(async () => {
+		await controller.open(bot.id)
+	})
+
+	return {
+		thread: () => ({
+			kind: "bot",
+			bot,
+			chat: { state: controller.stateFor(bot.id), controller },
+			isSettingsOpen: false,
+			isOverlayOpen: false,
+			onToggleSettings: () => undefined,
+		}),
+		report: async (text) => {
+			await act(async () => {
+				await controller.reportRun({
+					conversationId: chat.id,
+					botId: bot.id,
+					runtimeSessionId: "rs-1",
+					text,
+					routineTitle: ROUTINE_TITLE,
+					triggerSourceId: "schedule",
+				})
+			})
+			await settle()
+		},
+	}
 }
 
 const stopsFor = (name: string) =>
@@ -829,6 +888,50 @@ describe("ThreadScreen", () => {
 		await settle()
 
 		expect(screen.getAllByText(CAUSES_TITLE)).toHaveLength(raised)
+	})
+
+	it("names the routine on the report turn of a solo thread", async () => {
+		const solo = await soloOf({
+			spoken: [REPORTED],
+			readReportedRuns: reportedRunsOf(REPORT_TURN),
+		})
+		render(screenOf(solo.thread()))
+		await settle()
+
+		expect(screen.getByText(REPORT_TEXT)).toBeTruthy()
+		expect(screen.getByText(ROUTINE_TITLE)).toBeTruthy()
+	})
+
+	it("shows a report written while the solo thread is open", async () => {
+		const solo = await soloOf({ spoken: [SAID_BEFORE] })
+		const { rerender } = render(screenOf(solo.thread()))
+		await settle()
+
+		expect(screen.queryByText(REPORT_TEXT)).toBeNull()
+
+		await solo.report(REPORT_TEXT)
+		rerender(screenOf(solo.thread()))
+		await settle()
+
+		expect(screen.getByText(REPORT_TEXT)).toBeTruthy()
+		expect(screen.getByText(ROUTINE_TITLE)).toBeTruthy()
+	})
+
+	it("keeps the solo transcript and reports a failed read of the runs", async () => {
+		render(createElement(NoticeSurface))
+		const solo = await soloOf({
+			spoken: [REPORTED],
+			readReportedRuns: REFUSED_REPORTED_RUNS,
+		})
+		render(screenOf(solo.thread()))
+		await settle()
+
+		expect(screen.getByText(REPORT_TEXT)).toBeTruthy()
+		expect(screen.queryByText(ROUTINE_TITLE)).toBeNull()
+		expect(screen.getAllByText(CAUSES_TITLE).length).toBeGreaterThan(0)
+		expect(screen.getAllByText(CAUSES_SOLO_DESCRIPTION).length).toBeGreaterThan(
+			0,
+		)
 	})
 
 	it("stops the bot whose working row carries the stop, and no other", async () => {

@@ -1,4 +1,8 @@
-import type { RunClosing, RunRequested } from "./routine-contract"
+import type {
+	RunClosing,
+	RunReportDraft,
+	RunRequested,
+} from "./routine-contract"
 import { RUN_OUTPUT_SCHEMA, readRunReport } from "./run-output"
 import type { RunPort, RunUnsubscribe } from "./run-port"
 import { runPromptFor } from "./run-prompt"
@@ -10,6 +14,7 @@ import type {
 	TurnEnded,
 	TurnOutcome,
 } from "../agent/contract"
+import type { ChatController } from "../chat/chat-controller"
 import { isSameRuntimeScope } from "../chat/chat-state"
 import type { ChatDriver } from "../chat/driver"
 import { needsFreshSession } from "../chat/screen-model"
@@ -29,8 +34,9 @@ export type RunDriverOptions = {
 		| "shutdown"
 		| "subscribe"
 	>
-	store: Pick<TranscriptStore, "openRuntimeSession">
+	store: Pick<TranscriptStore, "openRuntimeSession" | "mainChat">
 	runtimes: Pick<ConversationRuntimes, "runtimeFor">
+	chat: Pick<ChatController, "reportRun">
 	runs: RunPort
 	now?: () => number
 }
@@ -68,6 +74,8 @@ const reporting = (command: string) => (reason: unknown) => {
 	console.error(`run driver: ${command} failed`, reason)
 }
 
+const reportMainChatFailure = reporting("conversation_main_chat")
+
 const listening = (
 	opening: Promise<RunUnsubscribe>,
 	label: string,
@@ -81,6 +89,7 @@ export const startRunDriver = ({
 	driver,
 	store,
 	runtimes,
+	chat,
 	runs,
 	now = () => Date.now(),
 }: RunDriverOptions): (() => void) => {
@@ -168,15 +177,34 @@ export const startRunDriver = ({
 		}
 	}
 
-	const writeReport = ({ requested, scope }: LiveRun, text: string) =>
-		runtimes.runtimeFor(requested.conversationId).reportRun({
+	const mainChatIdOf = (botId: string) =>
+		store
+			.mainChat(botId)
+			.then(({ id }) => id)
+			.catch((reason) => {
+				reportMainChatFailure(reason)
+				return null
+			})
+
+	const reporterOf = async ({ conversationId, botId }: RunReportDraft) => {
+		const mainChatId = await mainChatIdOf(botId)
+		return mainChatId === conversationId
+			? chat
+			: runtimes.runtimeFor(conversationId)
+	}
+
+	const writeReport = async ({ requested, scope }: LiveRun, text: string) => {
+		const draft: RunReportDraft = {
 			conversationId: requested.conversationId,
 			botId: requested.botId,
 			runtimeSessionId: scope.runtimeSessionId,
 			text,
 			routineTitle: requested.title,
 			triggerSourceId: requested.triggerSourceId,
-		})
+		}
+		const reporter = await reporterOf(draft)
+		return reporter.reportRun(draft)
+	}
 
 	const closingFor = async (
 		held: LiveRun,

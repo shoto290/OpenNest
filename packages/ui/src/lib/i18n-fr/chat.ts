@@ -54,6 +54,8 @@ const chat = {
 				title: "Les rapports de routine n'ont pas pu être lus",
 				description:
 					"La conversation est intacte. Ce qui a déclenché chaque rapport manque jusqu'à la prochaine lecture.",
+				soloDescription:
+					"Le fil est intact. Ce qui a déclenché chaque rapport manque jusqu'à la prochaine lecture.",
 			},
 		},
 		mention: {
