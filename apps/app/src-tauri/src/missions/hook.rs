@@ -69,19 +69,18 @@ fn written(path: &Path, bytes: &[u8]) -> Result<(), MissionError> {
 }
 
 pub fn checkout(workspace: &str) -> Result<PathBuf, MissionError> {
-	let root = Path::new(workspace).canonicalize().map_err(|_| {
-		unreachable(format!("the workspace {workspace} is on nothing this machine holds"))
-	})?;
+	let root = Path::new(workspace)
+		.canonicalize()
+		.map_err(|_| unreachable(format!("the workspace {workspace} is nowhere on this machine")))?;
 	if !root.is_dir() {
-		return Err(unreachable(format!("the workspace {} is not a directory", root.display())));
+		return Err(unreachable(format!("the workspace {workspace} is not a directory")));
 	}
-	match root.join(GIT_ENTRY).exists() {
-		true => Ok(root),
-		false => Err(unreachable(format!(
-			"the workspace {} holds no {GIT_ENTRY}, so it is no git checkout",
-			root.display()
-		))),
+	if !root.join(GIT_ENTRY).exists() {
+		return Err(unreachable(format!(
+			"the workspace {workspace} holds no {GIT_ENTRY}, so it is no git checkout"
+		)));
 	}
+	Ok(root)
 }
 
 fn read(settings: &Path) -> Result<Value, MissionError> {
@@ -320,13 +319,10 @@ mod tests {
 				.expect_err("the install is refused")
 		});
 
-		for held in &refused {
-			assert!(matches!(held, MissionError::Undeliverable { .. }), "got {held:?}");
-		}
 		assert!(
 			refused.iter().all(|held| matches!(held, MissionError::Undeliverable { detail }
-				if detail.contains(&dir.to_string_lossy().into_owned()))),
-			"a refusal named no path: {refused:?}"
+				if detail.contains(&*dir.to_string_lossy()))),
+			"a refusal is not an Undeliverable naming the path: {refused:?}"
 		);
 		assert!(files_in(&bare).is_empty(), "the refused workspace was written in");
 		assert!(files_in(&dir.join("hook")).is_empty(), "the refused install laid the hook out");
