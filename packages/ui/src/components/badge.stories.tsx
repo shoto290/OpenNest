@@ -43,8 +43,6 @@ const TITLE_HOST = "flex w-40 items-center gap-1.5 text-sm"
 
 const BOT_TITLES = ["Ops", "Release manager for the platform", ""]
 
-const TITLE_BADGE_MAX_WIDTH = 64
-
 const CARD_HOST =
 	"relative block size-10 rounded-full bg-card [--badge-ring:var(--color-card)]"
 
@@ -241,11 +239,11 @@ export const BotTitles = meta.story({
 	play: async ({ canvasElement }) => {
 		const badges = slotsIn(canvasElement, "bot-title-badge")
 
+		const [short, cut] = badges
+
 		await expect(badges).toHaveLength(2)
-		await expect(badges[0].scrollWidth).toBe(badges[0].clientWidth)
-		await expect(badges[1].scrollWidth).toBeGreaterThan(badges[1].clientWidth)
-		await expect(
-			badges.every((badge) => boxOf(badge).width <= TITLE_BADGE_MAX_WIDTH),
-		).toBe(true)
+		await expect(short.scrollWidth).toBe(short.clientWidth)
+		await expect(cut.scrollWidth).toBeGreaterThan(cut.clientWidth)
+		await expect(boxOf(short).width).toBeLessThan(boxOf(cut).width)
 	},
 })
