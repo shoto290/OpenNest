@@ -24,9 +24,16 @@ import {
 import {
 	RoutinesPanel,
 	type RoutinesPanelForm,
+	type RoutinesPanelMissions,
 } from "@workspace/ui/components/routines-panel"
 
 import "@workspace/ui/lib/i18n"
+
+const NO_MISSIONS: RoutinesPanelMissions = {
+	running: [],
+	closed: [],
+	now: 0,
+}
 
 const NEW_SCHEDULE: RoutineFormModel = {
 	id: null,
@@ -49,6 +56,7 @@ const panelHolding = (open: RoutineFormModel, onSave = vi.fn()) => {
 			failure={null}
 			form={form}
 			isOpen
+			missions={NO_MISSIONS}
 			onDelete={vi.fn()}
 			onEnabledChange={vi.fn()}
 			onOpenChange={vi.fn()}

@@ -90,7 +90,7 @@ const readOf = async (
 	const sources = declared ? toTriggerSources(declared) : NO_SOURCES
 
 	if (listing.status === "rejected") {
-		return { sources, listed: null, failure: "read" }
+		return { sources, listed: null, failure: "routines" }
 	}
 
 	return {
@@ -99,7 +99,7 @@ const readOf = async (
 			rows: listing.value,
 			known: await knownOf(listing.value, leadDeclaration(leadBotId, declared)),
 		},
-		failure: declared ? null : "read",
+		failure: declared ? null : "routines",
 	}
 }
 

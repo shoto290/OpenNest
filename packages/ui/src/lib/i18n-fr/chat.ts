@@ -307,12 +307,52 @@ const chat = {
 			},
 		},
 	},
-	routines: {
+	activity: {
 		panel: {
-			label: "Routines",
-			toggle: "Routines",
+			label: "Activité",
+			toggle: "Activité",
+			title: "Activité",
+		},
+		missions: {
+			title: "Missions",
+			none: "Aucune mission en cours",
+			badge: {
+				attention: "En attente d'une personne",
+				done: "Prête à être fusionnée",
+				failed: "Échouée",
+			},
+			closed: {
+				open: "Missions terminées",
+				title: "Missions terminées",
+				back: "Retour à l'activité",
+			},
+		},
+		routines: {
 			title: "Routines",
 		},
+		failure: {
+			missions: {
+				title: "Les missions n'ont pas pu être lues",
+				description:
+					"Rien n'a été modifié. Réessayez pour lire les missions de cette conversation.",
+			},
+			routines: {
+				title: "Les routines n'ont pas pu être lues",
+				description: "Rien n'a été modifié. Réessayez pour lire les routines.",
+			},
+			activity: {
+				title: "L'activité de cette conversation n'a pas pu être lue",
+				description:
+					"Rien n'a été modifié. Réessayez pour lire ses missions et ses routines.",
+			},
+			write: {
+				title: "La routine n'a pas pu être modifiée",
+				description:
+					"La modification n'a pas été enregistrée. Relisez les routines pour voir où elles en sont.",
+			},
+		},
+	},
+	routines: {
 		form: {
 			new: "Nouvelle routine",
 			edit: "Modifier la routine",
@@ -471,17 +511,6 @@ const chat = {
 			title: "Aucune routine",
 			description:
 				"Une routine fait travailler un bot toute seule, sur un horaire ou quand un fichier qu'elle surveille change.",
-		},
-		failure: {
-			read: {
-				title: "Les routines n'ont pas pu être lues",
-				description: "Rien n'a été modifié. Réessayez pour lire les routines.",
-			},
-			write: {
-				title: "La routine n'a pas pu être modifiée",
-				description:
-					"La modification n'a pas été enregistrée. Relisez les routines pour voir où elles en sont.",
-			},
 		},
 	},
 } as const

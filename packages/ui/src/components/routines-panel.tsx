@@ -1,11 +1,15 @@
 "use client"
 
-import { type ReactNode, useEffect, useRef } from "react"
+import { type ReactNode, useEffect, useId, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@workspace/ui/components/button"
 import { EmptyStateShell } from "@workspace/ui/components/empty-state-shell"
 import { Icons } from "@workspace/ui/components/icons"
+import {
+	MissionRow,
+	type MissionRowModel,
+} from "@workspace/ui/components/mission-row"
 import {
 	AnimatedSidebar,
 	AnimatedSidebarContent,
@@ -37,10 +41,10 @@ const ROUTINES_PANEL_ID = "routines-panel"
 const ROUTINES_PANEL_WIDTH = 320
 
 const NEW_ROUTINE_KEY = "new-routine"
-const HEADER_OPENER = "header-new-routine"
-const EMPTY_OPENER = "empty-new-routine"
+const NEW_ROUTINE_OPENER = "new-routine-opener"
+const CLOSED_MISSIONS_OPENER = "closed-missions-opener"
 
-type RoutinesFailure = "read" | "write"
+type RoutinesFailure = "missions" | "routines" | "activity" | "write"
 
 type RoutinesPanelForm = {
 	open: RoutineFormModel | null
@@ -60,7 +64,15 @@ type RoutinesPanelDetail = {
 	onRunNow: () => void
 }
 
+type RoutinesPanelMissions = {
+	running: MissionRowModel[]
+	closed: MissionRowModel[]
+	now: number
+	onOpen?: (missionId: string) => void
+}
+
 type RoutinesPanelListProps = {
+	missions: RoutinesPanelMissions
 	routines: RoutineRowModel[]
 	failure: RoutinesFailure | null
 	onRetry: () => void
@@ -76,13 +88,66 @@ type RoutinesPanelProps = RoutinesPanelListProps & {
 	children: ReactNode
 }
 
+type PanelSectionProps = {
+	slot: string
+	title: string
+	action?: ReactNode
+	children: ReactNode
+}
+
+const PanelSection = ({ slot, title, action, children }: PanelSectionProps) => {
+	const titleId = useId()
+
+	return (
+		<section
+			aria-labelledby={titleId}
+			className="flex min-w-0 flex-col gap-2"
+			data-slot={slot}
+		>
+			<div className="flex h-7 items-center gap-2">
+				<h3
+					className="flex-1 font-medium text-muted-foreground text-xs"
+					id={titleId}
+				>
+					{title}
+				</h3>
+				{action}
+			</div>
+			{children}
+		</section>
+	)
+}
+
+type MissionListProps = {
+	missions: MissionRowModel[]
+	now: number
+	slot: string
+	onOpen?: (missionId: string) => void
+}
+
+const MissionList = ({ missions, now, slot, onOpen }: MissionListProps) => (
+	<ul className="flex flex-col gap-2" data-slot={slot}>
+		{missions.map((mission) => (
+			<MissionRow
+				{...mission}
+				key={mission.id}
+				now={now}
+				onOpen={onOpen ? () => onOpen(mission.id) : undefined}
+			/>
+		))}
+	</ul>
+)
+
 type RoutinesPanelBodyProps = RoutinesPanelListProps & {
+	isShowingClosedMissions: boolean
+	onShowClosedMissions: () => void
 	onNewRoutine: () => void
 	onOpenRoutine?: (routineId: string) => void
 	onEditRoutine: () => void
 }
 
 const RoutinesPanelBody = ({
+	missions,
 	routines,
 	failure,
 	onRetry,
@@ -90,6 +155,8 @@ const RoutinesPanelBody = ({
 	onDelete,
 	form,
 	detail,
+	isShowingClosedMissions,
+	onShowClosedMissions,
 	onNewRoutine,
 	onOpenRoutine,
 	onEditRoutine,
@@ -98,9 +165,9 @@ const RoutinesPanelBody = ({
 
 	const notice = failure ? (
 		<Notice
-			description={t(`routines.failure.${failure}.description`)}
+			description={t(`activity.failure.${failure}.description`)}
 			retry={{ onRetry }}
-			title={t(`routines.failure.${failure}.title`)}
+			title={t(`activity.failure.${failure}.title`)}
 		/>
 	) : null
 
@@ -133,18 +200,52 @@ const RoutinesPanelBody = ({
 		)
 	}
 
-	if (routines.length === 0) {
+	if (isShowingClosedMissions) {
 		return (
-			notice ?? (
+			<>
+				{notice}
+				<MissionList
+					missions={missions.closed}
+					now={missions.now}
+					onOpen={missions.onOpen}
+					slot="closed-missions-list"
+				/>
+			</>
+		)
+	}
+
+	const newRoutine = form?.canCreate ? (
+		<Button
+			aria-label={t("routines.form.new")}
+			data-opens={NEW_ROUTINE_OPENER}
+			onClick={onNewRoutine}
+			size="icon-sm"
+			variant="ghost"
+		>
+			<Icons.Add aria-hidden="true" />
+		</Button>
+	) : undefined
+
+	const routinesSection = (children: ReactNode) => (
+		<PanelSection
+			action={newRoutine}
+			slot="routines-section"
+			title={t("activity.routines.title")}
+		>
+			{children}
+		</PanelSection>
+	)
+
+	const isBare =
+		missions.running.length === 0 &&
+		missions.closed.length === 0 &&
+		routines.length === 0
+
+	if (isBare) {
+		return (
+			notice ??
+			routinesSection(
 				<EmptyStateShell
-					action={
-						form?.canCreate ? (
-							<Button data-opens={EMPTY_OPENER} onClick={onNewRoutine}>
-								<Icons.Add aria-hidden="true" />
-								{t("routines.form.new")}
-							</Button>
-						) : undefined
-					}
 					data-slot="routines-empty"
 					description={t("routines.empty.description")}
 					mark={
@@ -154,7 +255,7 @@ const RoutinesPanelBody = ({
 						/>
 					}
 					title={t("routines.empty.title")}
-				/>
+				/>,
 			)
 		)
 	}
@@ -162,33 +263,86 @@ const RoutinesPanelBody = ({
 	return (
 		<>
 			{notice}
-			<ul className="flex flex-col gap-2" data-slot="routines-list">
-				{routines.map((routine) => (
-					<RoutineRow
-						{...routine}
-						key={routine.id}
-						onDelete={() => onDelete(routine.id)}
-						onEnabledChange={(isEnabled) =>
-							onEnabledChange(routine.id, isEnabled)
-						}
-						onOpen={onOpenRoutine ? () => onOpenRoutine(routine.id) : undefined}
+			<PanelSection
+				action={
+					missions.closed.length > 0 ? (
+						<Button
+							aria-label={t("activity.missions.closed.open")}
+							data-opens={CLOSED_MISSIONS_OPENER}
+							onClick={onShowClosedMissions}
+							size="icon-sm"
+							variant="ghost"
+						>
+							<Icons.History aria-hidden="true" />
+						</Button>
+					) : undefined
+				}
+				slot="missions-section"
+				title={t("activity.missions.title")}
+			>
+				{missions.running.length > 0 ? (
+					<MissionList
+						missions={missions.running}
+						now={missions.now}
+						onOpen={missions.onOpen}
+						slot="missions-list"
 					/>
-				))}
-			</ul>
+				) : (
+					<p
+						className="rounded-xl border border-border border-dashed px-2.5 py-2 text-muted-foreground text-xs"
+						data-slot="missions-none"
+					>
+						{t("activity.missions.none")}
+					</p>
+				)}
+			</PanelSection>
+			{routinesSection(
+				<ul className="flex flex-col gap-2" data-slot="routines-list">
+					{routines.map((routine) => (
+						<RoutineRow
+							{...routine}
+							key={routine.id}
+							onDelete={() => onDelete(routine.id)}
+							onEnabledChange={(isEnabled) =>
+								onEnabledChange(routine.id, isEnabled)
+							}
+							onOpen={
+								onOpenRoutine ? () => onOpenRoutine(routine.id) : undefined
+							}
+						/>
+					))}
+				</ul>,
+			)}
 		</>
 	)
 }
 
 type PanelHeading = {
-	back: "routines.detail.back" | "routines.form.back"
+	back:
+		| "activity.missions.closed.back"
+		| "routines.detail.back"
+		| "routines.form.back"
 	onBack: () => void
-	title: "routines.detail.title" | "routines.form.edit" | "routines.form.new"
+	title:
+		| "activity.missions.closed.title"
+		| "routines.detail.title"
+		| "routines.form.edit"
+		| "routines.form.new"
 }
 
-const headingOf = (
-	form: RoutinesPanelForm | undefined,
-	detail: RoutinesPanelDetail | undefined,
-): PanelHeading | null => {
+type HeadingSources = {
+	form: RoutinesPanelForm | undefined
+	detail: RoutinesPanelDetail | undefined
+	isShowingClosedMissions: boolean
+	onHideClosedMissions: () => void
+}
+
+const headingOf = ({
+	form,
+	detail,
+	isShowingClosedMissions,
+	onHideClosedMissions,
+}: HeadingSources): PanelHeading | null => {
 	if (form?.open) {
 		return {
 			back: detail?.open ? "routines.detail.back" : "routines.form.back",
@@ -205,18 +359,35 @@ const headingOf = (
 		}
 	}
 
+	if (isShowingClosedMissions) {
+		return {
+			back: "activity.missions.closed.back",
+			onBack: onHideClosedMissions,
+			title: "activity.missions.closed.title",
+		}
+	}
+
 	return null
 }
 
 const RoutinesPanelSurface = (props: RoutinesPanelListProps) => {
 	const { t } = useTranslation("chat")
 	const { open, triggerRef } = useAnimatedSidebar()
+	const [isShowingClosedMissions, setShowingClosedMissions] = useState(false)
 	const wasOpen = useRef(open)
 	const surface = useRef<HTMLElement>(null)
 	const openers = useRef<string[]>([])
 	const { form, detail } = props
-	const heading = headingOf(form, detail)
-	const depth = (detail?.open ? 1 : 0) + (form?.open ? 1 : 0)
+	const heading = headingOf({
+		form,
+		detail,
+		isShowingClosedMissions,
+		onHideClosedMissions: () => setShowingClosedMissions(false),
+	})
+	const depth =
+		(detail?.open ? 1 : 0) +
+		(form?.open ? 1 : 0) +
+		(isShowingClosedMissions ? 1 : 0)
 	const shownDepth = useRef(depth)
 
 	useEffect(() => {
@@ -253,7 +424,7 @@ const RoutinesPanelSurface = (props: RoutinesPanelListProps) => {
 
 	return (
 		<AnimatedSidebar
-			ariaLabel={t("routines.panel.label")}
+			ariaLabel={t("activity.panel.label")}
 			collapsible="offcanvas"
 			id={ROUTINES_PANEL_ID}
 			inert={!open}
@@ -276,33 +447,26 @@ const RoutinesPanelSurface = (props: RoutinesPanelListProps) => {
 							<h2 className="font-medium text-sm">{t(heading.title)}</h2>
 						</>
 					) : (
-						<>
-							<h2 className="flex-1 font-medium text-sm">
-								{t("routines.panel.title")}
-							</h2>
-							{form?.canCreate ? (
-								<Button
-									aria-label={t("routines.form.new")}
-									data-opens={HEADER_OPENER}
-									onClick={() => remember(HEADER_OPENER, form.onNew)}
-									size="icon-sm"
-									variant="ghost"
-								>
-									<Icons.Add aria-hidden="true" />
-								</Button>
-							) : null}
-						</>
+						<h2 className="flex-1 font-medium text-sm">
+							{t("activity.panel.title")}
+						</h2>
 					)}
 				</div>
 			</AnimatedSidebarHeader>
-			<AnimatedSidebarContent>
+			<AnimatedSidebarContent className="gap-4">
 				<RoutinesPanelBody
 					{...props}
+					isShowingClosedMissions={isShowingClosedMissions}
 					onEditRoutine={editOpenRoutine}
-					onNewRoutine={() => remember(EMPTY_OPENER, () => form?.onNew())}
+					onNewRoutine={() => remember(NEW_ROUTINE_OPENER, () => form?.onNew())}
 					onOpenRoutine={
 						detail &&
 						((routineId) => remember(routineId, () => detail.onOpen(routineId)))
+					}
+					onShowClosedMissions={() =>
+						remember(CLOSED_MISSIONS_OPENER, () =>
+							setShowingClosedMissions(true),
+						)
 					}
 				/>
 			</AnimatedSidebarContent>
@@ -336,7 +500,7 @@ const RoutinesPanelTrigger = (props: AnimatedSidebarTriggerProps) => {
 		<AnimatedSidebarTrigger
 			{...props}
 			aria-controls={ROUTINES_PANEL_ID}
-			aria-label={t("routines.panel.toggle")}
+			aria-label={t("activity.panel.toggle")}
 			className="size-8"
 		>
 			<Icons.Routine aria-hidden="true" className="size-4" />
@@ -350,6 +514,7 @@ export {
 	RoutinesPanel,
 	type RoutinesPanelDetail,
 	type RoutinesPanelForm,
+	type RoutinesPanelMissions,
 	type RoutinesPanelProps,
 	RoutinesPanelTrigger,
 }
