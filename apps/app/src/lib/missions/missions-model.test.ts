@@ -249,7 +249,7 @@ describe("withMissions", () => {
 
 describe("missionRingBadges", () => {
 	const ringOf = (mission?: AppSidebarBot["mission"]) =>
-		missionRingBadges([row({ mission })])[0].badge
+		missionRingBadges({ work: [row({ mission })] }).work[0].badge
 
 	it("lights the ring for a mission a person has to answer", () => {
 		expect(ringOf({ state: "waiting", count: 1 })).toBe("attention")

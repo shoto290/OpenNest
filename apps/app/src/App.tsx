@@ -498,25 +498,14 @@ export function App() {
 		],
 	)
 
-	const missionBadgesBySpace = useMemo(
-		() =>
-			Object.fromEntries(
-				Object.entries(rosterBotsBySpace).map(([spaceId, spaceRows]) => [
-					spaceId,
-					missionRingBadges(spaceRows),
-				]),
-			),
-		[rosterBotsBySpace],
-	)
-
 	const badgesBySpaceId = useMemo(
 		() =>
 			toSpaceBadges(
 				rosterBotsBySpace,
 				rosterConversationsBySpace,
-				missionBadgesBySpace,
+				missionRingBadges(rosterBotsBySpace),
 			),
-		[rosterBotsBySpace, rosterConversationsBySpace, missionBadgesBySpace],
+		[rosterBotsBySpace, rosterConversationsBySpace],
 	)
 
 	const isOverlayOpen =

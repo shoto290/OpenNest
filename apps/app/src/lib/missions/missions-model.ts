@@ -115,8 +115,13 @@ export const withMissions = <Row extends AppSidebarBot>(
 }
 
 export const missionRingBadges = (
-	rows: AppSidebarBot[],
-): { badge?: BotBadge }[] =>
-	rows.map((row) => ({
-		badge: row.mission && RING_BADGE_OF[row.mission.state],
-	}))
+	rowsBySpaceId: Record<string, AppSidebarBot[]>,
+): Record<string, { badge?: BotBadge }[]> =>
+	Object.fromEntries(
+		Object.entries(rowsBySpaceId).map(([spaceId, rows]) => [
+			spaceId,
+			rows.map((row) => ({
+				badge: row.mission && RING_BADGE_OF[row.mission.state],
+			})),
+		]),
+	)
