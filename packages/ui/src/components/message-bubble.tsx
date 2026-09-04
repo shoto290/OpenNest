@@ -67,6 +67,8 @@ function hasSurface(variant: MessageBubbleVariant) {
 	return variant !== "ghost" && variant !== "bare"
 }
 
+export const MESSAGE_BUBBLE_MAX_INLINE_SIZE = "max-w-[75%]"
+
 export function MessageBubble({
 	variant = "soft",
 	align,
@@ -85,7 +87,7 @@ export function MessageBubble({
 				data-variant={variant}
 				className={cn(
 					"group/bubble flex w-full flex-col",
-					hasSurface(variant) && "max-w-[75%]",
+					hasSurface(variant) && MESSAGE_BUBBLE_MAX_INLINE_SIZE,
 					resolvedAlign === "end" ? "items-end" : "items-start",
 					className,
 				)}

@@ -1,17 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
-import type { MissionRowModel } from "@workspace/ui/components/mission-row"
 import type { RoutinesPanelMissions } from "@workspace/ui/components/routines-panel"
 
+import type { Mission } from "./mission-contract"
 import { toMissionRows } from "./missions-model"
 import { missionsTransport } from "./missions-transport"
 
 import { useRosterClock } from "@/lib/bots/use-roster-clock"
 
-const NO_MISSIONS: MissionRowModel[] = []
+const NO_MISSIONS: Mission[] = []
 
 export type ConversationMissionsRead = {
-	missions: RoutinesPanelMissions
+	panel: RoutinesPanelMissions
+	missions: Mission[]
 	hasFailed: boolean
 	reload: () => void
 }
@@ -19,8 +20,8 @@ export type ConversationMissionsRead = {
 export const useMissions = (
 	conversationId: string | null,
 ): ConversationMissionsRead => {
-	const [running, setRunning] = useState<MissionRowModel[]>(NO_MISSIONS)
-	const [closed, setClosed] = useState<MissionRowModel[]>(NO_MISSIONS)
+	const [running, setRunning] = useState<Mission[]>(NO_MISSIONS)
+	const [closed, setClosed] = useState<Mission[]>(NO_MISSIONS)
 	const [hasFailed, setFailed] = useState(false)
 	const reads = useRef(0)
 	const now = useRosterClock()
@@ -39,8 +40,8 @@ export const useMissions = (
 					return
 				}
 
-				setRunning(toMissionRows(listed.open))
-				setClosed(toMissionRows(listed.done))
+				setRunning(listed.open)
+				setClosed(listed.done)
 				setFailed(false)
 			},
 			() => {
@@ -67,12 +68,18 @@ export const useMissions = (
 		}
 	}, [reload])
 
-	return useMemo(
+	const panel = useMemo<RoutinesPanelMissions>(
 		() => ({
-			missions: { running, closed, now },
-			hasFailed,
-			reload,
+			running: toMissionRows(running),
+			closed: toMissionRows(closed),
+			now,
 		}),
-		[running, closed, now, hasFailed, reload],
+		[running, closed, now],
+	)
+	const missions = useMemo(() => [...running, ...closed], [running, closed])
+
+	return useMemo(
+		() => ({ panel, missions, hasFailed, reload }),
+		[panel, missions, hasFailed, reload],
 	)
 }

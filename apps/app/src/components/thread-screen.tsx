@@ -15,6 +15,7 @@ import {
 	MessageQuote,
 	type QuotedMessage,
 } from "@workspace/ui/components/message-quote"
+import { MissionTurn } from "@workspace/ui/components/mission-turn"
 import {
 	PINNED_AVATAR_SIZE,
 	type PinnedMessage,
@@ -110,6 +111,14 @@ import type { SpeakingBot } from "@/lib/conversations/conversation-controller"
 import { leadOf } from "@/lib/conversations/roster-conversations"
 import type { Bot } from "@/lib/conversations/store-contract"
 import { useConversation } from "@/lib/conversations/use-conversation"
+import type { Mission } from "@/lib/missions/mission-contract"
+import { toMissionFace } from "@/lib/missions/mission-thread-model"
+import {
+	type PlacedMission,
+	placeMissions,
+} from "@/lib/missions/mission-transcript"
+import { toMissionCard } from "@/lib/missions/missions-model"
+import { useMissions } from "@/lib/missions/use-missions"
 import type { ReportedRunsByTurnId } from "@/lib/routines/routine-contract"
 
 type WorkingBotProps = BotStopProps & {
@@ -502,6 +511,43 @@ const toRunRows = ({
 		),
 	}))
 
+type MissionCardRowsProps = {
+	runRows: TranscriptItem[]
+	placed: PlacedMission[]
+	faceOf: ThreadNaming["faceOf"]
+	onOpen: (missionId: string) => void
+}
+
+const toMissionCardRow = (
+	mission: Mission,
+	face: ThreadFace,
+	onOpen: (missionId: string) => void,
+): TranscriptItem => ({
+	key: `mission-${mission.id}`,
+	render: () => (
+		<MissionTurn
+			mission={toMissionCard(mission, toMissionFace(face))}
+			onOpen={onOpen}
+		/>
+	),
+})
+
+const withMissionCards = ({
+	runRows,
+	placed,
+	faceOf,
+	onOpen,
+}: MissionCardRowsProps): TranscriptItem[] =>
+	runRows.flatMap((runRow, runIndex) => [
+		runRow,
+		...placed.flatMap(({ mission, runIndex: opened }) => {
+			const face = faceOf(mission.botId)
+			return opened === runIndex && face
+				? [toMissionCardRow(mission, face, onOpen)]
+				: []
+		}),
+	])
+
 type BotThreadTailProps = {
 	thread: LoadedBotThread
 	face: ThreadFace
@@ -733,6 +779,7 @@ function ThreadView({
 	)
 	const pins = usePinnedMessages(controller, state.conversationId)
 	const routinesScope = routinesScopeOf(facts, state.conversationId)
+	const missions = useMissions(routinesScope.conversationId)
 	const { highlightedMessageId, jumpToMessage } = useThreadJump(
 		controller,
 		scrollerRef,
@@ -822,6 +869,12 @@ function ThreadView({
 		speakerStops: speakerStopsOf(thread),
 		toQuote,
 	})
+	const transcriptRows = withMissionCards({
+		faceOf,
+		onOpen: onOpenMission,
+		placed: placeMissions(runs, missions.missions),
+		runRows,
+	})
 	const refusedTarget = repliedToRefusal
 		? quotes.get(repliedToRefusal)
 		: undefined
@@ -895,7 +948,7 @@ function ThreadView({
 					: undefined
 			}
 			rootRef={rootRef}
-			rows={runRows}
+			rows={transcriptRows}
 			scrollerRef={scrollerRef}
 			transcriptKey={facts.id}
 		>
@@ -920,7 +973,11 @@ function ThreadView({
 
 	return (
 		<RosterProvider bots={bots}>
-			<ThreadRoutines {...routinesScope} onOpenMission={onOpenMission}>
+			<ThreadRoutines
+				{...routinesScope}
+				missions={missions}
+				onOpenMission={onOpenMission}
+			>
 				{layout}
 			</ThreadRoutines>
 		</RosterProvider>

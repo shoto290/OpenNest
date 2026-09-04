@@ -1,6 +1,13 @@
 // @vitest-environment happy-dom
 
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
+import {
+	act,
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	within,
+} from "@testing-library/react"
 import { createElement } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -244,12 +251,16 @@ const threadOf = ({
 
 const NO_BOT_RECORDS: Bot[] = []
 
-const screenOf = (thread: Thread, bots: Bot[] = NO_BOT_RECORDS) =>
+const screenOf = (
+	thread: Thread,
+	bots: Bot[] = NO_BOT_RECORDS,
+	onOpenMission: (missionId: string) => void = () => undefined,
+) =>
 	createElement(ThreadScreen, {
 		attachments,
 		bots,
 		drafts: createDraftsController(),
-		onOpenMission: () => undefined,
+		onOpenMission,
 		readerName: "Reader",
 		thread,
 	})
@@ -452,6 +463,13 @@ const SOLO_MISSION: Mission = {
 	closedAt: null,
 }
 
+const CLOSED_SOLO_MISSION: Mission = {
+	...SOLO_MISSION,
+	id: "m-2",
+	state: "done",
+	closedAt: 1,
+}
+
 const SCHEDULE_SOURCE = {
 	id: "schedule",
 	title: "Schedule",
@@ -475,6 +493,14 @@ const withoutMainConversation = (thread: BotThread): BotThread => ({
 
 const turnGroups = () =>
 	document.querySelectorAll('[data-slot="chat-turn-group"]')
+
+const missionCards = () =>
+	screen.queryAllByRole("article", { name: "mission opened" })
+
+const missionCard = () =>
+	screen.getByRole("article", { name: "mission opened" })
+
+const missionsSection = () => screen.getByRole("region", { name: "Missions" })
 
 const openRoutinesPanel = async () => {
 	fireEvent.click(screen.getByRole("button", { name: ROUTINES_TOGGLE }))
@@ -631,12 +657,88 @@ describe("ThreadScreen", () => {
 
 		await openRoutinesPanel()
 		expect(listMissions).toHaveBeenCalledWith("c-bot-1")
-		expect(screen.getByText(SOLO_MISSION.objective)).toBeTruthy()
+		expect(
+			within(missionsSection()).getByText(SOLO_MISSION.objective),
+		).toBeTruthy()
 
 		announce.toPanel?.({ missionId: SOLO_MISSION.id, state: "waiting_human" })
 		await settle()
 
 		expect(listMissions).toHaveBeenCalledTimes(2)
+	})
+
+	it("shows a mission of the conversation under the run that opened it", async () => {
+		listMissions.mockResolvedValue({ open: [SOLO_MISSION], done: [] })
+		render(screenOf(threadOf({ id: "bot-1", name: "Nyx", said: "held" })))
+		await settle()
+
+		const card = missionCard()
+		expect(within(card).getByText(SOLO_MISSION.objective)).toBeTruthy()
+		expect(within(card).getByText(SOLO_MISSION.ticket.externalId)).toBeTruthy()
+		expect(
+			turnGroups()[0].compareDocumentPosition(card) &
+				Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy()
+	})
+
+	it("opens the mission thread the reader activates in the transcript", async () => {
+		const openMission = vi.fn()
+		listMissions.mockResolvedValue({ open: [SOLO_MISSION], done: [] })
+		render(
+			screenOf(
+				threadOf({ id: "bot-1", name: "Nyx", said: "held" }),
+				NO_BOT_RECORDS,
+				openMission,
+			),
+		)
+		await settle()
+
+		fireEvent.click(within(missionCard()).getByRole("button"))
+
+		expect(openMission).toHaveBeenCalledWith(SOLO_MISSION.id)
+	})
+
+	it("carries the new state of a mission on its card", async () => {
+		const announce: { toPanel: ((changed: MissionChanged) => void) | null } = {
+			toPanel: null,
+		}
+		listenToMissions.mockImplementation((listener) => {
+			announce.toPanel = listener
+			return Promise.resolve(() => undefined)
+		})
+		listMissions.mockResolvedValue({ open: [SOLO_MISSION], done: [] })
+		render(screenOf(threadOf({ id: "bot-1", name: "Nyx", said: "held" })))
+		await settle()
+
+		expect(within(missionCard()).getByText("Working")).toBeTruthy()
+
+		listMissions.mockResolvedValue({
+			open: [{ ...SOLO_MISSION, state: "waiting_human" }],
+			done: [],
+		})
+		announce.toPanel?.({ missionId: SOLO_MISSION.id, state: "waiting_human" })
+		await settle()
+
+		expect(within(missionCard()).getByText("Waiting for you")).toBeTruthy()
+	})
+
+	it("keeps a closed mission in the transcript with the state it ended on", async () => {
+		listMissions.mockResolvedValue({ open: [], done: [CLOSED_SOLO_MISSION] })
+		render(screenOf(threadOf({ id: "bot-1", name: "Nyx", said: "held" })))
+		await settle()
+
+		const card = within(missionCard()).getByRole("button")
+		expect(card.getAttribute("data-closed")).toBe("true")
+		expect(within(card).getByText("Done")).toBeTruthy()
+	})
+
+	it("leaves the transcript without a mission card when the missions could not be read", async () => {
+		listMissions.mockRejectedValue(new Error("refused"))
+		render(screenOf(threadOf({ id: "bot-1", name: "Nyx", said: "held" })))
+		await settle()
+
+		expect(missionCards()).toHaveLength(0)
+		expect(screen.getByText("held")).toBeTruthy()
 	})
 
 	it("names the missions when they are the read that failed", async () => {
