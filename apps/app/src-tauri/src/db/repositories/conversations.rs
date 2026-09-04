@@ -498,17 +498,6 @@ impl ConversationsRepository {
 		self.call(move |connection| Ok(seats_of(connection, &conversation_id))).await?
 	}
 
-	pub async fn is_topic(&self, id: String) -> Result<bool, DatabaseError> {
-		self.call(move |connection| {
-			Ok(connection
-				.prepare_cached("SELECT 1 FROM conversations WHERE id = ?1 AND kind = ?2")?
-				.query_row(params![id, TOPIC_KIND], |_| Ok(()))
-				.optional()?
-				.is_some())
-		})
-		.await
-	}
-
 	pub async fn instructions(&self, conversation_id: String) -> Result<String, DatabaseError> {
 		self.call(move |connection| {
 			let stored: Option<String> = connection

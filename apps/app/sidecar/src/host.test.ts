@@ -57,10 +57,10 @@ const aHost = (session: string) => {
 
 const aSilentHost = (session: string) => {
 	const frames: SessionFrame[] = []
-	openHostChannel(session, (frame) => {
+	const emit = openHostChannel(session, (frame) => {
 		frames.push(frame)
 	})
-	return frames
+	return { frames, emit }
 }
 
 describe("the host channel", () => {
@@ -130,7 +130,7 @@ describe("the host channel", () => {
 	})
 
 	it("settles a request the host never answered when the session closes", async () => {
-		const frames = aSilentHost("k3")
+		const { frames } = aSilentHost("k3")
 
 		const asking = askHost("k3", { subtype: "routine", operation: "list" })
 		closeHostChannel("k3")
@@ -139,6 +139,36 @@ describe("the host channel", () => {
 		expect(frames).toHaveLength(1)
 		expect(refused).toBeInstanceOf(HostRefusal)
 		expect((refused as HostRefusal).error.kind).toBe("undeliverable")
+	})
+
+	it("settles a request the session left awaiting when it emits a closed frame", async () => {
+		const { emit } = aSilentHost("k4")
+
+		const asking = askHost("k4", { subtype: "routine", operation: "list" })
+		emit({ type: "closed", detail: "the query threw" })
+		const refused = await asking.catch((error: unknown) => error)
+
+		expect(refused).toBeInstanceOf(HostRefusal)
+		expect((refused as HostRefusal).error.kind).toBe("undeliverable")
+		expect(
+			await askHost("k4", { subtype: "routine", operation: "list" }).catch(
+				(error: unknown) => error,
+			),
+		).toBeInstanceOf(HostRefusal)
+	})
+
+	it("settles what the channel it replaces was still awaiting", async () => {
+		aSilentHost("k5")
+
+		const asking = askHost("k5", { subtype: "routine", operation: "list" })
+		const { frames } = aSilentHost("k5")
+		const refused = await asking.catch((error: unknown) => error)
+
+		expect(refused).toBeInstanceOf(HostRefusal)
+		expect((refused as HostRefusal).error.kind).toBe("undeliverable")
+		expect(frames).toHaveLength(0)
+
+		closeHostChannel("k5")
 	})
 
 	it("refuses a request for a session that holds no channel", async () => {

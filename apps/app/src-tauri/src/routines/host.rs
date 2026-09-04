@@ -11,8 +11,6 @@ use crate::agent::session::{Answering, HostRequests};
 use crate::conversations::commands::ready;
 use crate::db;
 
-const SOLO_THREAD: &str = "a routine lives in a conversation, not in a solo thread";
-
 const NO_DATABASE: &str = "the store this session writes to is not open";
 
 #[derive(Debug)]
@@ -45,7 +43,6 @@ impl<R: Runtime> RoutineHost<R> {
 		let Asked::Routine { operation, payload } = read(request)?;
 		let state = self.state()?;
 		let database = ready(&state)?;
-		self.refuse_a_solo_thread(database).await?;
 		match operation {
 			Operation::List => {
 				let _: Listed = read(payload)?;
@@ -92,16 +89,6 @@ impl<R: Runtime> RoutineHost<R> {
 		self.app
 			.try_state::<db::DatabaseState>()
 			.ok_or_else(|| RoutineError::Unexpected { detail: NO_DATABASE.to_owned() })
-	}
-
-	async fn refuse_a_solo_thread(&self, database: &db::Database) -> Result<(), RoutineError> {
-		if database.conversations().is_topic(self.conversation_id.clone()).await? {
-			return Ok(());
-		}
-		Err(RoutineError::NotInAConversation {
-			conversation_id: self.conversation_id.clone(),
-			reason: SOLO_THREAD.to_owned(),
-		})
 	}
 
 	async fn refuse_a_routine_it_does_not_own(
@@ -436,31 +423,25 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn a_solo_thread_refuses_every_routine_operation_and_writes_nothing() {
+	async fn a_solo_conversation_is_served_like_any_other() {
 		let app = a_host("solo-thread").await;
-		let held = a_routine_of(&app, "c1", "b1").await;
 		let host = serving(&app, "m1");
 
-		let asked = [
-			json!({ "subtype": "routine", "operation": "list" }),
-			a_create(json!({})),
-			an_edit(&held.id),
-			naming("runNow", &held.id),
-			naming("delete", &held.id),
-		];
-		for asked in asked {
-			let refused = refusal(host.answer(asked).await);
+		let created = host.answer(a_create(json!({}))).await.expect("it is created");
+		let id = created["id"].as_str().expect("the routine is named").to_owned();
+		let held = host
+			.answer(json!({ "subtype": "routine", "operation": "list" }))
+			.await
+			.expect("the routines are listed");
+		let updated = host.answer(an_edit(&id)).await.expect("it is updated");
+		let ran = host.answer(naming("runNow", &id)).await.expect("it runs now");
+		host.answer(naming("delete", &id)).await.expect("it is deleted");
 
-			assert_eq!(refused["kind"], json!("notInAConversation"));
-			assert_eq!(refused["conversationId"], json!("m1"));
-			assert!(
-				refused["reason"]
-					.as_str()
-					.is_some_and(|reason| reason.contains("lives in a conversation")),
-				"got {refused}"
-			);
-		}
-		assert_eq!(listed(&app, "c1").await, vec![held]);
+		assert_eq!(created["conversationId"], json!("m1"));
+		assert_eq!(held.as_array().map(Vec::len), Some(1), "got {held}");
+		assert_eq!(updated["title"], json!("Renamed"));
+		assert_eq!(ran["kind"], json!("started"));
+		assert!(listed(&app, "m1").await.is_empty());
 
 		cleaned(&app);
 	}

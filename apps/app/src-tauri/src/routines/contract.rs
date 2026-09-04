@@ -336,8 +336,6 @@ pub enum RoutineError {
 	#[serde(rename_all = "camelCase")]
 	RoutineOfAnotherBot { id: String, bot_id: String },
 	#[serde(rename_all = "camelCase")]
-	NotInAConversation { conversation_id: String, reason: String },
-	#[serde(rename_all = "camelCase")]
 	UnreadableRequest { detail: String },
 	#[serde(rename_all = "camelCase")]
 	UnknownTurn { id: String },

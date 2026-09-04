@@ -236,16 +236,17 @@ no turn, and it does not promote a session to `Running`.
 - `list` answers every routine of that conversation, whatever bot owns one;
 - `update`, `runNow` and `delete` refuse a routine of another conversation or of
   another bot, that routine named;
-- a session whose conversation is not a topic refuses every operation: a routine
-  lives in a conversation, not in a solo thread;
+- every conversation is served the same way, a bot's own solo thread included:
+  nothing here reads the kind of a conversation;
 - every write emits `routine://changed` with the conversation id, whatever asked
   for it.
 
 An `error` is a `RoutineError`, the same taxonomy the front's own invokes are
 refused with. A session opened with no host attached answers every request with
-one, so a request is never left hanging. So does a close: the sidecar settles
-every request it still awaits as `undeliverable`, since a host answer has no
-deadline of its own.
+one, so a request is never left hanging. So does the end of a session: a `close`
+command, a `closed` frame, or an `open` reusing the same session key settles
+every request that channel still awaits as `undeliverable`, since a host answer
+has no deadline of its own.
 
 ## Stop and shutdown
 

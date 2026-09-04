@@ -39,8 +39,18 @@ type Channel = {
 
 const channels = new Map<string, Channel>()
 
-export const openHostChannel = (session: string, emit: EmitFrame) => {
-	channels.set(session, { emit, awaiting: new Map() })
+export const openHostChannel = (
+	session: string,
+	write: EmitFrame,
+): EmitFrame => {
+	closeHostChannel(session)
+	channels.set(session, { emit: write, awaiting: new Map() })
+	return (frame) => {
+		write(frame)
+		if (frame.type === "closed") {
+			closeHostChannel(session)
+		}
+	}
 }
 
 export const askHost = (session: string, request: HostRequest) =>

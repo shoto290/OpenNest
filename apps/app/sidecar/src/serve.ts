@@ -68,7 +68,7 @@ export const serve = async (requestedId?: string) => {
 	const opening = new Map<string, Promise<AgentSession | undefined>>()
 
 	const open = async (command: Command, session: string) => {
-		const emit = emitter(session)
+		const emit = openHostChannel(session, emitter(session))
 		try {
 			const opened = await provider.open(sessionRequest(command), emit)
 			emit({ type: "opened" })
@@ -123,7 +123,6 @@ export const serve = async (requestedId?: string) => {
 		}
 		switch (command.type) {
 			case "open":
-				openHostChannel(session, emitter(session))
 				opening.set(session, open(command, session))
 				return
 			case "prompt":
