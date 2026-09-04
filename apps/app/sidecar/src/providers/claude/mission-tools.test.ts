@@ -144,9 +144,9 @@ describe("missionTools", () => {
 	it("tells the agent only a git checkout is taken as a workspace path", () => {
 		const armed = z.toJSONSchema(
 			z.object(toolNamed(SESSION, "mission_watch").inputSchema),
-		) as { properties: { workspacePath: { description: string } } }
+		)
 
-		const said = armed.properties.workspacePath.description
+		const said = JSON.stringify(armed.properties?.workspacePath)
 
 		expect(said).toContain("git checkout")
 		expect(said).toContain("Superset worktree")
