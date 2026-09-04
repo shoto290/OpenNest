@@ -42,9 +42,7 @@ const MissionMachineLine = ({ event, now }: MissionEventProps) => {
 			className="flex w-full min-w-0 items-center gap-1.5 text-muted-foreground text-xs"
 			data-slot="mission-machine-line"
 		>
-			<span className="max-w-24 shrink truncate font-medium">
-				{event.source}
-			</span>
+			<span className="max-w-24 truncate font-medium">{event.source}</span>
 			<span className="min-w-0 flex-1 truncate">
 				{t(`missions.event.${event.kind}`)}
 			</span>
