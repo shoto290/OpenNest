@@ -111,7 +111,7 @@ export const startMissionRunDriver = ({
 	const starting = new Set<string>()
 	const states = createMissionStates()
 
-	const refuseWith = (reason: unknown) => {
+	const raiseFailure = (reason: unknown) => {
 		console.error("mission run driver: the run was refused", reason)
 		reportFailure({
 			title: i18n.t("chat:missions.failure.run.title"),
@@ -135,7 +135,7 @@ export const startMissionRunDriver = ({
 		const { scope } = held
 		end(held)
 		await driver.cancelTurn(scope).catch(reporting("agent_cancel_turn"))
-		refuseWith(reason)
+		raiseFailure(reason)
 	}
 
 	const openScope = async ({ mission }: MissionRunCall) => {
@@ -171,7 +171,7 @@ export const startMissionRunDriver = ({
 			if (held) {
 				end(held)
 			}
-			refuseWith(`the mission run could not start: ${detailOf(thrown)}`)
+			raiseFailure(`the mission run could not start: ${detailOf(thrown)}`)
 		}
 	}
 
@@ -191,7 +191,7 @@ export const startMissionRunDriver = ({
 				await begin(call)
 			}
 		} catch (thrown) {
-			refuseWith(`the mission could not be read: ${detailOf(thrown)}`)
+			raiseFailure(`the mission could not be read: ${detailOf(thrown)}`)
 		} finally {
 			starting.delete(changed.missionId)
 		}
@@ -214,13 +214,13 @@ export const startMissionRunDriver = ({
 		end(held)
 
 		if (ended.outcome !== "completed") {
-			return refuseWith(`the mission run's turn was ${ended.outcome}`)
+			return raiseFailure(`the mission run's turn was ${ended.outcome}`)
 		}
 
 		const report = readRunReport(ended.structuredOutput)
 
 		if (!report) {
-			return refuseWith("the mission run ended with no structured output")
+			return raiseFailure("the mission run ended with no structured output")
 		}
 
 		if (report.outcome === "nothing") {
@@ -230,7 +230,7 @@ export const startMissionRunDriver = ({
 		try {
 			await writeReport(held, report.text)
 		} catch (thrown) {
-			refuseWith(`the report could not be written: ${detailOf(thrown)}`)
+			raiseFailure(`the report could not be written: ${detailOf(thrown)}`)
 		}
 	}
 
@@ -239,7 +239,7 @@ export const startMissionRunDriver = ({
 			return
 		}
 		end(held)
-		refuseWith(`the mission run's session failed with ${error.kind}`)
+		raiseFailure(`the mission run's session failed with ${error.kind}`)
 	}
 
 	const runAt = (scope: RuntimeScope | null) =>

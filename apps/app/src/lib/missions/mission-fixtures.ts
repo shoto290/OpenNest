@@ -27,13 +27,13 @@ export const aMission = (held: Partial<Mission> = {}): Mission => ({
 	...held,
 })
 
-export type MissionEventSeed = {
+type MissionEventSeed = {
 	kind: MissionEventKind
 	source: string
 	payload?: unknown
 }
 
-export const aMissionEvent = (
+const aMissionEvent = (
 	{ kind, source, payload = {} }: MissionEventSeed,
 	position = 0,
 ): MissionEvent => ({

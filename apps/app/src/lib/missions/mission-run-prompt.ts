@@ -34,7 +34,7 @@ const messageIn = (payload: unknown): string | null => {
 		: null
 }
 
-export const agentLastMessageIn = (events: MissionEvent[]): string | null =>
+const agentLastMessageIn = (events: MissionEvent[]): string | null =>
 	[...events]
 		.reverse()
 		.filter((event) => event.kind === "agent_asked")
