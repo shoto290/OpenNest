@@ -124,9 +124,6 @@ def call():
 	}
 	body = json.dumps(payload)
 	if len(body.encode("utf-8")) > MAX_BODY_BYTES:
-		payload["excerpt"] = ""
-		body = json.dumps(payload)
-	if len(body.encode("utf-8")) > MAX_BODY_BYTES:
 		return None
 	return url, key, uuid.uuid4().hex, body
 
