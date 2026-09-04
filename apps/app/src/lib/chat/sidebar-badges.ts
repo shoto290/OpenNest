@@ -16,6 +16,12 @@ type Badged<Row> = Row & BadgeCarrier
 
 const STRONGEST_FIRST: ShownBadge[] = ["attention", "failed", "done"]
 
+export const strongerBadge = (
+	one: ShownBadge | undefined,
+	other: ShownBadge | undefined,
+): ShownBadge | undefined =>
+	STRONGEST_FIRST.find((badge) => badge === one || badge === other)
+
 const shownBadge = (badge: BotBadge | undefined): ShownBadge | undefined =>
 	badge === undefined || badge === "none" ? undefined : badge
 

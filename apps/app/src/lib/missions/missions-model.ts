@@ -11,6 +11,7 @@ import type {
 } from "./mission-contract"
 
 import { rosterTimestamp } from "../bots/roster-timestamp"
+import { strongerBadge } from "../chat/sidebar-badges"
 
 const BADGE_BY_STATE: Record<MissionState, BotBadge | null> = {
 	working: null,
@@ -99,7 +100,7 @@ const drivenBy = <Row extends AppSidebarBot>(
 				lastMessage: mission.objective,
 				timestamp: rosterTimestamp(mission.openedAt, now),
 				status: isBotTurn(mission.state) ? "onMission" : "idle",
-				badge: BADGE_OF[mission.state],
+				badge: strongerBadge(row.badge, BADGE_OF[mission.state]),
 			}
 		: row
 

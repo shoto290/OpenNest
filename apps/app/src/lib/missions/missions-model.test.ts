@@ -232,6 +232,26 @@ describe("withMissions", () => {
 		expect(lineFor("waiting_bot").badge).toBeUndefined()
 	})
 
+	const badgeUnder = (state: MissionState, held: AppSidebarBot["badge"]) =>
+		withMissions([row({ badge: held })], { "b-1": mission({ state }) }, NOW)[0]
+			.badge
+
+	it("keeps the chat badge when its mission carries none", () => {
+		expect(badgeUnder("working", "attention")).toBe("attention")
+		expect(badgeUnder("waiting_bot", "done")).toBe("done")
+	})
+
+	it("shows the stronger of the chat badge and the mission badge", () => {
+		expect(badgeUnder("waiting_human", "done")).toBe("attention")
+		expect(badgeUnder("ready_to_merge", "attention")).toBe("attention")
+		expect(badgeUnder("failed", "done")).toBe("failed")
+	})
+
+	it("shows the mission badge when the chat carries none", () => {
+		expect(badgeUnder("waiting_human", undefined)).toBe("attention")
+		expect(badgeUnder("working", undefined)).toBeUndefined()
+	})
+
 	it("shimmers the line its mission still moves", () => {
 		expect(lineFor("working").status).toBe("onMission")
 		expect(lineFor("waiting_bot").status).toBe("onMission")

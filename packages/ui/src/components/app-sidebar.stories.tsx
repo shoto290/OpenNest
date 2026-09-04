@@ -1023,6 +1023,56 @@ export const MissionLines = meta.story({
 	},
 })
 
+export const MissionUnderChatBadge = meta.story({
+	args: {
+		bots: [{ ...MISSION_ROSTER[3], badge: "attention" }, ROSTER[4]],
+		selectedBotId: "beacon",
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A bot running a mission that has asked for nothing, on a row its chat has flagged for the reader anyway. Check the row keeps the attention dot: a mission with the ball says nothing about the badge, so it never takes back a mark the conversation put there. Check the row still reads as a mission line under it — the ticket pill, the objective shimmering, the time the mission opened — so the dot and the line answer two different questions at once. Pick `MissionLines` for the four states alone, `MissionBadgeOverChatBadge` for the case where the mission has the stronger news.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const rows = rowsIn(canvasElement)
+
+		await expect(badgeIn(rows[0])).toBe("attention")
+		await expect(slotIn(rows[0], "roster-row-badge")).toHaveTextContent(
+			"OPE-31",
+		)
+		await expect(slotIn(rows[0], "text-shimmer")).toBeInTheDocument()
+		await expect(slotIn(rows[0], "roster-row-preview")).toHaveTextContent(
+			"Mirror the mission board into the tray menu.",
+		)
+	},
+})
+
+export const MissionBadgeOverChatBadge = meta.story({
+	args: {
+		bots: [MISSION_ROSTER[0], MISSION_ROSTER[2]],
+		selectedBotId: "beacon",
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Two rows where the mission has louder news than the chat under it: the first waits on the reader, the second failed, and both rooms had only something done to report. Check each row shows the stronger of the two marks under the one order the panel already uses — attention, then failed, then done — and never two dots at once. A row carries a single badge whatever it has to say, so the reader runs one column of marks down the list and takes the worst news per bot from it. Pick `MissionUnderChatBadge` for the mission that yields to the chat, `Badges` for the same three marks from a chat alone.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const rows = rowsIn(canvasElement)
+
+		await expect(rows.map(badgeIn)).toEqual(["attention", "failed"])
+		for (const row of rows) {
+			await expect(slotsIn(row, "bot-activity-dot")).toHaveLength(1)
+		}
+	},
+})
+
 export const MissionRaised = meta.story({
 	args: { bots: RAISED_MISSION_ROSTER, selectedBotId: "flint" },
 	parameters: {
