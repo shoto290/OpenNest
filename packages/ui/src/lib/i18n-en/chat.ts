@@ -498,6 +498,41 @@ const chat = {
 				"A routine runs a bot on its own, on a schedule or when a file it watches changes.",
 		},
 	},
+	missions: {
+		state: {
+			working: "Working",
+			waiting_bot: "Waiting for the bot",
+			waiting_human: "Waiting for you",
+			ready_to_merge: "Ready to merge",
+			failed: "Failed",
+			done: "Done",
+		},
+		event: {
+			opened: "Mission opened",
+			note: "Note recorded",
+			agent_asked: "Question sent to the agent",
+			answered: "The agent answered",
+			escalated: "Escalated to a human",
+			ready: "Ready to merge",
+			failed: "Mission failed",
+			closed: "Mission closed",
+		},
+		header: {
+			tools: "Tools",
+		},
+		feed: {
+			label: "Mission thread",
+		},
+		composer: {
+			placeholder: "Answer this mission…",
+		},
+		failure: {
+			read: {
+				title: "The mission could not be read",
+				description: "Nothing was changed. Try again to read this mission.",
+			},
+		},
+	},
 } as const
 
 export { chat }

@@ -1,3 +1,9 @@
+import type {
+	MissionBot,
+	MissionEventModel,
+	MissionTicket,
+} from "@workspace/ui/components/mission"
+import type { MissionCardModel } from "@workspace/ui/components/mission-card"
 import type { MissionRowModel } from "@workspace/ui/components/mission-row"
 
 export const MISSIONS_READ_AT = Date.parse("2026-03-04T09:30:00Z")
@@ -65,3 +71,103 @@ export const CLOSED_MISSIONS: MissionRowModel[] = [
 ]
 
 export const NO_MISSIONS: MissionRowModel[] = []
+
+
+export const MISSION_NOW = new Date("2026-03-04T09:30:00Z").getTime()
+
+const minutesBefore = (minutes: number) => MISSION_NOW - minutes * 60_000
+
+export const MISSION_BOT: MissionBot = {
+	name: "Ada Martin",
+	animal: "owl",
+	seed: "bot-ada-martin",
+}
+
+export const MISSION_TICKET: MissionTicket = {
+	externalId: "OPE-30",
+	title: "Mission thread screen and mission card in the origin",
+}
+
+export const MISSION_TOOLS = ["Repository", "Terminal", "Web search"]
+
+export const MISSION_OBJECTIVE =
+	"Ship the mission thread and the card that summarises it in the conversation it came from."
+
+export const MISSION_EVENTS: MissionEventModel[] = [
+	{
+		id: "event-opened",
+		kind: "opened",
+		source: "claude-code",
+		createdAt: minutesBefore(48),
+	},
+	{
+		id: "event-note",
+		kind: "note",
+		source: "claude-code",
+		createdAt: minutesBefore(41),
+		text: "Read the Rust contract and mirrored every kind and every state before touching a pixel.",
+	},
+	{
+		id: "event-agent-asked",
+		kind: "agent_asked",
+		source: "claude-code",
+		createdAt: minutesBefore(33),
+	},
+	{
+		id: "event-answered",
+		kind: "answered",
+		source: "claude-code",
+		createdAt: minutesBefore(30),
+	},
+	{
+		id: "event-escalated",
+		kind: "escalated",
+		source: "claude-code",
+		createdAt: minutesBefore(12),
+		text: "The payload carries no field this design can trust yet. Which one names the ticket?",
+	},
+	{
+		id: "event-ready",
+		kind: "ready",
+		source: "claude-code",
+		createdAt: minutesBefore(6),
+	},
+	{
+		id: "event-failed",
+		kind: "failed",
+		source: "claude-code",
+		createdAt: minutesBefore(4),
+	},
+	{
+		id: "event-closed",
+		kind: "closed",
+		source: "claude-code",
+		createdAt: minutesBefore(1),
+	},
+]
+
+export const WAITING_MISSION_CARD: MissionCardModel = {
+	id: "mission-ope-30",
+	bot: MISSION_BOT,
+	objective: MISSION_OBJECTIVE,
+	ticket: MISSION_TICKET,
+	state: "waiting_human",
+	isClosed: false,
+}
+
+export const CLOSED_MISSION_CARD: MissionCardModel = {
+	id: "mission-ope-25",
+	bot: {
+		name: "Noor Beltran",
+		animal: "rabbit",
+		seed: "bot-noor-beltran",
+	},
+	objective:
+		"Store a mission, its thread, its events and the commands over them.",
+	ticket: {
+		externalId: "OPE-25",
+		title: "Mission storage and its command surface",
+	},
+	state: "done",
+	isClosed: true,
+}

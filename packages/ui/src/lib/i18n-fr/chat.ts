@@ -513,6 +513,41 @@ const chat = {
 				"Une routine fait travailler un bot toute seule, sur un horaire ou quand un fichier qu'elle surveille change.",
 		},
 	},
+	missions: {
+		state: {
+			working: "En cours",
+			waiting_bot: "En attente du bot",
+			waiting_human: "En attente de vous",
+			ready_to_merge: "Prête à fusionner",
+			failed: "En échec",
+			done: "Terminée",
+		},
+		event: {
+			opened: "Mission ouverte",
+			note: "Note enregistrée",
+			agent_asked: "Question envoyée à l'agent",
+			answered: "L'agent a répondu",
+			escalated: "Remontée à un humain",
+			ready: "Prête à fusionner",
+			failed: "Mission en échec",
+			closed: "Mission fermée",
+		},
+		header: {
+			tools: "Outils",
+		},
+		feed: {
+			label: "Fil de la mission",
+		},
+		composer: {
+			placeholder: "Répondre à cette mission…",
+		},
+		failure: {
+			read: {
+				title: "La mission n'a pas pu être lue",
+				description: "Rien n'a été modifié. Réessayez pour lire cette mission.",
+			},
+		},
+	},
 } as const
 
 export { chat }
