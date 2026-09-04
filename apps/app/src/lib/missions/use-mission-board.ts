@@ -10,12 +10,6 @@ import {
 } from "./missions-model"
 import { missionsTransport } from "./missions-transport"
 
-const raiseBoardFailure = () =>
-	raiseFailureNotice({
-		title: i18n.t("bots:roster.mission.unavailable.title"),
-		description: i18n.t("bots:roster.mission.unavailable.description"),
-	})
-
 export const useMissionBoard = (): DrivingMissions => {
 	const [driving, setDriving] = useState<DrivingMissions>(NO_MISSIONS)
 
@@ -24,7 +18,10 @@ export const useMissionBoard = (): DrivingMissions => {
 			(board) => setDriving(drivingMissions(board)),
 			() => {
 				setDriving(NO_MISSIONS)
-				raiseBoardFailure()
+				raiseFailureNotice({
+					title: i18n.t("bots:roster.mission.unavailable.title"),
+					description: i18n.t("bots:roster.mission.unavailable.description"),
+				})
 			},
 		)
 	}, [])
