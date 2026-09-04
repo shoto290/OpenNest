@@ -9,7 +9,7 @@ use super::conversations::open_thread_under;
 use crate::db::{Access, DatabaseError};
 use crate::missions::contract::{
 	ConversationMissions, Mission, MissionDetail, MissionDraft, MissionEntry, MissionError,
-	MissionEvent, MissionEventKind, MissionState, Ticket,
+	MissionEvent, MissionEventKind, MissionState, MissionWatch, Ticket, WatchedMission,
 };
 
 const MAX_MISSIONS_PER_READ: u32 = 200;
@@ -51,9 +51,22 @@ const INSERT_MISSION: &str = "INSERT INTO missions
 	VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)";
 
 const INSERT_EVENT: &str = "INSERT INTO mission_events
-	(id, mission_id, seq, kind, source, payload, created_at)
-	SELECT ?1, ?2, COALESCE(max(seq), 0) + 1, ?3, ?4, ?5, ?6
+	(id, mission_id, seq, kind, source, payload, created_at, delivery_id)
+	SELECT ?1, ?2, COALESCE(max(seq), 0) + 1, ?3, ?4, ?5, ?6, ?7
 	FROM mission_events WHERE mission_id = ?2";
+
+const COUNT_DELIVERY: &str = "SELECT count(*) FROM mission_events
+	WHERE mission_id = ?1 AND delivery_id = ?2";
+
+const WATCH_COLUMNS: &str = "SELECT id, watch_branch, watch_repository, github_fingerprint
+	FROM missions";
+
+const ARM_MISSION: &str = "UPDATE missions SET watch_branch = ?2, watch_repository = ?3,
+	watch_workspace_path = ?4, delivery_key = ?5 WHERE id = ?1";
+
+const KEEP_FINGERPRINT: &str = "UPDATE missions SET github_fingerprint = ?2 WHERE id = ?1";
+
+const SELECT_KEY: &str = "SELECT delivery_key FROM missions WHERE id = ?1";
 
 const CLOSE_MISSION: &str = "UPDATE missions SET closed_at = ?2 WHERE id = ?1";
 
@@ -79,7 +92,69 @@ impl MissionsRepository {
 		entry: MissionEntry,
 	) -> Result<Mission, MissionError> {
 		self.access
-			.call_mut(move |connection| Ok(appended(connection, &mission_id, &entry)))
+			.call_mut(move |connection| Ok(appended(connection, &mission_id, &entry, "")))
+			.await?
+	}
+
+	pub async fn arm(
+		&self,
+		mission_id: String,
+		watch: MissionWatch,
+		minted_key: String,
+	) -> Result<(Mission, String), MissionError> {
+		self.access
+			.call_mut(move |connection| Ok(armed(connection, &mission_id, &watch, &minted_key)))
+			.await?
+	}
+
+	pub async fn armed_on_key(&self, key: String) -> Result<Option<Mission>, MissionError> {
+		Ok(self
+			.access
+			.call(move |connection| {
+				let mut statement = connection.prepare_cached(&format!(
+					"{MISSION_COLUMNS} WHERE delivery_key = ?1
+						AND delivery_key <> ''"
+				))?;
+				Ok(statement.query_row([key], mission).optional()?)
+			})
+			.await?)
+	}
+
+	pub async fn append_delivery(
+		&self,
+		mission_id: String,
+		entry: MissionEntry,
+		delivery_id: String,
+	) -> Result<Mission, MissionError> {
+		self.access
+			.call_mut(move |connection| Ok(appended(connection, &mission_id, &entry, &delivery_id)))
+			.await?
+	}
+
+	pub async fn watched(&self) -> Result<Vec<WatchedMission>, MissionError> {
+		Ok(self
+			.access
+			.call(move |connection| {
+				let mut statement = connection.prepare_cached(&format!(
+					"{WATCH_COLUMNS} WHERE closed_at IS NULL AND watch_repository <> ''
+						AND watch_branch <> '' ORDER BY opened_at, id LIMIT ?1"
+				))?;
+				let rows = statement.query_map([MAX_MISSIONS_PER_READ], watched)?;
+				Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+			})
+			.await?)
+	}
+
+	pub async fn record_github(
+		&self,
+		mission_id: String,
+		entries: Vec<MissionEntry>,
+		fingerprint: String,
+	) -> Result<Option<Mission>, MissionError> {
+		self.access
+			.call_mut(move |connection| {
+				Ok(recorded(connection, &mission_id, &entries, &fingerprint))
+			})
 			.await?
 	}
 
@@ -169,7 +244,7 @@ fn opened(connection: &mut Connection, draft: &MissionDraft) -> Result<Mission, 
 		source: draft.source.clone(),
 		payload: serde_json::json!({}),
 	};
-	record(&transaction, &id, &entry, at)?;
+	record(&transaction, &id, &entry, "", at)?;
 	let stored = read(&transaction, &id)?;
 	transaction.commit()?;
 	Ok(stored)
@@ -179,6 +254,7 @@ fn appended(
 	connection: &mut Connection,
 	mission_id: &str,
 	entry: &MissionEntry,
+	delivery_id: &str,
 ) -> Result<Mission, MissionError> {
 	let transaction = write_transaction(connection)?;
 	let Some(standing) = held(&transaction, mission_id)? else {
@@ -187,20 +263,95 @@ fn appended(
 	if standing.closed_at.is_some() {
 		return Err(MissionError::MissionAlreadyClosed { id: mission_id.to_owned() });
 	}
-	let at = now();
-	record(&transaction, mission_id, entry, at)?;
-	if entry.kind.closes() {
-		transaction.execute(CLOSE_MISSION, params![mission_id, at])?;
+	if !already_delivered(&transaction, mission_id, delivery_id)? {
+		let at = now();
+		record(&transaction, mission_id, entry, delivery_id, at)?;
+		if entry.kind.closes() {
+			transaction.execute(CLOSE_MISSION, params![mission_id, at])?;
+		}
 	}
 	let stored = read(&transaction, mission_id)?;
 	transaction.commit()?;
 	Ok(stored)
 }
 
+fn armed(
+	connection: &mut Connection,
+	mission_id: &str,
+	watch: &MissionWatch,
+	minted_key: &str,
+) -> Result<(Mission, String), MissionError> {
+	let transaction = write_transaction(connection)?;
+	let Some(standing) = held(&transaction, mission_id)? else {
+		return Err(MissionError::UnknownMission { id: mission_id.to_owned() });
+	};
+	if standing.closed_at.is_some() {
+		return Err(MissionError::MissionAlreadyClosed { id: mission_id.to_owned() });
+	}
+	let held_key: String = transaction.query_row(SELECT_KEY, [mission_id], |row| row.get(0))?;
+	let key = match held_key.is_empty() {
+		true => minted_key.to_owned(),
+		false => held_key,
+	};
+	transaction.execute(
+		ARM_MISSION,
+		params![mission_id, watch.branch, watch.repository, watch.workspace_path, key],
+	)?;
+	let stored = read(&transaction, mission_id)?;
+	transaction.commit()?;
+	Ok((stored, key))
+}
+
+fn recorded(
+	connection: &mut Connection,
+	mission_id: &str,
+	entries: &[MissionEntry],
+	fingerprint: &str,
+) -> Result<Option<Mission>, MissionError> {
+	let transaction = write_transaction(connection)?;
+	let Some(standing) = held(&transaction, mission_id)? else {
+		return Ok(None);
+	};
+	if standing.closed_at.is_some() {
+		return Ok(None);
+	}
+	let at = now();
+	let mut closed = false;
+	for entry in entries {
+		if closed {
+			break;
+		}
+		record(&transaction, mission_id, entry, "", at)?;
+		closed = entry.kind.closes();
+	}
+	if closed {
+		transaction.execute(CLOSE_MISSION, params![mission_id, at])?;
+	}
+	transaction.execute(KEEP_FINGERPRINT, params![mission_id, fingerprint])?;
+	let stored = read(&transaction, mission_id)?;
+	transaction.commit()?;
+	Ok(Some(stored))
+}
+
+fn already_delivered(
+	transaction: &Transaction<'_>,
+	mission_id: &str,
+	delivery_id: &str,
+) -> Result<bool, MissionError> {
+	if delivery_id.is_empty() {
+		return Ok(false);
+	}
+	let carried: i64 =
+		transaction
+			.query_row(COUNT_DELIVERY, params![mission_id, delivery_id], |row| row.get(0))?;
+	Ok(carried > 0)
+}
+
 fn record(
 	transaction: &Transaction<'_>,
 	mission_id: &str,
 	entry: &MissionEntry,
+	delivery_id: &str,
 	at: i64,
 ) -> Result<(), MissionError> {
 	transaction.execute(
@@ -212,6 +363,7 @@ fn record(
 			entry.source,
 			as_text(&entry.payload)?,
 			at,
+			delivery_id,
 		],
 	)?;
 	Ok(())
@@ -268,6 +420,15 @@ fn mission(row: &Row<'_>) -> rusqlite::Result<Mission> {
 		opened_at: row.get(10)?,
 		closed_at: row.get(11)?,
 		state: derived(row.get(12)?)?,
+	})
+}
+
+fn watched(row: &Row<'_>) -> rusqlite::Result<WatchedMission> {
+	Ok(WatchedMission {
+		id: row.get(0)?,
+		branch: row.get(1)?,
+		repository: row.get(2)?,
+		fingerprint: row.get(3)?,
 	})
 }
 
@@ -668,6 +829,125 @@ mod tests {
 			detail.events.last().map(|event| event.payload.clone()),
 			Some(json!({ "seq": 506 })),
 			"the newest event fell out of the read"
+		);
+
+		drop(database);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	fn a_watch(branch: &str) -> MissionWatch {
+		MissionWatch {
+			branch: branch.to_owned(),
+			repository: "shoto290/OpenNest".to_owned(),
+			workspace_path: Some("/tmp/workspace".to_owned()),
+		}
+	}
+
+	#[tokio::test]
+	async fn arming_a_mission_twice_keeps_the_key_minted_the_first_time_and_carries_the_new_watch()
+	{
+		let (database, dir) = planted().await;
+		let opened = database
+			.missions()
+			.open(a_draft("c1", "b1", "Fix the crash"))
+			.await
+			.expect("the mission opens");
+
+		let (_, first) = database
+			.missions()
+			.arm(opened.id.clone(), a_watch("feature/one"), "minted-first".to_owned())
+			.await
+			.expect("the mission is armed");
+		let (armed, second) = database
+			.missions()
+			.arm(opened.id.clone(), a_watch("feature/two"), "minted-second".to_owned())
+			.await
+			.expect("the mission is armed again");
+
+		assert_eq!((first.as_str(), second.as_str()), ("minted-first", "minted-first"));
+		assert_eq!(armed.id, opened.id);
+		assert_eq!(
+			database
+				.missions()
+				.watched()
+				.await
+				.expect("the watched missions read")
+				.into_iter()
+				.map(|held| (held.id, held.branch, held.repository, held.fingerprint))
+				.collect::<Vec<_>>(),
+			vec![(
+				opened.id.clone(),
+				"feature/two".to_owned(),
+				"shoto290/OpenNest".to_owned(),
+				String::new(),
+			)],
+			"the second arming did not carry the branch it named"
+		);
+		assert_eq!(
+			database
+				.missions()
+				.armed_on_key("minted-first".to_owned())
+				.await
+				.expect("the mission reads")
+				.map(|held| held.id),
+			Some(opened.id),
+		);
+
+		drop(database);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_mission_nobody_armed_is_neither_watched_nor_reachable_on_a_blank_key() {
+		let (database, dir) = planted().await;
+		database
+			.missions()
+			.open(a_draft("c1", "b1", "Fix the crash"))
+			.await
+			.expect("the mission opens");
+
+		assert!(database.missions().watched().await.expect("the watched missions read").is_empty());
+		assert_eq!(
+			database.missions().armed_on_key(String::new()).await.expect("the mission reads"),
+			None,
+		);
+
+		drop(database);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_delivery_id_already_appended_leaves_the_mission_with_one_event() {
+		let (database, dir) = planted().await;
+		let opened = database
+			.missions()
+			.open(a_draft("c1", "b1", "Fix the crash"))
+			.await
+			.expect("the mission opens");
+
+		for _ in 0..2 {
+			database
+				.missions()
+				.append_delivery(
+					opened.id.clone(),
+					an_entry(MissionEventKind::AgentAsked),
+					"delivery-1".to_owned(),
+				)
+				.await
+				.expect("the delivery is appended");
+		}
+
+		assert_eq!(
+			database
+				.missions()
+				.detail(opened.id.clone())
+				.await
+				.expect("the mission reads")
+				.events
+				.iter()
+				.filter(|event| event.kind == MissionEventKind::AgentAsked)
+				.count(),
+			1,
 		);
 
 		drop(database);

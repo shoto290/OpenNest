@@ -21,6 +21,7 @@ use super::rate_limit::RateLimit;
 use super::silence::Silence;
 use crate::conversations::commands::ready;
 use crate::db;
+use crate::missions;
 
 pub const SOURCE_ID: &str = "local-webhook";
 
@@ -63,8 +64,17 @@ impl Webhook {
 		self.address.map(|address| format!("http://{address}{PATH}"))
 	}
 
+	pub fn mission_url(&self) -> Option<String> {
+		self.address.map(|address| format!("http://{address}{}", missions::call::PATH))
+	}
+
 	pub fn stop(&self) {
 		self.stop.send_replace(true);
+	}
+
+	#[cfg(test)]
+	pub(crate) fn address(&self) -> SocketAddr {
+		self.address.expect("the webhook bound an address")
 	}
 }
 
@@ -72,7 +82,7 @@ pub fn start<R: Runtime>(app: AppHandle<R>) -> Webhook {
 	started(app, Arc::new(SystemClock))
 }
 
-fn started<R: Runtime>(app: AppHandle<R>, clock: Arc<dyn Clock>) -> Webhook {
+pub(crate) fn started<R: Runtime>(app: AppHandle<R>, clock: Arc<dyn Clock>) -> Webhook {
 	let (stop, halted) = signal::channel(false);
 	let calls = Calls {
 		app,
@@ -130,10 +140,10 @@ async fn stopping(mut halted: signal::Receiver<bool>) {
 	}
 }
 
-struct Calls<R: Runtime> {
-	app: AppHandle<R>,
-	clock: Arc<dyn Clock>,
-	limit: Arc<RateLimit>,
+pub(crate) struct Calls<R: Runtime> {
+	pub(crate) app: AppHandle<R>,
+	pub(crate) clock: Arc<dyn Clock>,
+	pub(crate) limit: Arc<RateLimit>,
 	silence: Arc<Silence>,
 }
 
@@ -148,7 +158,7 @@ impl<R: Runtime> Clone for Calls<R> {
 	}
 }
 
-enum DeliveryId {
+pub(crate) enum DeliveryId {
 	Carried(String),
 	Generated,
 	Refused,
@@ -157,6 +167,7 @@ enum DeliveryId {
 fn route<R: Runtime>(calls: Calls<R>) -> Router {
 	Router::new()
 		.route(PATH, post(called::<R>))
+		.route(missions::call::PATH, post(missions::call::called::<R>))
 		.layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
 		.with_state(calls)
 }
@@ -233,7 +244,7 @@ fn unread(rejection: StringRejection) -> (StatusCode, &'static str) {
 	}
 }
 
-fn named_here(headers: &HeaderMap) -> bool {
+pub(crate) fn named_here(headers: &HeaderMap) -> bool {
 	let Some(host) = headers.get(header::HOST).and_then(|host| host.to_str().ok()) else {
 		return false;
 	};
@@ -241,11 +252,11 @@ fn named_here(headers: &HeaderMap) -> bool {
 	LOOPBACK_NAMES.contains(&name)
 }
 
-fn presented(headers: &HeaderMap) -> Option<String> {
+pub(crate) fn presented(headers: &HeaderMap) -> Option<String> {
 	headers.get(HEADER)?.to_str().ok().map(str::to_owned)
 }
 
-fn delivery_id(headers: &HeaderMap) -> DeliveryId {
+pub(crate) fn delivery_id(headers: &HeaderMap) -> DeliveryId {
 	let Some(value) = headers.get(DELIVERY_ID_HEADER) else {
 		return DeliveryId::Generated;
 	};

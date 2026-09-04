@@ -33,6 +33,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 24, statements: ROUTINE_LAST_OCCURRENCE },
 	Migration { version: 25, statements: ROUTINE_REPORTED_TURN },
 	Migration { version: 26, statements: MISSIONS },
+	Migration { version: 27, statements: MISSION_WATCH },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -583,6 +584,25 @@ BEGIN
 END;
 ";
 
+const MISSION_WATCH: &str = "
+ALTER TABLE missions ADD COLUMN watch_branch TEXT NOT NULL DEFAULT '';
+ALTER TABLE missions ADD COLUMN watch_repository TEXT NOT NULL DEFAULT '';
+ALTER TABLE missions ADD COLUMN watch_workspace_path TEXT;
+ALTER TABLE missions ADD COLUMN delivery_key TEXT NOT NULL DEFAULT '';
+ALTER TABLE missions ADD COLUMN github_fingerprint TEXT NOT NULL DEFAULT '';
+
+CREATE UNIQUE INDEX missions_one_mission_per_delivery_key
+	ON missions (delivery_key) WHERE delivery_key <> '';
+
+CREATE INDEX missions_watched_on_github
+	ON missions (watch_repository, watch_branch) WHERE closed_at IS NULL;
+
+ALTER TABLE mission_events ADD COLUMN delivery_id TEXT NOT NULL DEFAULT '';
+
+CREATE UNIQUE INDEX mission_events_one_event_per_delivery
+	ON mission_events (mission_id, delivery_id) WHERE delivery_id <> '';
+";
+
 pub fn latest_version() -> u32 {
 	MIGRATIONS.last().map_or(0, |migration| migration.version)
 }
@@ -655,6 +675,7 @@ mod tests {
 	const ROUTINE_LAST_OCCURRENCE_STEP: u32 = 24;
 	const ROUTINE_REPORTED_TURN_STEP: u32 = 25;
 	const MISSIONS_STEP: u32 = 26;
+	const MISSION_WATCH_STEP: u32 = 27;
 
 	const A_LIVE_SESSION: &str = "INSERT INTO runtime_sessions
 		(id, conversation_id, bot_id, provider_session_id, seq, status, started_at)
@@ -720,6 +741,74 @@ mod tests {
 				CREATE TABLE half_landed (id TEXT PRIMARY KEY);",
 		},
 	];
+
+	#[test]
+	fn a_mission_stored_before_the_watch_step_reads_with_every_watch_column_empty() {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, shipped_before(MISSION_WATCH_STEP))
+			.expect("the shipped schema");
+		connection
+			.execute_batch(
+				"INSERT INTO bots (id, space_id, name, model, created_at)
+					VALUES ('b1', 'personal', 'First', 'sonnet', 1);
+				INSERT INTO conversations (id, kind, title, created_at, updated_at)
+					VALUES ('c1', 'main', 'Chat', 1, 1), ('c2', 'mission', 'Fix it', 1, 1);
+				INSERT INTO conversation_participants
+					(conversation_id, bot_id, role, joined_at, join_seq)
+					VALUES ('c1', 'b1', 'assistant', 1, 0);
+				INSERT INTO missions (id, origin_conversation_id, bot_id, thread_conversation_id,
+					objective, ticket_platform, ticket_external_id, ticket_url, ticket_title,
+					tools, opened_at)
+					VALUES ('m1', 'c1', 'b1', 'c2', 'Fix it', 'github', '42',
+						'https://opennest.test/tickets/42', 'Crash', '[]', 1);
+				INSERT INTO mission_events (id, mission_id, seq, kind, source, payload, created_at)
+					VALUES ('e1', 'm1', 1, 'opened', 'bot', '{}', 1);",
+			)
+			.expect("the missions this build upgrades from");
+
+		apply(&mut connection).expect("the file comes up to this build");
+
+		assert_eq!(version(&connection).expect("version"), latest_version());
+		assert_eq!(
+			connection
+				.query_row(
+					"SELECT watch_branch, watch_repository, watch_workspace_path, delivery_key,
+						github_fingerprint FROM missions WHERE id = 'm1'",
+					[],
+					|row| Ok((
+						row.get::<_, String>(0)?,
+						row.get::<_, String>(1)?,
+						row.get::<_, Option<String>>(2)?,
+						row.get::<_, String>(3)?,
+						row.get::<_, String>(4)?,
+					)),
+				)
+				.expect("the stored mission reads"),
+			(String::new(), String::new(), None, String::new(), String::new()),
+			"the mission nobody armed did not come out of the step empty"
+		);
+		assert_eq!(
+			connection
+				.query_row("SELECT delivery_id FROM mission_events WHERE id = 'e1'", [], |row| {
+					row.get::<_, String>(0)
+				},)
+				.expect("the stored event reads"),
+			String::new(),
+			"the event stored before the step lost its row"
+		);
+		assert!(
+			has_index(&connection, "missions_one_mission_per_delivery_key"),
+			"two missions could hold one delivery key"
+		);
+		assert!(
+			has_index(&connection, "mission_events_one_event_per_delivery"),
+			"one delivery could be appended twice"
+		);
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
 
 	#[test]
 	fn the_conversations_a_file_already_held_come_out_of_the_missions_step_untouched() {

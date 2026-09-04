@@ -76,6 +76,7 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
 		missions::commands::mission_list,
 		missions::commands::mission_detail,
 		missions::commands::mission_board,
+		missions::commands::mission_watch,
 		notifications::commands::notification_show,
 		routines::commands::routine_trigger_sources,
 		routines::commands::routine_create,

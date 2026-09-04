@@ -1,15 +1,17 @@
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Runtime, State};
+use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 
 use super::contract::{
 	ConversationMissions, Mission, MissionDetail, MissionDraft, MissionEntry, MissionError,
-	MissionEventKind, MissionNote, MissionOnBoard, MissionState,
+	MissionEventKind, MissionNote, MissionOnBoard, MissionState, MissionWatch, MissionWatching,
 };
+use super::hook;
 use crate::avatars;
 use crate::bundles;
 use crate::conversations::commands::{bot_row, ready};
 use crate::conversations::contract::Bot;
 use crate::db;
+use crate::routines::webhook::{Webhook, HEADER};
 
 pub const CHANGED_EVENT: &str = "mission://changed";
 
@@ -91,6 +93,54 @@ async fn appended<R: Runtime>(
 	let written = ready(state)?.missions().append(mission_id, entry).await?;
 	announce_change(app, &written)?;
 	Ok(written)
+}
+
+#[tauri::command]
+pub async fn mission_watch<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	mission_id: String,
+	watch: MissionWatch,
+) -> Result<MissionWatching, MissionError> {
+	let watch = normalised(watch);
+	refused_watch(&watch)?;
+	let url = hook_url(&app)?;
+	let (mission, key) = ready(&state)?
+		.missions()
+		.arm(mission_id, watch.clone(), uuid::Uuid::new_v4().to_string())
+		.await?;
+	if let Some(workspace) = watch.workspace_path.as_deref() {
+		hook::installed(&hook::dir(&app, &mission.id)?, workspace, &url, &key)?;
+	}
+	Ok(MissionWatching { mission, url, key, header: HEADER.to_owned() })
+}
+
+fn normalised(watch: MissionWatch) -> MissionWatch {
+	MissionWatch {
+		branch: watch.branch.trim().to_owned(),
+		repository: watch.repository.trim().to_owned(),
+		workspace_path: watch
+			.workspace_path
+			.map(|path| path.trim().to_owned())
+			.filter(|path| !path.is_empty()),
+	}
+}
+
+fn refused_watch(watch: &MissionWatch) -> Result<(), MissionError> {
+	refuse_blank("branch", &watch.branch)?;
+	refuse_blank("repository", &watch.repository)?;
+	match watch.repository.split('/').collect::<Vec<_>>().as_slice() {
+		[owner, name] if !owner.is_empty() && !name.is_empty() => Ok(()),
+		_ => Err(MissionError::Undeliverable {
+			detail: "a repository is named owner then slash then name".to_owned(),
+		}),
+	}
+}
+
+fn hook_url<R: Runtime>(app: &AppHandle<R>) -> Result<String, MissionError> {
+	app.try_state::<Webhook>().and_then(|webhook| webhook.mission_url()).ok_or_else(|| {
+		MissionError::Undeliverable { detail: "the local server answers no call".to_owned() }
+	})
 }
 
 #[tauri::command]
@@ -272,6 +322,120 @@ mod tests {
 			"the front was not told which mission moved and where it stands"
 		);
 
+		cleaned(&app);
+	}
+
+	fn a_workspace(name: &str) -> std::path::PathBuf {
+		let path = std::env::temp_dir()
+			.join(format!("opennest-mission-watch-{name}-{}", std::process::id()));
+		let _ = fs::remove_dir_all(&path);
+		fs::create_dir_all(&path).expect("the workspace is there");
+		path
+	}
+
+	fn a_watch(branch: &str, workspace: Option<&std::path::Path>) -> MissionWatch {
+		MissionWatch {
+			branch: branch.to_owned(),
+			repository: "shoto290/OpenNest".to_owned(),
+			workspace_path: workspace.map(|path| path.to_string_lossy().into_owned()),
+		}
+	}
+
+	#[tokio::test]
+	async fn arming_a_mission_answers_where_the_hook_calls_and_installs_it_in_the_workspace() {
+		let app = a_host("watched").await;
+		app.manage(crate::routines::webhook::start(app.handle().clone()));
+		let workspace = a_workspace("watched");
+		let opened = mission_open(app.handle().clone(), app.state(), a_draft("c1", "b1", "Fix it"))
+			.await
+			.expect("the mission opens");
+
+		let armed = mission_watch(
+			app.handle().clone(),
+			app.state(),
+			opened.id.clone(),
+			a_watch("feature/ope-27", Some(&workspace)),
+		)
+		.await
+		.expect("the mission is armed");
+
+		assert_eq!(armed.header, crate::routines::webhook::HEADER);
+		assert!(armed.url.starts_with("http://127.0.0.1:"), "got {}", armed.url);
+		assert!(armed.url.ends_with(crate::missions::call::PATH), "got {}", armed.url);
+		assert!(!armed.key.is_empty());
+		assert_eq!(armed.mission.id, opened.id);
+		let settings = fs::read_to_string(workspace.join(".claude").join("settings.local.json"))
+			.expect("the settings of the workspace read");
+		assert!(settings.contains("opennest-agent-hook.sh"), "got {settings}");
+
+		let again = mission_watch(
+			app.handle().clone(),
+			app.state(),
+			opened.id.clone(),
+			a_watch("feature/ope-27", None),
+		)
+		.await
+		.expect("the mission is armed again");
+
+		assert_eq!(again.key, armed.key, "the second arming minted another key");
+
+		if let Some(webhook) = app.try_state::<crate::routines::webhook::Webhook>() {
+			webhook.stop();
+		}
+		fs::remove_dir_all(&workspace).expect("cleanup");
+		cleaned(&app);
+	}
+
+	#[tokio::test]
+	async fn arming_refuses_an_unknown_mission_a_closed_one_and_a_repository_without_an_owner() {
+		let app = a_host("refused").await;
+		app.manage(crate::routines::webhook::start(app.handle().clone()));
+		let opened = mission_open(app.handle().clone(), app.state(), a_draft("c1", "b1", "Fix it"))
+			.await
+			.expect("the mission opens");
+		let done = mission_open(app.handle().clone(), app.state(), a_draft("c1", "b1", "Old work"))
+			.await
+			.expect("the mission opens");
+		mission_close(app.handle().clone(), app.state(), done.id.clone(), a_note())
+			.await
+			.expect("the mission closes");
+
+		let unknown = mission_watch(
+			app.handle().clone(),
+			app.state(),
+			"x9".to_owned(),
+			a_watch("feature/ope-27", None),
+		)
+		.await
+		.expect_err("the unknown mission is refused");
+		let closed = mission_watch(
+			app.handle().clone(),
+			app.state(),
+			done.id.clone(),
+			a_watch("feature/ope-27", None),
+		)
+		.await
+		.expect_err("the closed mission is refused");
+		let unnamed = mission_watch(
+			app.handle().clone(),
+			app.state(),
+			opened.id,
+			MissionWatch {
+				branch: "feature/ope-27".to_owned(),
+				repository: "OpenNest".to_owned(),
+				workspace_path: None,
+			},
+		)
+		.await
+		.expect_err("the repository without an owner is refused");
+
+		assert_eq!(unknown, MissionError::UnknownMission { id: "x9".to_owned() });
+		assert_eq!(closed, MissionError::MissionAlreadyClosed { id: done.id });
+		assert!(matches!(unnamed, MissionError::Undeliverable { .. }), "got {unnamed:?}");
+
+		if let Some(webhook) = app.try_state::<crate::routines::webhook::Webhook>() {
+			webhook.stop();
+		}
 		cleaned(&app);
 	}
 
