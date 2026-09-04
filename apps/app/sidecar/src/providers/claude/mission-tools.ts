@@ -41,7 +41,7 @@ const REPOSITORY =
 	"The repository that branch lives in, written owner then slash then name."
 
 const WORKSPACE_PATH =
-	"The checkout of that repository on this machine, when you work in one. Leave it out otherwise."
+	"The checkout of that repository on this machine. A path given installs the agent hook in that checkout, so what you do there reaches the thread of the mission. Left out, the branch stays watched by its repository alone and no hook is installed."
 
 const OPEN =
 	"Open a mission on this conversation, owned by you, and get its own thread. Call this once you and the person agree on the objective and the ticket it carries."
@@ -56,7 +56,7 @@ const CLOSE =
 	"Close a mission of yours with its outcome and a summary. Nothing can be appended to it afterwards."
 
 const WATCH =
-	"Arm a mission of yours on the branch it lands its work in, so what happens on that branch reaches its thread. Call this once the branch exists."
+	"Arm a mission of yours on the branch it lands its work in, so what happens on that branch reaches its thread. It answers the address a call reaches the mission at, the key that call carries and the name of the header that key goes in. Call this once the branch exists."
 
 const LIST =
 	"Read the missions of yours this conversation still carries, each with the id the other mission tools take. Read this when you no longer hold the id mission_open answered."

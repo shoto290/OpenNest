@@ -280,6 +280,7 @@ fn refused(error: MissionError) -> Value {
 #[cfg(test)]
 mod tests {
 	use std::fs;
+	use std::path::{Path, PathBuf};
 
 	use serde_json::json;
 	use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
@@ -394,11 +395,24 @@ mod tests {
 			.collect()
 	}
 
-	fn an_arming(id: &str) -> Value {
+	fn an_arming(id: &str, workspace: Option<&Path>) -> Value {
 		asking(
 			"watch",
-			json!({ "id": id, "branch": "feature/ope-37", "repository": "shoto290/OpenNest" }),
+			json!({
+				"id": id,
+				"branch": "feature/ope-37",
+				"repository": "shoto290/OpenNest",
+				"workspacePath": workspace.map(|path| path.to_string_lossy().into_owned())
+			}),
 		)
+	}
+
+	fn a_workspace(name: &str) -> PathBuf {
+		let path = std::env::temp_dir()
+			.join(format!("opennest-mission-host-{name}-{}", std::process::id()));
+		let _ = fs::remove_dir_all(&path);
+		fs::create_dir_all(&path).expect("the workspace is there");
+		path
 	}
 
 	#[tokio::test]
@@ -510,7 +524,7 @@ mod tests {
 			asking("note", json!({ "id": held.id, "line": "Sneaking in" })),
 			asking("escalate", json!({ "id": held.id, "question": "?", "reason": "?" })),
 			asking("close", json!({ "id": held.id, "outcome": "done", "summary": "?" })),
-			an_arming(&held.id),
+			an_arming(&held.id, None),
 		] {
 			let refused = host.answer(asked).await.expect_err("the call is refused");
 
@@ -536,7 +550,7 @@ mod tests {
 			asking("note", json!({ "id": held.id, "line": "Sneaking in" })),
 			asking("escalate", json!({ "id": held.id, "question": "?", "reason": "?" })),
 			asking("close", json!({ "id": held.id, "outcome": "done", "summary": "?" })),
-			an_arming(&held.id),
+			an_arming(&held.id, None),
 		] {
 			let refused = host.answer(asked).await.expect_err("the call is refused");
 
@@ -582,10 +596,14 @@ mod tests {
 	async fn a_mission_is_armed_and_listed_from_its_own_thread() {
 		let app = a_host("armed").await;
 		app.manage(crate::routines::webhook::start(app.handle().clone()));
+		let workspace = a_workspace("armed");
 		let opened = a_mission_of(&app, "c1", "b1").await;
 		let host = serving(&app, &opened.thread_conversation_id);
 
-		let armed = host.answer(an_arming(&opened.id)).await.expect("the mission is armed");
+		let armed = host
+			.answer(an_arming(&opened.id, Some(&workspace)))
+			.await
+			.expect("the mission is armed");
 		let answered =
 			host.answer(asking("list", json!({}))).await.expect("the missions are listed");
 
@@ -597,10 +615,14 @@ mod tests {
 		assert!(armed["key"].as_str().is_some_and(|key| !key.is_empty()), "got {armed}");
 		assert_eq!(armed_missions(&app).await, vec![opened.id.clone()]);
 		assert_eq!(ids(&answered), vec![opened.id]);
+		let settings = fs::read_to_string(workspace.join(".claude").join("settings.local.json"))
+			.expect("the settings of the workspace read");
+		assert!(settings.contains("opennest-agent-hook.sh"), "got {settings}");
 
 		if let Some(webhook) = app.try_state::<crate::routines::webhook::Webhook>() {
 			webhook.stop();
 		}
+		fs::remove_dir_all(&workspace).expect("cleanup");
 		cleaned(&app);
 	}
 

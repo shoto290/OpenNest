@@ -56,7 +56,12 @@ const calls: [string, Record<string, unknown>, string][] = [
 	],
 	[
 		"mission_watch",
-		{ id: "m1", branch: "feature/ope-37", repository: "shoto290/OpenNest" },
+		{
+			id: "m1",
+			branch: "feature/ope-37",
+			repository: "shoto290/OpenNest",
+			workspacePath: "/tmp/opennest",
+		},
 		"watch",
 	],
 	["mission_list", {}, "list"],
