@@ -21,6 +21,7 @@ type MissionThreadProps = {
 	events: MissionEventModel[]
 	now: number
 	hasFailedToRead: boolean
+	onBack: () => void
 	onRetry: () => void
 	onSend: (text: string) => void
 	className?: string
@@ -35,6 +36,7 @@ const MissionThread = ({
 	events,
 	now,
 	hasFailedToRead,
+	onBack,
 	onRetry,
 	onSend,
 	className,
@@ -53,7 +55,13 @@ const MissionThread = ({
 			}
 			contentClassName="flex min-h-full w-full flex-col px-4 pt-4 pb-2"
 			header={
-				<MissionHeader bot={bot} state={state} ticket={ticket} tools={tools} />
+				<MissionHeader
+					bot={bot}
+					onBack={onBack}
+					state={state}
+					ticket={ticket}
+					tools={tools}
+				/>
 			}
 			label={t("missions.feed.label")}
 		>

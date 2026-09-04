@@ -1,4 +1,4 @@
-import { expect } from "storybook/test"
+import { expect, fn } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { slotIn } from "@workspace/storybook/story-utils"
@@ -12,7 +12,7 @@ import {
 	MISSION_TOOLS,
 } from "@workspace/ui/components/missions.fixtures"
 
-const WORKING_HEADER: MissionHeaderProps = {
+const WORKING_HEADER: Omit<MissionHeaderProps, "onBack"> = {
 	bot: MISSION_BOT,
 	ticket: MISSION_TICKET,
 	tools: MISSION_TOOLS,
@@ -21,6 +21,7 @@ const WORKING_HEADER: MissionHeaderProps = {
 
 const LONG_HEADER: MissionHeaderProps = {
 	...WORKING_HEADER,
+	onBack: fn(),
 	bot: { ...MISSION_BOT, name: "Anastasia Konstantinopoulou-Whitfield" },
 	ticket: {
 		externalId: "OPE-1042",
@@ -42,11 +43,11 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The top of a mission thread: who runs it, which ticket it answers, what it is allowed to reach for, and where it stands. Reach for it inside `MissionThread`; on its own it is useful to check that a long ticket title and a long tool list still leave the state pill in place.",
+					"The top of a mission thread: the way out of it, who runs it, which ticket it answers, what it is allowed to reach for, and where it stands. Reach for it inside `MissionThread`; on its own it is useful to check that a long ticket title and a long tool list still leave the state pill in place.",
 			},
 		},
 	},
-	args: WORKING_HEADER,
+	args: { ...WORKING_HEADER, onBack: fn() },
 	render: (args) => (
 		<div className="w-[36rem] max-w-full">
 			<MissionHeader {...args} />
@@ -59,9 +60,16 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"A mission a bot is working on right now. Check that the ticket identifier reads before its title, that every tool is named, and that the state pill keeps its place at the end of the first line rather than wrapping under the name.",
+					"A mission a bot is working on right now. Check that the back control is the first thing the keyboard reaches, that the ticket identifier reads before its title, that every tool is named, and that the state pill keeps its place at the end of the first line rather than wrapping under the name.",
 			},
 		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Back to the conversation" }),
+		)
+
+		await expect(args.onBack).toHaveBeenCalled()
 	},
 })
 

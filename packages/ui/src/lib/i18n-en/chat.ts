@@ -519,6 +519,7 @@ const chat = {
 		},
 		header: {
 			tools: "Tools",
+			back: "Back to the conversation",
 		},
 		feed: {
 			label: "Mission thread",
@@ -530,6 +531,11 @@ const chat = {
 			read: {
 				title: "The mission could not be read",
 				description: "Nothing was changed. Try again to read this mission.",
+			},
+			send: {
+				title: "The answer did not reach the bot",
+				description:
+					"Nothing was recorded on the mission. Send your answer again.",
 			},
 		},
 	},

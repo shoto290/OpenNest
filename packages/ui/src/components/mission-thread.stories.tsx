@@ -14,7 +14,10 @@ import {
 	MISSION_TOOLS,
 } from "@workspace/ui/components/missions.fixtures"
 
-const WORKING_THREAD: Omit<MissionThreadProps, "onRetry" | "onSend"> = {
+const WORKING_THREAD: Omit<
+	MissionThreadProps,
+	"onBack" | "onRetry" | "onSend"
+> = {
 	bot: MISSION_BOT,
 	ticket: MISSION_TICKET,
 	tools: MISSION_TOOLS,
@@ -39,6 +42,7 @@ const meta = preview.meta({
 	},
 	args: {
 		...WORKING_THREAD,
+		onBack: fn(),
 		onRetry: fn(),
 		onSend: fn(),
 	},
@@ -49,7 +53,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"A mission running, with events behind it and a composer ready. Check that the header holds still while the feed scrolls, and that what is typed reaches `onSend` rather than being posted by the component itself.",
+					"A mission running, with events behind it and a composer ready. Check that the header holds still while the feed scrolls, that what is typed reaches `onSend` rather than being posted by the component itself, and that the back control hands the way out to the screen around it.",
 			},
 		},
 	},
@@ -60,6 +64,12 @@ export const Default = meta.story({
 		await userEvent.keyboard("{Enter}")
 
 		await expect(args.onSend).toHaveBeenCalledWith("Take the second option.")
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Back to the conversation" }),
+		)
+
+		await expect(args.onBack).toHaveBeenCalled()
 	},
 })
 
