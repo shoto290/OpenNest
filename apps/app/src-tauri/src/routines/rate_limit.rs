@@ -14,14 +14,14 @@ pub struct RateLimit {
 }
 
 impl RateLimit {
-	pub async fn admits(&self, routine_id: &str, clock: &dyn Clock) -> bool {
+	pub async fn admits(&self, key: &str, clock: &dyn Clock) -> bool {
 		let now = clock.now_ms();
 		let mut counted = self.counted.lock().await;
 		counted.retain(|_, calls| {
 			forget_before(calls, now - WINDOW_MS);
 			!calls.is_empty()
 		});
-		let calls = counted.entry(routine_id.to_owned()).or_default();
+		let calls = counted.entry(key.to_owned()).or_default();
 		if calls.len() >= CALLS_PER_WINDOW {
 			return false;
 		}
@@ -30,7 +30,7 @@ impl RateLimit {
 	}
 
 	#[cfg(test)]
-	async fn counted_routines(&self) -> usize {
+	async fn counted_keys(&self) -> usize {
 		self.counted.lock().await.len()
 	}
 }
@@ -67,10 +67,10 @@ mod tests {
 		}
 	}
 
-	async fn called(limit: &RateLimit, routine_id: &str, clock: &Ticking, times: usize) -> usize {
+	async fn called(limit: &RateLimit, key: &str, clock: &Ticking, times: usize) -> usize {
 		let mut admitted = 0;
 		for _ in 0..times {
-			if limit.admits(routine_id, clock).await {
+			if limit.admits(key, clock).await {
 				admitted += 1;
 			}
 		}
@@ -78,7 +78,7 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn a_routine_is_admitted_sixty_times_inside_a_window_and_refused_beyond() {
+	async fn a_key_is_admitted_sixty_times_inside_a_window_and_refused_beyond() {
 		let clock = Ticking::at(NOON);
 		let limit = RateLimit::default();
 
@@ -100,7 +100,7 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn the_count_of_one_routine_leaves_another_routine_admitted() {
+	async fn the_count_of_one_key_leaves_another_key_admitted() {
 		let clock = Ticking::at(NOON);
 		let limit = RateLimit::default();
 		called(&limit, "r1", &clock, CALLS_PER_WINDOW).await;
@@ -110,22 +110,22 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn a_routine_holding_no_call_inside_the_window_is_dropped_from_the_count() {
+	async fn a_key_holding_no_call_inside_the_window_is_dropped_from_the_count() {
 		let clock = Ticking::at(NOON);
 		let limit = RateLimit::default();
 		called(&limit, "r1", &clock, 3).await;
-		assert_eq!(limit.counted_routines().await, 1);
+		assert_eq!(limit.counted_keys().await, 1);
 
 		clock.moved_by(WINDOW_MS);
 		limit.admits("r2", &clock).await;
 
-		assert_eq!(limit.counted_routines().await, 1);
+		assert_eq!(limit.counted_keys().await, 1);
 	}
 
 	#[tokio::test]
 	async fn a_fresh_limit_counts_no_call() {
 		let limit = RateLimit::default();
 
-		assert_eq!(limit.counted_routines().await, 0);
+		assert_eq!(limit.counted_keys().await, 0);
 	}
 }

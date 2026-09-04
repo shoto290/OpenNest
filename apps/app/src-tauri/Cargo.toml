@@ -63,6 +63,12 @@ chrono = "0.4"
 # Answers the one local route a webhook routine is called on. Shows through hyper, which
 # tauri already carries; only the HTTP/1 server is compiled in.
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }
+# Reads what became of the pull request of a mission. Already in the tree under
+# tauri-plugin-updater; named here with rustls so no system TLS stack is asked for.
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls-no-provider"] }
+# Named only to hand reqwest the provider it asks for: already in the tree with ring compiled in,
+# and no crate enters the lockfile through this line.
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

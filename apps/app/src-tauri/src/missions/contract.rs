@@ -125,6 +125,31 @@ pub struct MissionEvent {
 	pub created_at: i64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MissionWatch {
+	pub branch: String,
+	pub repository: String,
+	pub workspace_path: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MissionWatching {
+	pub mission: Mission,
+	pub url: String,
+	pub key: String,
+	pub header: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WatchedMission {
+	pub id: String,
+	pub branch: String,
+	pub repository: String,
+	pub fingerprint: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MissionDetail {
