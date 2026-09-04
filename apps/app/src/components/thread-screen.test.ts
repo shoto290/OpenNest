@@ -249,6 +249,7 @@ const screenOf = (thread: Thread, bots: Bot[] = NO_BOT_RECORDS) =>
 		attachments,
 		bots,
 		drafts: createDraftsController(),
+		onOpenMission: () => undefined,
 		readerName: "Reader",
 		thread,
 	})

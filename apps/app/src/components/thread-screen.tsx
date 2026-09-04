@@ -687,6 +687,7 @@ type ThreadViewProps = {
 	attachments: AttachmentsController
 	drafts: DraftsController
 	readerName: string
+	onOpenMission: (missionId: string) => void
 }
 
 function ThreadView({
@@ -695,6 +696,7 @@ function ThreadView({
 	attachments,
 	drafts,
 	readerName,
+	onOpenMission,
 }: ThreadViewProps) {
 	const t = useChatCopy()
 	const { state, controller } = thread
@@ -918,7 +920,9 @@ function ThreadView({
 
 	return (
 		<RosterProvider bots={bots}>
-			<ThreadRoutines {...routinesScope}>{layout}</ThreadRoutines>
+			<ThreadRoutines {...routinesScope} onOpenMission={onOpenMission}>
+				{layout}
+			</ThreadRoutines>
 		</RosterProvider>
 	)
 }
@@ -929,6 +933,7 @@ type ThreadScreenProps = {
 	attachments: AttachmentsController
 	drafts: DraftsController
 	readerName: string
+	onOpenMission: (missionId: string) => void
 }
 
 type ConversationThreadViewProps = Omit<ThreadScreenProps, "thread"> & {
@@ -941,6 +946,7 @@ function ConversationThreadView({
 	attachments,
 	drafts,
 	readerName,
+	onOpenMission,
 }: ConversationThreadViewProps) {
 	const { state, controller } = useConversation(
 		thread.runtimes,
@@ -952,6 +958,7 @@ function ConversationThreadView({
 			attachments={attachments}
 			bots={bots}
 			drafts={drafts}
+			onOpenMission={onOpenMission}
 			readerName={readerName}
 			thread={{ ...thread, state, controller }}
 		/>
@@ -968,6 +975,7 @@ function BotThreadView({
 	attachments,
 	drafts,
 	readerName,
+	onOpenMission,
 }: BotThreadViewProps) {
 	const { controller } = thread.chat
 	const botId = thread.bot.id
@@ -979,6 +987,7 @@ function BotThreadView({
 			attachments={attachments}
 			bots={bots}
 			drafts={drafts}
+			onOpenMission={onOpenMission}
 			readerName={readerName}
 			thread={{ ...thread, state: thread.chat.state, controller }}
 		/>
@@ -991,6 +1000,7 @@ export function ThreadScreen({
 	attachments,
 	drafts,
 	readerName,
+	onOpenMission,
 }: ThreadScreenProps) {
 	if (thread.kind === "conversation") {
 		return (
@@ -999,6 +1009,7 @@ export function ThreadScreen({
 				bots={bots}
 				drafts={drafts}
 				key={thread.conversation.id}
+				onOpenMission={onOpenMission}
 				readerName={readerName}
 				thread={thread}
 			/>
@@ -1011,6 +1022,7 @@ export function ThreadScreen({
 			bots={bots}
 			drafts={drafts}
 			key={thread.bot.id}
+			onOpenMission={onOpenMission}
 			readerName={readerName}
 			thread={thread}
 		/>

@@ -1,7 +1,10 @@
+import { useCallback, useState } from "react"
+
 import { AppHeader } from "@workspace/ui/components/app-header"
 import { Notice } from "@workspace/ui/components/notice"
 import { useCommonCopy } from "@workspace/ui/hooks/use-common-copy"
 
+import { MissionThreadScreen } from "@/components/mission-thread-screen"
 import { ThreadScreen } from "@/components/thread-screen"
 import type { AttachmentsController } from "@/lib/chat/attachments-controller"
 import type { DraftsController } from "@/lib/chat/drafts-controller"
@@ -62,8 +65,25 @@ const threadOf = ({
 	return null
 }
 
+type OpenedMission = {
+	missionId: string
+	rowId: string
+}
+
 export function WorkspaceBody(props: WorkspaceBodyProps) {
 	const t = useCommonCopy()
+	const [opened, setOpened] = useState<OpenedMission | null>(null)
+	const rowId = props.conversation?.id ?? props.bot?.id ?? null
+
+	const openMission = useCallback(
+		(missionId: string) => {
+			if (rowId) {
+				setOpened({ missionId, rowId })
+			}
+		},
+		[rowId],
+	)
+	const leaveMission = useCallback(() => setOpened(null), [])
 
 	if (props.haveSpacesFailed) {
 		return (
@@ -71,6 +91,18 @@ export function WorkspaceBody(props: WorkspaceBodyProps) {
 				description={t("spaces.unavailable.description")}
 				retry={{ onRetry: props.onRetrySpaces }}
 				title={t("spaces.unavailable.title")}
+			/>
+		)
+	}
+
+	if (opened && opened.rowId === rowId) {
+		return (
+			<MissionThreadScreen
+				bots={props.bots}
+				missionId={opened.missionId}
+				onLeave={leaveMission}
+				readerName={props.readerName}
+				runtimes={props.conversationRuntimes}
 			/>
 		)
 	}
@@ -91,6 +123,7 @@ export function WorkspaceBody(props: WorkspaceBodyProps) {
 			attachments={props.attachments}
 			bots={props.bots}
 			drafts={props.drafts}
+			onOpenMission={openMission}
 			readerName={props.readerName}
 			thread={thread}
 		/>

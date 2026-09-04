@@ -11,6 +11,7 @@ import { useRoutines } from "@/lib/routines/use-routines"
 type ThreadRoutinesProps = {
 	conversationId: string | null
 	leadBotId?: string
+	onOpenMission: (missionId: string) => void
 	children: ReactNode
 }
 
@@ -28,6 +29,7 @@ const activityFailure = (
 const ThreadRoutines = ({
 	conversationId,
 	leadBotId,
+	onOpenMission,
 	children,
 }: ThreadRoutinesProps) => {
 	const [isOpen, setOpen] = useState(false)
@@ -46,7 +48,7 @@ const ThreadRoutines = ({
 			failure={activityFailure(failure, missions.hasFailed)}
 			form={form}
 			isOpen={isOpen}
-			missions={missions.missions}
+			missions={{ ...missions.missions, onOpen: onOpenMission }}
 			onDelete={remove}
 			onEnabledChange={setEnabled}
 			onOpenChange={setOpen}

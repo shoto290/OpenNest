@@ -546,6 +546,11 @@ const chat = {
 				title: "La mission n'a pas pu être lue",
 				description: "Rien n'a été modifié. Réessayez pour lire cette mission.",
 			},
+			send: {
+				title: "La réponse n'est pas parvenue au bot",
+				description:
+					"Rien n'a été enregistré sur la mission. Renvoyez votre réponse.",
+			},
 		},
 	},
 } as const
