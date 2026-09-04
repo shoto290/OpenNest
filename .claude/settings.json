@@ -1,0 +1,24 @@
+{
+	"hooks": {
+		"Stop": [
+			{
+				"hooks": [
+					{
+						"type": "command",
+						"command": "$CLAUDE_PROJECT_DIR/.claude/hooks/opennest-agent-hook.sh"
+					}
+				]
+			}
+		],
+		"Notification": [
+			{
+				"hooks": [
+					{
+						"type": "command",
+						"command": "$CLAUDE_PROJECT_DIR/.claude/hooks/opennest-agent-hook.sh"
+					}
+				]
+			}
+		]
+	}
+}
