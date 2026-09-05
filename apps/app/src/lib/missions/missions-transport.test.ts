@@ -57,6 +57,19 @@ it("reads the open and the done missions of a conversation", async () => {
 	})
 })
 
+it("reads the roster block of a conversation for a bot", async () => {
+	hostInvoke.mockResolvedValueOnce("The room holds @ada.")
+
+	await expect(missionsTransport.rosterBlock("c-1", "b-1")).resolves.toBe(
+		"The room holds @ada.",
+	)
+
+	expect(hostInvoke).toHaveBeenCalledWith("conversation_roster_block", {
+		conversationId: "c-1",
+		botId: "b-1",
+	})
+})
+
 it("hands every mission change to its listener", async () => {
 	const heard: MissionChanged[] = []
 	hostListen.mockResolvedValueOnce(() => undefined)

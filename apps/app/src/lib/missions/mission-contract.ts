@@ -10,8 +10,6 @@ export type MissionEventKind =
 	| "failed"
 	| "closed"
 
-export const GITHUB_SOURCE = "github"
-
 export type MissionState =
 	| "working"
 	| "waiting_bot"

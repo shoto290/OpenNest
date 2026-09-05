@@ -1,18 +1,20 @@
 import type { Mission, MissionEvent } from "./mission-contract"
 
-export type MissionRunCause = "answer" | "merge"
+export type MissionRunCause = "answer" | "done" | "failed"
 
 export type MissionRunCall = {
 	cause: MissionRunCause
 	mission: Mission
 	events: MissionEvent[]
+	rosterBlock?: string | null
 }
 
 const INSTRUCTION_OF: Record<MissionRunCause, string> = {
 	answer:
 		"The coding agent running your mission is blocked and waiting on you. Read where the mission stands, decide alone with the tools you hold, and act. Report only what the reader must know, and report nothing when the mission moved on without them.",
-	merge:
-		"Your mission was merged on GitHub and is now closed. Report the merge in a few lines, then take your next ticket.",
+	done: "Your mission is finished. Close it if it is still open, report in a few lines where it landed, and mention whoever takes it from here.",
+	failed:
+		"Your mission is blocked and cannot go further. Close it if it is still open, report in a few lines what blocks it, and mention whoever takes it from here.",
 }
 
 const UNTRUSTED_NOTICE =
@@ -77,6 +79,7 @@ export const missionRunPromptFor = (call: MissionRunCall): string => {
 
 	return [
 		INSTRUCTION_OF[call.cause],
+		...(call.rosterBlock ? [call.rosterBlock] : []),
 		UNTRUSTED_NOTICE,
 		...(isCut ? [CUT_NOTICE] : []),
 		[UNTRUSTED_OPEN, text, UNTRUSTED_CLOSE].join("\n"),

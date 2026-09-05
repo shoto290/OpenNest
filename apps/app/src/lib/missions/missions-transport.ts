@@ -14,6 +14,11 @@ export const missionsTransport = {
 	board: () => invoke<MissionOnBoard[]>("mission_board"),
 	detail: (missionId: string) =>
 		invoke<MissionDetail>("mission_detail", { missionId }),
+	rosterBlock: (conversationId: string, botId: string) =>
+		invoke<string | null>("conversation_roster_block", {
+			conversationId,
+			botId,
+		}),
 	list: (conversationId: string) =>
 		invoke<ConversationMissions>("mission_list", { conversationId }),
 	onChanged: (listener: (changed: MissionChanged) => void) =>
