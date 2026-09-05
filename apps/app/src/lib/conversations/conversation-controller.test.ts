@@ -1818,3 +1818,165 @@ describe("the routine causes a conversation holds", () => {
 		)
 	})
 })
+
+describe("a run report relaying the bots it names", () => {
+	const draftFor = (conversationId: string, botId: string, text: string) => ({
+		conversationId,
+		botId,
+		runtimeSessionId: "rs-report",
+		text,
+		routineTitle: "Nightly report",
+		triggerSourceId: "schedule",
+	})
+
+	type Reporting = {
+		driver: ScriptedDriver
+		store: TranscriptStore
+		controller: ConversationController
+		conversation: Conversation
+	}
+
+	const createReporting = async (
+		store: TranscriptStore = createFakeTranscriptStore(),
+	): Promise<Reporting> => {
+		const driver = createScriptedDriver()
+		const bots = await seatBots(store, SPACE, ["Ada", "Nyx"])
+		const conversation = await store.createConversation({
+			spaceId: SPACE,
+			sectionId: null,
+			title: "Walls",
+			botIds: bots.map((bot) => bot.id),
+		})
+		const controller = createConversationController(driver, store)
+		controller.attach()
+		return { driver, store, controller, conversation }
+	}
+
+	it("summons the bot a report names in a conversation it never opened", async () => {
+		const { driver, controller, conversation } = await createReporting()
+		const ada = idOf(conversation, "Ada")
+		const nyx = idOf(conversation, "Nyx")
+
+		await controller.reportRun(
+			draftFor(conversation.id, ada, "Walls are up. @Nyx and @Ada, read it."),
+		)
+		await settled()
+
+		expect(driver.submissions.map(({ scope }) => scope.botId)).toEqual([nyx])
+		expect(driver.submissions[0].prompt).toContain(`<@${nyx}>`)
+	})
+
+	it("stores the answer of a summoned bot outside the turn of the report", async () => {
+		const { driver, store, controller, conversation } = await createReporting()
+		const ada = idOf(conversation, "Ada")
+		const nyx = idOf(conversation, "Nyx")
+
+		const reportTurnId = await controller.reportRun(
+			draftFor(conversation.id, ada, "Walls are up. @Nyx, read it."),
+		)
+		await settled()
+		driver.pushTo(nyx, spoke(nyx, "read and noted"))
+		await settled()
+
+		const page = await store.loadPage(conversation.id, null)
+		const answer = page.messages.find(({ authorBotId }) => authorBotId === nyx)
+		expect(answer?.content).toBe("read and noted")
+		expect(answer?.turnId).not.toBe(reportTurnId)
+	})
+
+	it("summons nobody when the turn of the summoned bots cannot be started", async () => {
+		const base = createFakeTranscriptStore()
+		let startedTurns = 0
+		const { driver, store, controller, conversation } = await createReporting({
+			...base,
+			startTurn: (turn) => {
+				startedTurns += 1
+				return startedTurns > 1
+					? Promise.reject(new Error("refused"))
+					: base.startTurn(turn)
+			},
+		})
+		const ada = idOf(conversation, "Ada")
+
+		await controller.reportRun(
+			draftFor(conversation.id, ada, "Walls are up. @Nyx, read it."),
+		)
+		await settled()
+
+		const page = await store.loadPage(conversation.id, null)
+		expect(page.messages).toHaveLength(1)
+		expect(driver.submissions).toHaveLength(0)
+	})
+
+	it("stores the report carrying the tokens of the bots it names", async () => {
+		const { store, controller, conversation } = await createReporting()
+		const ada = idOf(conversation, "Ada")
+		const nyx = idOf(conversation, "Nyx")
+
+		await controller.reportRun(
+			draftFor(conversation.id, ada, "Walls are up. @Nyx, read it."),
+		)
+		await settled()
+
+		const page = await store.loadPage(conversation.id, null)
+		expect(page.messages.map(({ content }) => content)).toContain(
+			`Walls are up. <@${nyx}>, read it.`,
+		)
+	})
+
+	it("writes the report and summons nobody when the conversation cannot be read", async () => {
+		const base = createFakeTranscriptStore()
+		const { driver, store, controller, conversation } = await createReporting({
+			...base,
+			spaces: () => Promise.reject(new Error("refused")),
+		})
+		const ada = idOf(conversation, "Ada")
+
+		await controller.reportRun(
+			draftFor(conversation.id, ada, "Walls are up. @Nyx, read it."),
+		)
+		await settled()
+
+		const page = await store.loadPage(conversation.id, null)
+		expect(page.messages.map(({ content }) => content)).toContain(
+			"Walls are up. @Nyx, read it.",
+		)
+		expect(driver.submissions).toHaveLength(0)
+	})
+
+	it("leaves the queue untouched when a report names no seated bot", async () => {
+		const { driver, controller, conversation } = await createReporting()
+		const ada = idOf(conversation, "Ada")
+
+		await controller.reportRun(draftFor(conversation.id, ada, "Walls are up."))
+		await settled()
+
+		expect(driver.submissions).toHaveLength(0)
+		expect(controller.getState().waitingBotIds).toEqual([])
+	})
+
+	it("holds the summons of a report for the wave after the one running", async () => {
+		const { driver, controller, conversation } = await createReporting()
+		const ada = idOf(conversation, "Ada")
+		const nyx = idOf(conversation, "Nyx")
+		await controller.open(conversation)
+		await controller.send("@Ada take the walls")
+		await settled()
+
+		await controller.reportRun(
+			draftFor(conversation.id, ada, "Walls are up. @Nyx, read it."),
+		)
+		await settled()
+
+		expect(runningIn(controller)).toEqual([ada])
+		expect(controller.getState().waitingBotIds).toEqual([nyx])
+
+		driver.pushTo(ada, spoke(ada, "walls done"))
+		await settled()
+
+		expect(driver.submissions.map(({ scope }) => scope.botId)).toEqual([
+			ada,
+			nyx,
+		])
+	})
+})
