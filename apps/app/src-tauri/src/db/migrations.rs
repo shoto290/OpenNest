@@ -34,6 +34,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 25, statements: ROUTINE_REPORTED_TURN },
 	Migration { version: 26, statements: MISSIONS },
 	Migration { version: 27, statements: MISSION_WATCH },
+	Migration { version: 28, statements: MISSION_REPORT },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -603,6 +604,17 @@ CREATE UNIQUE INDEX mission_events_one_event_per_delivery
 	ON mission_events (mission_id, delivery_id) WHERE delivery_id <> '';
 ";
 
+const MISSION_REPORT: &str = "
+ALTER TABLE missions ADD COLUMN reported_at INTEGER;
+ALTER TABLE missions ADD COLUMN reported_turn_id TEXT
+	REFERENCES turns (id) ON DELETE SET NULL;
+
+UPDATE missions SET reported_at = closed_at WHERE closed_at IS NOT NULL;
+
+CREATE INDEX missions_closed_without_report
+	ON missions (closed_at, id) WHERE closed_at IS NOT NULL AND reported_at IS NULL;
+";
+
 pub fn latest_version() -> u32 {
 	MIGRATIONS.last().map_or(0, |migration| migration.version)
 }
@@ -676,6 +688,7 @@ mod tests {
 	const ROUTINE_REPORTED_TURN_STEP: u32 = 25;
 	const MISSIONS_STEP: u32 = 26;
 	const MISSION_WATCH_STEP: u32 = 27;
+	const MISSION_REPORT_STEP: u32 = 28;
 
 	const A_LIVE_SESSION: &str = "INSERT INTO runtime_sessions
 		(id, conversation_id, bot_id, provider_session_id, seq, status, started_at)
@@ -808,6 +821,59 @@ mod tests {
 
 		drop(connection);
 		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[test]
+	fn the_report_step_marks_the_missions_already_closed_and_leaves_the_open_ones_alone() {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, shipped_before(MISSION_REPORT_STEP))
+			.expect("the shipped schema");
+		connection
+			.execute_batch(
+				"INSERT INTO bots (id, space_id, name, model, created_at)
+					VALUES ('b1', 'personal', 'First', 'sonnet', 1);
+				INSERT INTO conversations (id, kind, title, created_at, updated_at)
+					VALUES ('c1', 'main', 'Chat', 1, 1), ('c2', 'mission', 'Fix it', 1, 1),
+						('c3', 'mission', 'Ship it', 1, 1);
+				INSERT INTO conversation_participants
+					(conversation_id, bot_id, role, joined_at, join_seq)
+					VALUES ('c1', 'b1', 'assistant', 1, 0);
+				INSERT INTO missions (id, origin_conversation_id, bot_id, thread_conversation_id,
+					objective, ticket_platform, ticket_external_id, ticket_url, ticket_title,
+					tools, opened_at, closed_at)
+					VALUES ('m1', 'c1', 'b1', 'c2', 'Fix it', 'github', '42',
+							'https://opennest.test/tickets/42', 'Crash', '[]', 1, 9),
+						('m2', 'c1', 'b1', 'c3', 'Ship it', 'github', '43',
+							'https://opennest.test/tickets/43', 'Ship', '[]', 2, NULL);",
+			)
+			.expect("the missions this build upgrades from");
+
+		apply(&mut connection).expect("the file comes up to this build");
+
+		assert_eq!(version(&connection).expect("version"), latest_version());
+		assert_eq!(
+			reports_of(&connection),
+			vec![("m1".to_owned(), Some(9), None), ("m2".to_owned(), None, None)],
+			"the step did not settle the closed mission or it touched the open one"
+		);
+		assert!(
+			has_index(&connection, "missions_closed_without_report"),
+			"the read of the missions still owing a report has no index"
+		);
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	fn reports_of(connection: &Connection) -> Vec<(String, Option<i64>, Option<String>)> {
+		let mut statement = connection
+			.prepare("SELECT id, reported_at, reported_turn_id FROM missions ORDER BY id")
+			.expect("the report columns are there");
+		let rows = statement
+			.query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+			.expect("the missions read");
+		rows.collect::<rusqlite::Result<Vec<_>>>().expect("every mission reads")
 	}
 
 	#[test]

@@ -40,7 +40,7 @@ fn named(kind: MissionEventKind) -> rusqlite::Result<String> {
 
 const MISSION_COLUMNS: &str = "SELECT id, origin_conversation_id, bot_id, thread_conversation_id,
 	objective, ticket_platform, ticket_external_id, ticket_url, ticket_title, tools,
-	opened_at, closed_at,
+	opened_at, closed_at, reported_at, reported_turn_id,
 	COALESCE((SELECT kind FROM mission_events
 		WHERE mission_events.mission_id = missions.id AND mission_events.kind <> 'note'
 		ORDER BY mission_events.seq DESC LIMIT 1), 'opened') AS state_kind
@@ -70,6 +70,11 @@ const KEEP_FINGERPRINT: &str = "UPDATE missions SET github_fingerprint = ?2 WHER
 const SELECT_KEY: &str = "SELECT delivery_key FROM missions WHERE id = ?1";
 
 const CLOSE_MISSION: &str = "UPDATE missions SET closed_at = ?2 WHERE id = ?1";
+
+const REPORT_MISSION: &str =
+	"UPDATE missions SET reported_at = ?2, reported_turn_id = ?3 WHERE id = ?1";
+
+const CONVERSATION_OF_TURN: &str = "SELECT conversation_id FROM turns WHERE id = ?1";
 
 const SELECT_EVENTS: &str = "SELECT id, mission_id, kind, source, payload, created_at
 	FROM mission_events WHERE mission_id = ?1 ORDER BY seq DESC LIMIT ?2";
@@ -252,6 +257,30 @@ impl MissionsRepository {
 			.await?)
 	}
 
+	pub async fn closed_without_report(&self) -> Result<Vec<Mission>, MissionError> {
+		Ok(self
+			.access
+			.call(move |connection| {
+				let mut statement = connection.prepare_cached(&format!(
+					"{MISSION_COLUMNS} WHERE closed_at IS NOT NULL AND reported_at IS NULL
+					ORDER BY closed_at, id LIMIT ?1"
+				))?;
+				let rows = statement.query_map([MAX_MISSIONS_PER_READ], mission)?;
+				Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+			})
+			.await?)
+	}
+
+	pub async fn report(
+		&self,
+		mission_id: String,
+		turn_id: Option<String>,
+	) -> Result<Mission, MissionError> {
+		self.access
+			.call_mut(move |connection| Ok(reported(connection, &mission_id, turn_id.as_deref())))
+			.await?
+	}
+
 	pub async fn held(&self, id: String) -> Result<Option<Mission>, MissionError> {
 		Ok(self.access.call(move |connection| held(connection, &id)).await?)
 	}
@@ -358,6 +387,50 @@ fn closed(
 	let stored = read(&transaction, mission_id)?;
 	transaction.commit()?;
 	Ok(stored)
+}
+
+fn reported(
+	connection: &mut Connection,
+	mission_id: &str,
+	turn_id: Option<&str>,
+) -> Result<Mission, MissionError> {
+	let transaction = write_transaction(connection)?;
+	let Some(standing) = held(&transaction, mission_id)? else {
+		return Err(MissionError::UnknownMission { id: mission_id.to_owned() });
+	};
+	if standing.closed_at.is_none() {
+		return Err(MissionError::MissionStillOpen { id: mission_id.to_owned() });
+	}
+	if standing.reported_at.is_some() {
+		return Err(MissionError::MissionAlreadyReported { id: mission_id.to_owned() });
+	}
+	refuse_an_unreportable_turn(&transaction, &standing, turn_id)?;
+	transaction.execute(REPORT_MISSION, params![mission_id, now(), turn_id])?;
+	let stored = read(&transaction, mission_id)?;
+	transaction.commit()?;
+	Ok(stored)
+}
+
+fn refuse_an_unreportable_turn(
+	transaction: &Transaction<'_>,
+	standing: &Mission,
+	turn_id: Option<&str>,
+) -> Result<(), MissionError> {
+	let Some(turn_id) = turn_id else {
+		return Ok(());
+	};
+	let of_turn: Option<String> =
+		transaction.query_row(CONVERSATION_OF_TURN, [turn_id], |row| row.get(0)).optional()?;
+	let Some(conversation_id) = of_turn else {
+		return Err(MissionError::UnknownTurn { id: turn_id.to_owned() });
+	};
+	if conversation_id != standing.origin_conversation_id {
+		return Err(MissionError::TurnOfAnotherConversation {
+			turn_id: turn_id.to_owned(),
+			conversation_id,
+		});
+	}
+	Ok(())
 }
 
 fn armed(
@@ -499,7 +572,9 @@ fn mission(row: &Row<'_>) -> rusqlite::Result<Mission> {
 		tools: from_text(row, 9)?,
 		opened_at: row.get(10)?,
 		closed_at: row.get(11)?,
-		state: derived(row.get(12)?)?,
+		reported_at: row.get(12)?,
+		reported_turn_id: row.get(13)?,
+		state: derived(row.get(14)?)?,
 	})
 }
 
@@ -1118,6 +1193,155 @@ mod tests {
 			None,
 			"a conversation holding a mission answered as its thread"
 		);
+
+		drop(database);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	async fn a_turn_in(database: &Database, id: &str, conversation_id: &str) {
+		let statement = format!(
+			"INSERT INTO turns (id, conversation_id, seq, started_at)
+				VALUES ('{id}', '{conversation_id}', 1, 1)"
+		);
+		database
+			.call_mut(move |connection| Ok(connection.execute_batch(&statement)?))
+			.await
+			.expect("the turn is planted");
+	}
+
+	async fn a_closed_mission(database: &Database) -> Mission {
+		let opened = database
+			.missions()
+			.open(a_draft("c1", "b1", "Fix it"))
+			.await
+			.expect("the mission opens");
+		database
+			.missions()
+			.append(opened.id.clone(), an_entry(MissionEventKind::Closed))
+			.await
+			.expect("the mission closes")
+	}
+
+	#[tokio::test]
+	async fn a_report_refuses_a_mission_nobody_holds_one_still_open_and_one_already_reported() {
+		let (database, dir) = planted().await;
+		let open = database
+			.missions()
+			.open(a_draft("c1", "b1", "Ship it"))
+			.await
+			.expect("the mission opens");
+		let closed = a_closed_mission(&database).await;
+
+		let unknown = database
+			.missions()
+			.report("nobody".to_owned(), None)
+			.await
+			.expect_err("an unknown mission reports");
+		let still_open = database
+			.missions()
+			.report(open.id.clone(), None)
+			.await
+			.expect_err("an open mission reports");
+		let first = database
+			.missions()
+			.report(closed.id.clone(), None)
+			.await
+			.expect("the report is recorded");
+		let again = database
+			.missions()
+			.report(closed.id.clone(), None)
+			.await
+			.expect_err("a second report lands");
+
+		assert_eq!(unknown, MissionError::UnknownMission { id: "nobody".to_owned() });
+		assert_eq!(still_open, MissionError::MissionStillOpen { id: open.id });
+		assert_eq!(first.reported_turn_id, None, "a report without a turn named one");
+		assert!(first.reported_at.is_some(), "the report carries no moment");
+		assert_eq!(again, MissionError::MissionAlreadyReported { id: closed.id.clone() });
+		assert_eq!(
+			database
+				.missions()
+				.held(closed.id)
+				.await
+				.expect("the mission reads")
+				.expect("the mission stands")
+				.reported_at,
+			first.reported_at,
+			"the refused report moved the moment already stored"
+		);
+
+		drop(database);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_report_refuses_a_turn_nobody_holds_and_one_of_another_conversation() {
+		let (database, dir) = planted().await;
+		let closed = a_closed_mission(&database).await;
+		a_turn_in(&database, "elsewhere", "c2").await;
+
+		let unknown = database
+			.missions()
+			.report(closed.id.clone(), Some("nobody".to_owned()))
+			.await
+			.expect_err("an unknown turn reports");
+		let elsewhere = database
+			.missions()
+			.report(closed.id.clone(), Some("elsewhere".to_owned()))
+			.await
+			.expect_err("a turn of another conversation reports");
+
+		assert_eq!(unknown, MissionError::UnknownTurn { id: "nobody".to_owned() });
+		assert_eq!(
+			elsewhere,
+			MissionError::TurnOfAnotherConversation {
+				turn_id: "elsewhere".to_owned(),
+				conversation_id: "c2".to_owned(),
+			}
+		);
+		assert_eq!(
+			database
+				.missions()
+				.closed_without_report()
+				.await
+				.expect("the missions owing a report read")
+				.into_iter()
+				.map(|mission| mission.id)
+				.collect::<Vec<_>>(),
+			vec![closed.id],
+			"a refused report settled the mission anyway"
+		);
+
+		drop(database);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_turn_that_goes_leaves_the_mission_that_reported_in_it_naming_no_turn() {
+		let (database, dir) = planted().await;
+		let closed = a_closed_mission(&database).await;
+		a_turn_in(&database, "t1", "c1").await;
+		let reported = database
+			.missions()
+			.report(closed.id.clone(), Some("t1".to_owned()))
+			.await
+			.expect("the report is recorded");
+
+		database
+			.call_mut(|connection| {
+				Ok(connection.execute_batch("DELETE FROM turns WHERE id = 't1'")?)
+			})
+			.await
+			.expect("the turn goes");
+
+		let held = database
+			.missions()
+			.held(closed.id)
+			.await
+			.expect("the mission reads")
+			.expect("the mission stands");
+		assert_eq!(held.reported_at, reported.reported_at, "the report lost its moment");
+		assert_eq!(held.reported_turn_id, None, "the mission still names a turn nobody holds");
 
 		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
