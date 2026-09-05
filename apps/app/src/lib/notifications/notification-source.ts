@@ -5,6 +5,7 @@ import {
 	type NotificationSwitches,
 	notificationsFor,
 	notifiesFinishedRound,
+	notifiesMission,
 } from "./notification-policy"
 import type {
 	NotificationPort,
@@ -220,10 +221,12 @@ export const startNotificationSource = ({
 		return requests
 	}
 
+	const currentFocus = (): boolean => windowFocus ?? hasFocus()
+
 	const compare = () => {
 		const reading: Reading = {
 			switches: switches(),
-			hasFocus: windowFocus ?? hasFocus(),
+			hasFocus: currentFocus(),
 		}
 		const requests = [
 			...botNotifications(reading),
@@ -255,6 +258,16 @@ export const startNotificationSource = ({
 		const { state } = changed
 
 		if (!isNotifiedMissionState(state)) {
+			return
+		}
+
+		if (
+			!notifiesMission({
+				state,
+				switches: switches(),
+				hasFocus: currentFocus(),
+			})
+		) {
 			return
 		}
 

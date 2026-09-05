@@ -1,3 +1,5 @@
+import type { NotifiedMissionState } from "./notification-words"
+
 import { type ChatState, isTurnBusy } from "../chat/chat-state"
 import type { ConversationState } from "../conversations/conversation-controller"
 import type { UserPreferences } from "../user/preferences-contract"
@@ -93,3 +95,21 @@ export const notifiesFinishedRound = ({
 	switches.notifyOnFinishedTurn &&
 	isRoundBusy(before) &&
 	!isRoundBusy(after)
+
+export type MissionPolicyInput = {
+	state: NotifiedMissionState
+	switches: NotificationSwitches
+	hasFocus: boolean
+}
+
+const MISSION_SWITCH_OF = {
+	waiting_human: "notifyOnQuestion",
+	ready_to_merge: "notifyOnFinishedTurn",
+} as const satisfies Record<NotifiedMissionState, keyof NotificationSwitches>
+
+export const notifiesMission = ({
+	state,
+	switches,
+	hasFocus,
+}: MissionPolicyInput): boolean =>
+	!hasFocus && switches[MISSION_SWITCH_OF[state]]

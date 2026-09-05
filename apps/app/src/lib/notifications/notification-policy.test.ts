@@ -3,10 +3,12 @@ import { describe, expect, it } from "vitest"
 import {
 	type ConversationPolicyInput,
 	type ConversationRound,
+	type MissionPolicyInput,
 	type NotificationPolicyInput,
 	type NotificationSwitches,
 	notificationsFor,
 	notifiesFinishedRound,
+	notifiesMission,
 } from "./notification-policy"
 
 import type { PermissionRequest, QuestionRequest } from "../agent/contract"
@@ -251,5 +253,53 @@ describe("notifiesFinishedRound", () => {
 				switches: { ...ALL_ON, notifyOnFinishedTurn: false },
 			}),
 		).toBe(false)
+	})
+})
+
+const decideMission = ({
+	state = "waiting_human",
+	switches = ALL_ON,
+	hasFocus = false,
+}: Partial<MissionPolicyInput> = {}): boolean =>
+	notifiesMission({ state, switches, hasFocus })
+
+describe("notifiesMission", () => {
+	it("reports an escalation to the human", () => {
+		expect(decideMission({ state: "waiting_human" })).toBe(true)
+	})
+
+	it("reports work that is ready to merge", () => {
+		expect(decideMission({ state: "ready_to_merge" })).toBe(true)
+	})
+
+	it("reports nothing while the window holds the focus", () => {
+		expect(decideMission({ hasFocus: true })).toBe(false)
+	})
+
+	it("reports nothing on an escalation while the question switch is off", () => {
+		expect(
+			decideMission({
+				state: "waiting_human",
+				switches: { ...ALL_ON, notifyOnQuestion: false },
+			}),
+		).toBe(false)
+	})
+
+	it("reports nothing on finished work while the finished turn switch is off", () => {
+		expect(
+			decideMission({
+				state: "ready_to_merge",
+				switches: { ...ALL_ON, notifyOnFinishedTurn: false },
+			}),
+		).toBe(false)
+	})
+
+	it("reports an escalation while the finished turn switch is off", () => {
+		expect(
+			decideMission({
+				state: "waiting_human",
+				switches: { ...ALL_ON, notifyOnFinishedTurn: false },
+			}),
+		).toBe(true)
 	})
 })
