@@ -30,6 +30,8 @@ import { RUN_OUTPUT_SCHEMA, readRunReport } from "../routines/run-output"
 
 export const MISSION_TRIGGER_SOURCE = "mission"
 
+export const RUN_DEADLINE_MS = 30 * 60_000
+
 export type MissionRunUnsubscribe = () => void
 
 export type MissionRunPort = {
@@ -58,6 +60,7 @@ export type MissionRunDriverOptions = {
 type LiveMissionRun = {
 	call: MissionRunCall
 	scope: RuntimeScope
+	deadline: ReturnType<typeof setTimeout>
 }
 
 const CAUSE_OF_STATE: Partial<Record<MissionState, MissionRunCause>> = {
@@ -126,16 +129,32 @@ export const startMissionRunDriver = ({
 		void driver.shutdown(scope).catch(reporting("agent_shutdown"))
 	}
 
-	const end = (held: LiveMissionRun) => {
+	const forget = (held: LiveMissionRun) => {
+		clearTimeout(held.deadline)
 		live.delete(held.call.mission.id)
+	}
+
+	const end = (held: LiveMissionRun) => {
+		forget(held)
 		shutdownSession(held.scope)
 	}
 
 	const refuse = async (held: LiveMissionRun, reason: string) => {
 		const { scope } = held
-		end(held)
+		forget(held)
 		await driver.cancelTurn(scope).catch(reporting("agent_cancel_turn"))
+		shutdownSession(scope)
 		raiseFailure(reason)
+	}
+
+	const expire = async (missionId: string) => {
+		const held = live.get(missionId)
+
+		if (!held) {
+			return
+		}
+
+		await refuse(held, "the mission run outlived its deadline")
 	}
 
 	const openScope = async ({ mission }: MissionRunCall) => {
@@ -158,7 +177,11 @@ export const startMissionRunDriver = ({
 		const { id } = call.mission
 		try {
 			const scope = await openScope(call)
-			live.set(id, { call, scope })
+			live.set(id, {
+				call,
+				scope,
+				deadline: setTimeout(() => void expire(id), RUN_DEADLINE_MS),
+			})
 			await driver.startOrResumeSession(
 				scope,
 				undefined,
@@ -176,11 +199,11 @@ export const startMissionRunDriver = ({
 	}
 
 	const consider = async (changed: MissionChanged) => {
-		if (!states.entered(changed) || !CAUSE_OF_STATE[changed.state]) {
+		if (isBusy(changed.missionId)) {
 			return
 		}
 
-		if (isBusy(changed.missionId)) {
+		if (!states.entered(changed) || !CAUSE_OF_STATE[changed.state]) {
 			return
 		}
 

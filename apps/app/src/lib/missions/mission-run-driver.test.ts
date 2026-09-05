@@ -5,10 +5,11 @@ import type { Mission, MissionEvent, MissionState } from "./mission-contract"
 import { aMission, missionEvents } from "./mission-fixtures"
 import {
 	MISSION_TRIGGER_SOURCE,
+	RUN_DEADLINE_MS,
 	startMissionRunDriver,
 } from "./mission-run-driver"
 
-import type { RuntimeScope, TurnEnded } from "../agent/contract"
+import type { AgentEvent, RuntimeScope, TurnEnded } from "../agent/contract"
 import type { ConversationState } from "../conversations/conversation-controller"
 import { createConversationRuntimes } from "../conversations/conversation-runtimes"
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
@@ -46,12 +47,14 @@ type Harness = {
 	driver: ScriptedDriver
 	missions: FakeMissions
 	starts: Started[]
+	calls: string[]
 	thread: Conversation
 	mission: Mission
 	reportFailure: ReturnType<typeof vi.fn>
 	stop: () => void
 	hold: (state: MissionState, events?: MissionEvent[]) => void
 	enter: (state: MissionState, events?: MissionEvent[]) => Promise<void>
+	emitAtRun: (event: AgentEvent) => Promise<void>
 	endTurn: (ended: Partial<TurnEnded>) => Promise<void>
 	tail: () => ConversationState
 }
@@ -61,11 +64,20 @@ const createHarness = async (
 ): Promise<Harness> => {
 	const scripted = createScriptedDriver()
 	const starts: Started[] = []
+	const calls: string[] = []
 	const driver: ScriptedDriver = {
 		...scripted,
 		startOrResumeSession: (scope, resume, cwd, outputSchema) => {
 			starts.push({ scope, outputSchema })
 			return scripted.startOrResumeSession(scope, resume, cwd, outputSchema)
+		},
+		cancelTurn: (scope) => {
+			calls.push("cancelTurn")
+			return scripted.cancelTurn(scope)
+		},
+		shutdown: (scope) => {
+			calls.push("shutdown")
+			return scripted.shutdown(scope)
 		},
 	}
 	const base = createFakeTranscriptStore()
@@ -105,17 +117,20 @@ const createHarness = async (
 		await settled()
 	}
 
-	const endTurn = async (ended: Partial<TurnEnded>) => {
+	const emitAtRun = async (event: AgentEvent) => {
 		const start = starts.at(-1)
 		if (!start) {
 			throw new Error("no mission run session was opened")
 		}
-		driver.emit(start.scope, {
+		driver.emit(start.scope, event)
+		await settled()
+	}
+
+	const endTurn = (ended: Partial<TurnEnded>) =>
+		emitAtRun({
 			type: "turnEnded",
 			ended: { sessionId: null, outcome: "completed", ...ended },
 		})
-		await settled()
-	}
 
 	const reader = runtimes.runtimeFor(thread.id)
 	await reader.open(thread)
@@ -127,12 +142,14 @@ const createHarness = async (
 		driver,
 		missions,
 		starts,
+		calls,
 		thread,
 		mission,
 		reportFailure,
 		stop,
 		hold,
 		enter,
+		emitAtRun,
 		endTurn,
 		tail,
 	}
@@ -160,6 +177,7 @@ describe("startMissionRunDriver", () => {
 
 	afterEach(() => {
 		harness.stop()
+		vi.useRealTimers()
 	})
 
 	it("opens a session of its own on the mission thread for the owning bot", async () => {
@@ -195,6 +213,45 @@ describe("startMissionRunDriver", () => {
 
 		expect(harness.starts).toHaveLength(1)
 		expect(harness.driver.submissions).toHaveLength(1)
+	})
+
+	it("keeps the state of a change it dropped for being busy", async () => {
+		await harness.enter("done", closedBy("github"))
+		await harness.enter("waiting_bot")
+		expect(harness.starts).toHaveLength(1)
+
+		await harness.endTurn({ structuredOutput: { outcome: "nothing" } })
+		await harness.enter("waiting_bot")
+
+		expect(harness.starts).toHaveLength(2)
+	})
+
+	it("cancels the turn of a refused run before it shuts its session down", async () => {
+		await harness.enter("waiting_bot")
+
+		await harness.emitAtRun({
+			type: "permissionRequested",
+			request: { id: "p-1", toolName: "Bash", title: "Run it", detail: null },
+		})
+
+		expect(harness.calls).toEqual(["cancelTurn", "shutdown"])
+		expect(harness.reportFailure).toHaveBeenCalledTimes(1)
+	})
+
+	it("ends a run that outlived its deadline and takes the mission again", async () => {
+		vi.useFakeTimers()
+		await harness.enter("waiting_bot")
+
+		await vi.advanceTimersByTimeAsync(RUN_DEADLINE_MS)
+
+		expect(harness.calls).toEqual(["cancelTurn", "shutdown"])
+		expect(harness.reportFailure).toHaveBeenCalledTimes(1)
+
+		vi.useRealTimers()
+		await harness.enter("working")
+		await harness.enter("waiting_bot")
+
+		expect(harness.starts).toHaveLength(2)
 	})
 
 	it("runs the bot again once the run has ended", async () => {
