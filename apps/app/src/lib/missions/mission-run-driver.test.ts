@@ -267,6 +267,48 @@ describe("startMissionRunDriver", () => {
 		})
 	})
 
+	it("asks a closing run for a report and nothing else", async () => {
+		await harness.enter("done", closedBy("poller"))
+
+		expect(harness.starts[0].outputSchema).toMatchObject({
+			properties: { outcome: { enum: ["report"] } },
+		})
+	})
+
+	it.each([
+		["it ends on nothing", { outcome: "nothing" }],
+		["its report text is blank", { outcome: "report", report: "   " }],
+	])(
+		"names a closing run that reported nothing when %s",
+		async (_name, structuredOutput) => {
+			const logged = vi
+				.spyOn(console, "error")
+				.mockImplementation(() => undefined)
+			await harness.enter("done", closedBy("poller"))
+			await harness.endTurn({ structuredOutput })
+
+			expect(harness.reportFailure).toHaveBeenCalledTimes(1)
+			expect(logged).toHaveBeenCalledWith(
+				"mission run driver: the run failed",
+				"the closing mission run reported nothing",
+			)
+			expect(spoken(harness.originTail())).toEqual([])
+		},
+	)
+
+	it("names a closing run whose turn carried no structured output", async () => {
+		const logged = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => undefined)
+		await harness.enter("done", closedBy("poller"))
+		await harness.endTurn({ structuredOutput: undefined })
+
+		expect(logged).toHaveBeenCalledWith(
+			"mission run driver: the run failed",
+			"the mission run ended with no structured output",
+		)
+	})
+
 	it("fences the mission events and the agent last message under the instruction", async () => {
 		await harness.enter("waiting_bot")
 
@@ -294,7 +336,7 @@ describe("startMissionRunDriver", () => {
 		await harness.enter("waiting_bot")
 		expect(harness.starts).toHaveLength(1)
 
-		await harness.endTurn({ structuredOutput: { outcome: "nothing" } })
+		await harness.endTurn(reported("The walls stand, handing over."))
 		await harness.enter("waiting_bot")
 
 		expect(harness.starts).toHaveLength(2)
@@ -489,7 +531,7 @@ describe("startMissionRunDriver", () => {
 	it("starts no second run when the bot closes its mission during its own run", async () => {
 		await harness.enter("failed", failedBy("claude-code"))
 		await harness.enter("failed", failedBy("claude-code"))
-		await harness.endTurn({ structuredOutput: { outcome: "nothing" } })
+		await harness.endTurn(reported("The build will not pass."))
 
 		expect(harness.starts).toHaveLength(1)
 		expect(harness.driver.submissions).toHaveLength(1)

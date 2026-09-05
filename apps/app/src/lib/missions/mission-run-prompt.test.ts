@@ -15,6 +15,39 @@ const callSaying = (message: string): MissionRunCall => ({
 	]),
 })
 
+const callClosedAfter = (noise: number): MissionRunCall => ({
+	cause: "done",
+	mission: aMission({ state: "done" }),
+	events: missionEvents([
+		{
+			kind: "agent_asked",
+			source: "agent-hook",
+			payload: { message: "Which branch?" },
+		},
+		...Array.from({ length: noise }, () => ({
+			kind: "note" as const,
+			source: "poller",
+			payload: { note: "still going" },
+		})),
+		{
+			kind: "closed",
+			source: "poller",
+			payload: { summary: "The walls stand." },
+		},
+	]),
+})
+
+const callNoting = (note: string): MissionRunCall => ({
+	cause: "done",
+	mission: aMission({ state: "done" }),
+	events: missionEvents([
+		{ kind: "note", source: "poller", payload: { note } },
+	]),
+})
+
+const eventIdsIn = (prompt: string) =>
+	[...dataIn(prompt).matchAll(/"id": "(event-\d+)"/g)].map(([, id]) => id)
+
 const countOf = (prompt: string, tag: string) => prompt.split(tag).length - 1
 
 const dataIn = (prompt: string) =>
@@ -41,21 +74,64 @@ describe("missionRunPromptFor", () => {
 		expect(countOf(prompt, CLOSE)).toBe(1)
 	})
 
-	it("cuts a payload running past the cap and says so above the fence", () => {
+	it("cuts an event payload running past the cap and says so above the fence", () => {
+		const prompt = missionRunPromptFor(callNoting("a".repeat(9000)))
+
+		expect(prompt).toContain("Payloads cut: 1.")
+		expect(prompt.indexOf("Payloads cut: 1.")).toBeLessThan(
+			prompt.indexOf(OPEN),
+		)
+		expect(dataIn(prompt)).not.toContain("a".repeat(1001))
+	})
+
+	it("says nothing of a cut payload when every payload fits", () => {
+		const prompt = missionRunPromptFor(callNoting("Still going."))
+
+		expect(prompt).not.toContain("Payloads cut")
+	})
+
+	it("keeps the last agent message whole", () => {
 		const prompt = missionRunPromptFor(callSaying("a".repeat(9000)))
 
-		expect(dataIn(prompt).length).toBeLessThanOrEqual(4000)
-		expect(prompt).toContain("The block below was cut")
-		expect(prompt.indexOf("The block below was cut")).toBeLessThan(
+		expect(dataIn(prompt)).toContain("a".repeat(9000))
+	})
+
+	it("leaves no lone surrogate when the cut falls inside a pair", () => {
+		const prompt = missionRunPromptFor(callNoting("\u{1F600}".repeat(4000)))
+
+		expect(prompt).not.toMatch(/[\uD800-\uDFFF]/u)
+	})
+
+	it("keeps the mission, the last event and the agent last message of a long history", () => {
+		const prompt = missionRunPromptFor(callClosedAfter(60))
+
+		expect(dataIn(prompt)).toContain("Ship the walls")
+		expect(dataIn(prompt)).toContain("The walls stand.")
+		expect(dataIn(prompt)).toContain("Which branch?")
+	})
+
+	it("keeps the 20 most recent events, the most recent one last", () => {
+		const prompt = missionRunPromptFor(callClosedAfter(60))
+		const events = eventIdsIn(prompt)
+
+		expect(events).toHaveLength(20)
+		expect(events.at(-1)).toBe("event-62")
+		expect(events.at(0)).toBe("event-43")
+	})
+
+	it("says how many older events it left out", () => {
+		const prompt = missionRunPromptFor(callClosedAfter(60))
+
+		expect(prompt).toContain("Older events left out: 42.")
+		expect(prompt.indexOf("Older events left out: 42.")).toBeLessThan(
 			prompt.indexOf(OPEN),
 		)
 	})
 
-	it("leaves no lone surrogate when the cut falls inside a pair", () => {
-		const prompt = missionRunPromptFor(callSaying("😀".repeat(4000)))
+	it("says nothing of a left out event when the history fits", () => {
+		const prompt = missionRunPromptFor(callSaying("Which branch?"))
 
-		expect(prompt).not.toMatch(/[\uD800-\uDFFF]/u)
-		expect([...dataIn(prompt)].length).toBeLessThanOrEqual(4000)
+		expect(prompt).not.toContain("Older events left out")
 	})
 
 	it("says nothing of a cut when the payload holds no tag and fits", () => {
