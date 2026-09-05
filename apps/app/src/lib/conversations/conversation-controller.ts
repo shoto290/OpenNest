@@ -828,17 +828,20 @@ export const createConversationController = (
 		sync()
 	}
 
-	const holdForReport = async (conversationId: string) => {
+	const isHeldForReport = async (conversationId: string) => {
 		if (conversation?.id === conversationId) {
-			return
+			return true
 		}
 		try {
 			const seated = await readConversation(store, conversationId)
-			if (seated) {
-				await open(seated)
+			if (!seated) {
+				return false
 			}
+			await open(seated)
+			return true
 		} catch (reason) {
 			noteFailure(toReadError(reason))
+			return false
 		}
 	}
 
@@ -870,8 +873,7 @@ export const createConversationController = (
 	}
 
 	const reportRun = async (draft: RunReportDraft) => {
-		await holdForReport(draft.conversationId)
-		const isSeated = conversation?.id === draft.conversationId
+		const isSeated = await isHeldForReport(draft.conversationId)
 		const text = isSeated
 			? toMentionTokens(draft.text, mentionBots())
 			: draft.text
