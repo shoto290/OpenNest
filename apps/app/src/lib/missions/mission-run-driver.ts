@@ -377,7 +377,7 @@ export const startMissionRunDriver = ({
 		}
 	}
 
-	const startEachOf = (caughtUp: Pick<MissionOnBoard, "mission">[]) => {
+	const startRunsFor = (caughtUp: Pick<MissionOnBoard, "mission">[]) => {
 		if (isStopped) {
 			return
 		}
@@ -388,11 +388,11 @@ export const startMissionRunDriver = ({
 	}
 
 	const catchUpOnOpenMissions = async () => {
-		startEachOf((await missions.board()).filter(isCaughtUpOn))
+		startRunsFor((await missions.board()).filter(isCaughtUpOn))
 	}
 
 	const catchUpOnUnreportedMissions = async () => {
-		startEachOf(await missions.unreported())
+		startRunsFor(await missions.unreported())
 	}
 
 	const changes = listening(
