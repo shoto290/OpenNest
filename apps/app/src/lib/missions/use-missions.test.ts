@@ -33,6 +33,8 @@ const MISSION: Mission = {
 	state: "working",
 	openedAt: 0,
 	closedAt: null,
+	reportedAt: null,
+	reportedTurnId: null,
 }
 
 const A_MINUTE_MS = 60_000

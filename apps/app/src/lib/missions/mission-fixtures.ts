@@ -20,6 +20,8 @@ const A_MISSION: Mission = {
 	state: "working",
 	openedAt: 1,
 	closedAt: null,
+	reportedAt: null,
+	reportedTurnId: null,
 }
 
 export const aMission = (held: Partial<Mission> = {}): Mission => ({

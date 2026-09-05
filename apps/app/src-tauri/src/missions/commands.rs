@@ -177,10 +177,36 @@ pub async fn mission_board<R: Runtime>(
 	state: State<'_, db::DatabaseState>,
 ) -> Result<Vec<MissionOnBoard>, MissionError> {
 	let database = ready(&state)?;
-	let dir = avatars::dir(&app);
-	let bundle_root = bundles::root(&app);
+	with_their_bots(&app, database, database.missions().still_open().await?).await
+}
+
+#[tauri::command]
+pub async fn mission_unreported<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+) -> Result<Vec<MissionOnBoard>, MissionError> {
+	let database = ready(&state)?;
+	with_their_bots(&app, database, database.missions().closed_without_report().await?).await
+}
+
+#[tauri::command]
+pub async fn mission_reported(
+	state: State<'_, db::DatabaseState>,
+	mission_id: String,
+	turn_id: Option<String>,
+) -> Result<Mission, MissionError> {
+	ready(&state)?.missions().report(mission_id, turn_id).await
+}
+
+async fn with_their_bots<R: Runtime>(
+	app: &AppHandle<R>,
+	database: &db::Database,
+	missions: Vec<Mission>,
+) -> Result<Vec<MissionOnBoard>, MissionError> {
+	let dir = avatars::dir(app);
+	let bundle_root = bundles::root(app);
 	let mut board = Vec::new();
-	for mission in database.missions().still_open().await? {
+	for mission in missions {
 		let bot = bot_row(database, &mission.bot_id).await?;
 		board.push(MissionOnBoard {
 			mission,
@@ -312,6 +338,75 @@ mod tests {
 		);
 
 		cleaned(&app);
+	}
+
+	#[tokio::test]
+	async fn a_closed_mission_owes_a_report_until_one_is_recorded_and_recording_stays_silent() {
+		let app = a_host("unreported").await;
+		let opened = mission_open(app.handle().clone(), app.state(), a_draft("c1", "b1", "Fix it"))
+			.await
+			.expect("the mission opens");
+		let open = mission_open(app.handle().clone(), app.state(), a_draft("c1", "b1", "Ship it"))
+			.await
+			.expect("the mission opens");
+		mission_close(
+			app.handle().clone(),
+			app.state(),
+			opened.id.clone(),
+			a_closing(MissionOutcome::Done),
+		)
+		.await
+		.expect("the mission closes");
+		a_turn_in(&app, "t1", "c1").await;
+		let (sender, received) = channel();
+		app.handle().listen(CHANGED_EVENT, move |event| {
+			let _ = sender.send(event.payload().to_owned());
+		});
+
+		let owed = mission_unreported(app.handle().clone(), app.state())
+			.await
+			.expect("the missions owing a report read");
+		let recorded = mission_reported(app.state(), opened.id.clone(), Some("t1".to_owned()))
+			.await
+			.expect("the report is recorded");
+		let settled = mission_unreported(app.handle().clone(), app.state())
+			.await
+			.expect("the missions owing a report read");
+
+		assert_eq!(
+			owed.iter().map(|held| held.mission.id.clone()).collect::<Vec<_>>(),
+			vec![opened.id.clone()],
+			"the closed mission is not the only one owing a report"
+		);
+		assert_eq!(owed[0].bot.name, "First", "the mission owing a report came without its bot");
+		assert_eq!(recorded.reported_turn_id, Some("t1".to_owned()));
+		assert!(recorded.reported_at.is_some(), "the recorded report carries no moment");
+		assert!(settled.is_empty(), "a mission that reported still owes one");
+		assert!(
+			received.try_recv().is_err(),
+			"recording a report told the front the mission moved"
+		);
+		let board =
+			mission_board(app.handle().clone(), app.state()).await.expect("the board reads");
+		assert_eq!(
+			board.iter().map(|held| held.mission.id.clone()).collect::<Vec<_>>(),
+			vec![open.id],
+			"the board stopped answering open missions only"
+		);
+
+		cleaned(&app);
+	}
+
+	async fn a_turn_in(app: &App<MockRuntime>, id: &str, conversation_id: &str) {
+		let statement = format!(
+			"INSERT INTO turns (id, conversation_id, seq, started_at)
+				VALUES ('{id}', '{conversation_id}', 1, 1)"
+		);
+		ready(&app.state::<db::DatabaseState>())
+			.expect("the database opens")
+			.call_mut(move |connection| Ok(connection.execute_batch(&statement)?))
+			.await
+			.expect("the turn is planted");
 	}
 
 	#[tokio::test]

@@ -32,6 +32,8 @@ const DETAIL: MissionDetail = {
 		state: "working",
 		openedAt: 1,
 		closedAt: null,
+		reportedAt: null,
+		reportedTurnId: null,
 	},
 	events: [
 		{

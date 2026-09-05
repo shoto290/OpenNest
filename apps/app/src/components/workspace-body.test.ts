@@ -94,6 +94,8 @@ const missionOf = (bot: Bot, origin: Conversation): Mission => ({
 	state: "waiting_human",
 	openedAt: 0,
 	closedAt: null,
+	reportedAt: null,
+	reportedTurnId: null,
 })
 
 const eventOf = (

@@ -35,6 +35,8 @@ const missionIn = (state: MissionState): Mission => ({
 	state,
 	openedAt: 1_700_000_000_000,
 	closedAt: null,
+	reportedAt: null,
+	reportedTurnId: null,
 })
 
 describe("toMissionRows", () => {
@@ -128,6 +130,8 @@ const mission = (over: Partial<Mission>): Mission => ({
 	state: "working",
 	openedAt: 1,
 	closedAt: null,
+	reportedAt: null,
+	reportedTurnId: null,
 	...over,
 })
 

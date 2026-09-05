@@ -56,6 +56,8 @@ export type Mission = {
 	state: MissionState
 	openedAt: number
 	closedAt: number | null
+	reportedAt: number | null
+	reportedTurnId: string | null
 }
 
 export type MissionEvent = {
@@ -88,6 +90,14 @@ export type MissionError =
 	| { kind: "unknownMission"; id: string }
 	| { kind: "unknownConversation"; id: string }
 	| { kind: "missionAlreadyClosed"; id: string }
+	| { kind: "missionStillOpen"; id: string }
+	| { kind: "missionAlreadyReported"; id: string }
+	| { kind: "unknownTurn"; id: string }
+	| {
+			kind: "turnOfAnotherConversation"
+			turnId: string
+			conversationId: string
+	  }
 	| { kind: "unknownBot"; id: string }
 	| { kind: "unknownParticipant"; conversationId: string; botId: string }
 	| { kind: "blankField"; field: string }

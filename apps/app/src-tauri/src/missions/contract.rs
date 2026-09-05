@@ -140,6 +140,8 @@ pub struct Mission {
 	pub state: MissionState,
 	pub opened_at: i64,
 	pub closed_at: Option<i64>,
+	pub reported_at: Option<i64>,
+	pub reported_turn_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -221,6 +223,14 @@ pub enum MissionError {
 	#[serde(rename_all = "camelCase")]
 	MissionAlreadyClosed { id: String },
 	#[serde(rename_all = "camelCase")]
+	MissionStillOpen { id: String },
+	#[serde(rename_all = "camelCase")]
+	MissionAlreadyReported { id: String },
+	#[serde(rename_all = "camelCase")]
+	UnknownTurn { id: String },
+	#[serde(rename_all = "camelCase")]
+	TurnOfAnotherConversation { turn_id: String, conversation_id: String },
+	#[serde(rename_all = "camelCase")]
 	UnknownBot { id: String },
 	#[serde(rename_all = "camelCase")]
 	UnknownParticipant { conversation_id: String, bot_id: String },
@@ -291,5 +301,74 @@ impl From<MissionError> for TranscriptStoreError {
 			}
 			other => TranscriptStoreError::UnreadableHistory { detail: format!("{other:?}") },
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use std::collections::BTreeSet;
+	use std::path::PathBuf;
+
+	use serde_json::to_value;
+
+	use super::*;
+
+	fn mirror() -> String {
+		let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+			.join("..")
+			.join("src")
+			.join("lib")
+			.join("missions")
+			.join("mission-contract.ts");
+		std::fs::read_to_string(&path).expect("the mirror reads")
+	}
+
+	fn mirrored_fields(alias: &str) -> BTreeSet<String> {
+		let mirror = mirror();
+		let opening = format!("export type {alias} = {{\n");
+		let start =
+			mirror.find(&opening).unwrap_or_else(|| panic!("the mirror declares no {alias}"))
+				+ opening.len();
+		let body = &mirror[start..];
+		let body = body.split("\n}").next().unwrap_or(body);
+		body.lines()
+			.filter_map(|line| line.split_once(':'))
+			.map(|(name, _)| name.trim().trim_end_matches('?').to_owned())
+			.collect()
+	}
+
+	fn serialised_fields<T: Serialize>(value: &T) -> BTreeSet<String> {
+		to_value(value)
+			.expect("the value serialises")
+			.as_object()
+			.expect("the value is an object")
+			.keys()
+			.cloned()
+			.collect()
+	}
+
+	#[test]
+	fn a_mission_names_the_fields_the_front_declares() {
+		let mission = Mission {
+			id: "m1".to_owned(),
+			origin_conversation_id: "c1".to_owned(),
+			bot_id: "b1".to_owned(),
+			thread_conversation_id: "c2".to_owned(),
+			objective: "Fix it".to_owned(),
+			ticket: Ticket {
+				platform: "github".to_owned(),
+				external_id: "42".to_owned(),
+				url: "https://opennest.test/tickets/42".to_owned(),
+				title: "Crash on open".to_owned(),
+			},
+			tools: vec!["gh".to_owned()],
+			state: MissionState::Done,
+			opened_at: 1,
+			closed_at: Some(2),
+			reported_at: Some(3),
+			reported_turn_id: Some("t1".to_owned()),
+		};
+
+		assert_eq!(serialised_fields(&mission), mirrored_fields("Mission"));
 	}
 }

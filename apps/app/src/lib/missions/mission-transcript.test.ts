@@ -36,6 +36,8 @@ const missionOf = (id: string, openedAt: number, botId = "bot-1"): Mission => ({
 	state: "working",
 	openedAt,
 	closedAt: null,
+	reportedAt: null,
+	reportedTurnId: null,
 })
 
 const PROMPT = [rowOf(null, 0)]
