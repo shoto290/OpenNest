@@ -152,6 +152,44 @@ describe("missionTools", () => {
 		expect(said).toContain("Superset worktree")
 	})
 
+	it("words the mission tools of the objective and names no tool it runs with", () => {
+		const NAMED_TOOLS =
+			/\b(github|gitlab|linear|jira|slack|notion|gh\b|repository|repositories|branch|pull request|review|reviews|merge|merged)\b/i
+
+		for (const name of [
+			"mission_open",
+			"mission_note",
+			"mission_escalate",
+			"mission_close",
+			"mission_list",
+		]) {
+			const held = toolNamed(SESSION, name)
+			const said = `${held.description} ${JSON.stringify(
+				z.toJSONSchema(z.object(held.inputSchema)),
+			)}`
+
+			expect(said).not.toMatch(NAMED_TOOLS)
+		}
+	})
+
+	it("keeps mission_watch naming the branch and the repository it watches", () => {
+		const held = toolNamed(SESSION, "mission_watch")
+		const said = `${held.description} ${JSON.stringify(
+			z.toJSONSchema(z.object(held.inputSchema)),
+		)}`
+
+		expect(said).toContain("branch")
+		expect(said).toContain("repository")
+	})
+
+	it("tells the agent a failed outcome gives the objective up", () => {
+		const closed = z.toJSONSchema(
+			z.object(toolNamed(SESSION, "mission_close").inputSchema),
+		)
+
+		expect(JSON.stringify(closed.properties?.outcome)).toContain("given up")
+	})
+
 	it("takes neither a conversation nor a bot from the agent", () => {
 		for (const held of missionTools(SESSION)) {
 			expect(Object.keys(held.inputSchema)).not.toContain("conversationId")

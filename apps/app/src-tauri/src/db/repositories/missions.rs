@@ -8,9 +8,9 @@ use uuid::Uuid;
 use super::conversations::open_thread_under;
 use crate::db::{Access, DatabaseError};
 use crate::missions::contract::{
-	ConversationMissions, Mission, MissionDetail, MissionDraft, MissionEntry, MissionError,
-	MissionEvent, MissionEventKind, MissionInThread, MissionState, MissionWatch, Ticket,
-	WatchedMission,
+	ConversationMissions, Mission, MissionClosing, MissionDetail, MissionDraft, MissionEntry,
+	MissionError, MissionEvent, MissionEventKind, MissionInThread, MissionState, MissionWatch,
+	Ticket, WatchedMission,
 };
 
 const MAX_MISSIONS_PER_READ: u32 = 200;
@@ -96,6 +96,16 @@ impl MissionsRepository {
 	) -> Result<Mission, MissionError> {
 		self.access
 			.call_mut(move |connection| Ok(appended(connection, &mission_id, &entry, "")))
+			.await?
+	}
+
+	pub async fn close(
+		&self,
+		mission_id: String,
+		closing: MissionClosing,
+	) -> Result<Mission, MissionError> {
+		self.access
+			.call_mut(move |connection| Ok(closed(connection, &mission_id, &closing)))
 			.await?
 	}
 
@@ -322,6 +332,26 @@ fn appended(
 			transaction.execute(CLOSE_MISSION, params![mission_id, at])?;
 		}
 	}
+	let stored = read(&transaction, mission_id)?;
+	transaction.commit()?;
+	Ok(stored)
+}
+
+fn closed(
+	connection: &mut Connection,
+	mission_id: &str,
+	closing: &MissionClosing,
+) -> Result<Mission, MissionError> {
+	let transaction = write_transaction(connection)?;
+	let Some(standing) = held(&transaction, mission_id)? else {
+		return Err(MissionError::UnknownMission { id: mission_id.to_owned() });
+	};
+	if standing.closed_at.is_some() {
+		return Err(MissionError::MissionAlreadyClosed { id: mission_id.to_owned() });
+	}
+	let at = now();
+	record(&transaction, mission_id, &closing.entry(), "", at)?;
+	transaction.execute(CLOSE_MISSION, params![mission_id, at])?;
 	let stored = read(&transaction, mission_id)?;
 	transaction.commit()?;
 	Ok(stored)

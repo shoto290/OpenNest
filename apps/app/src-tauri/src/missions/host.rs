@@ -6,8 +6,8 @@ use super::commands::{
 	mission_close, mission_escalate, mission_note, mission_open, mission_row, mission_watch,
 };
 use super::contract::{
-	Mission, MissionDraft, MissionEntry, MissionError, MissionEventKind, MissionNote, MissionState,
-	MissionWatch, Ticket,
+	Mission, MissionClosing, MissionDraft, MissionEntry, MissionError, MissionEventKind,
+	MissionNote, MissionOutcome, MissionState, MissionWatch, Ticket,
 };
 use crate::agent::protocol::HostAnswer;
 use crate::agent::session::{Answering, HostRequests};
@@ -81,14 +81,12 @@ impl<R: Runtime> MissionHost<R> {
 			Operation::Close => {
 				let asked: Closed = read(payload)?;
 				self.refuse_a_mission_it_does_not_own(database, &asked.id).await?;
-				let note = MissionNote {
+				let closing = MissionClosing {
 					source: BOT.to_owned(),
-					payload: serde_json::json!({
-						"outcome": asked.outcome,
-						"summary": asked.summary,
-					}),
+					outcome: asked.outcome,
+					summary: asked.summary,
 				};
-				answered(mission_close(self.app.clone(), state, asked.id, note).await?)
+				answered(mission_close(self.app.clone(), state, asked.id, closing).await?)
 			}
 			Operation::Watch => {
 				let asked: Armed = read(payload)?;
@@ -187,13 +185,6 @@ enum Operation {
 	List,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-enum Outcome {
-	Done,
-	Failed,
-}
-
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Opened {
@@ -221,7 +212,7 @@ struct Escalated {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Closed {
 	id: String,
-	outcome: Outcome,
+	outcome: MissionOutcome,
 	summary: String,
 }
 
@@ -661,7 +652,7 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn a_closed_mission_answers_the_state_the_last_event_derives() {
+	async fn a_mission_closed_on_a_failed_outcome_stands_failed_and_carries_a_closing_moment() {
 		let app = a_host("derived").await;
 		let host = serving(&app, "c1");
 		let opened = host.answer(an_open()).await.expect("the mission opens");
@@ -675,7 +666,8 @@ mod tests {
 		.expect("the mission is closed");
 
 		let mission = mission_detail(app.state(), id).await.expect("the mission reads").mission;
-		assert_eq!(mission.state, MissionState::Done);
+		assert_eq!(mission.state, MissionState::Failed);
+		assert!(mission.closed_at.is_some(), "the failed close left the mission open");
 
 		cleaned(&app);
 	}
