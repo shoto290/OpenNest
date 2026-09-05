@@ -18,6 +18,8 @@ A conversation seats as many bots as you name in it, and every bot named in one 
 
 **Its missions.** A mission is a longer piece of work a bot owns: an objective, the ticket it comes from, and a thread of its own. It moves through events — opened, note, agent_asked, answered, escalated, ready, failed, closed — and rests in a state you can read from the roster. A bot opens, notes, escalates, closes and lists its missions through the `mission_*` tools, and `mission_watch` arms a branch so what happens to it on GitHub reaches the mission thread; pointed at a git checkout, it also installs an agent hook there.
 
+A mission that reaches a finished or a blocked outcome sends its bot back to the conversation the mission was opened from, to report there in a few lines where the work landed or what blocks it. When more than one bot is seated there, the report is written with the roster of that conversation at hand — who is in the room, and how to reach each — so it can name whoever takes the work from here. And a report landing in a conversation summons the bots it names with an `@`: they answer in the same wave, as if you had named them yourself.
+
 Every bot also holds `delegate`, which hands a self-contained job to a nested read-only agent and brings its report back in the same turn.
 
 ## Requirements
