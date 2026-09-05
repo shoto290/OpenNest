@@ -292,9 +292,10 @@ export const startMissionRunDriver = ({
 		}
 
 		if (report.outcome === "nothing") {
-			return isReportOwedBy(held.call.cause)
-				? raiseFailure("the closing mission run reported nothing")
-				: undefined
+			if (isReportOwedBy(held.call.cause)) {
+				raiseFailure("the closing mission run reported nothing")
+			}
+			return
 		}
 
 		try {
