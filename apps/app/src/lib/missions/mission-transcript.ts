@@ -18,10 +18,8 @@ const openingRunIndex = (runs: TranscriptRow[][], mission: Mission): number => {
 
 	return spoken.reduce(
 		(nearest, index) =>
-			nearest === NOT_PLACED || distanceOf(index) <= distanceOf(nearest)
-				? index
-				: nearest,
-		NOT_PLACED,
+			distanceOf(index) <= distanceOf(nearest) ? index : nearest,
+		spoken[0] ?? NOT_PLACED,
 	)
 }
 
