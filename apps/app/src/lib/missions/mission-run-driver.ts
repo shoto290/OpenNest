@@ -162,15 +162,15 @@ export const startMissionRunDriver = ({
 		await refuse(held, "the mission run outlived its deadline")
 	}
 
-	const rosterBlockOf = async (call: MissionRunCall) => {
-		if (!isOnOrigin(call.cause)) {
+	const rosterBlockOf = async ({ cause, mission }: MissionRunCall) => {
+		if (!isOnOrigin(cause)) {
 			return null
 		}
 
 		try {
 			return await missions.rosterBlock(
-				call.mission.originConversationId,
-				call.mission.botId,
+				mission.originConversationId,
+				mission.botId,
 			)
 		} catch (thrown) {
 			reporting("conversation_roster_block")(thrown)
