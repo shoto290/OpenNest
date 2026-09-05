@@ -26,10 +26,15 @@ const UNTRUSTED_CLOSE = "</untrusted-data>"
 
 const ELISION = "[elided]"
 
-const PAYLOAD_LIMIT = 4000
+const EVENT_LIMIT = 20
 
-const CUT_NOTICE =
-	"The block below was cut: the data ran past what a run is given."
+const PAYLOAD_LIMIT = 1000
+
+const droppedEventsNoticeOf = (count: number) =>
+	`The block below holds only the ${EVENT_LIMIT} most recent mission events, the most recent one last. Older events left out: ${count}.`
+
+const cutPayloadsNoticeOf = (count: number) =>
+	`Event payloads in the block below are cut at ${PAYLOAD_LIMIT} characters. Payloads cut: ${count}.`
 
 const messageIn = (payload: unknown): string | null => {
 	if (typeof payload !== "object" || payload === null) {
@@ -50,38 +55,64 @@ const agentLastMessageIn = (events: MissionEvent[]): string | null =>
 		.filter((message) => message !== null)
 		.at(-1) ?? null
 
-const payloadText = ({ mission, events }: MissionRunCall) =>
-	JSON.stringify(
-		{ mission, events, agentLastMessage: agentLastMessageIn(events) },
-		null,
-		2,
-	)
+const cutPayloadOf = (payload: unknown): string | null => {
+	const codePoints = [...(JSON.stringify(payload) ?? "")]
+
+	return codePoints.length <= PAYLOAD_LIMIT
+		? null
+		: codePoints.slice(0, PAYLOAD_LIMIT).join("")
+}
+
+const cutEventOf = (event: MissionEvent): MissionEvent => {
+	const payload = cutPayloadOf(event.payload)
+
+	return payload === null ? event : { ...event, payload }
+}
+
+type ShortenedEvents = {
+	events: MissionEvent[]
+	droppedCount: number
+	cutCount: number
+}
+
+const shortened = (events: MissionEvent[]): ShortenedEvents => {
+	const recent = events.slice(-EVENT_LIMIT)
+	const cut = recent.map(cutEventOf)
+
+	return {
+		events: cut,
+		droppedCount: events.length - recent.length,
+		cutCount: cut.filter((event, index) => event !== recent[index]).length,
+	}
+}
 
 const withoutFence = (text: string) =>
 	text.replaceAll(UNTRUSTED_OPEN, ELISION).replaceAll(UNTRUSTED_CLOSE, ELISION)
 
-type FencedPayload = {
-	text: string
-	isCut: boolean
-}
+const payloadTextOf = (
+	{ mission, events }: MissionRunCall,
+	kept: MissionEvent[],
+) =>
+	JSON.stringify(
+		{ mission, events: kept, agentLastMessage: agentLastMessageIn(events) },
+		null,
+		2,
+	)
 
-const fencedPayloadOf = (call: MissionRunCall): FencedPayload => {
-	const text = withoutFence(payloadText(call))
-	const codePoints = [...text]
-
-	return codePoints.length <= PAYLOAD_LIMIT
-		? { text, isCut: false }
-		: { text: codePoints.slice(0, PAYLOAD_LIMIT).join(""), isCut: true }
-}
+const noticesOf = ({ droppedCount, cutCount }: ShortenedEvents) => [
+	...(droppedCount > 0 ? [droppedEventsNoticeOf(droppedCount)] : []),
+	...(cutCount > 0 ? [cutPayloadsNoticeOf(cutCount)] : []),
+]
 
 export const missionRunPromptFor = (call: MissionRunCall): string => {
-	const { text, isCut } = fencedPayloadOf(call)
+	const kept = shortened(call.events)
+	const text = withoutFence(payloadTextOf(call, kept.events))
 
 	return [
 		INSTRUCTION_OF[call.cause],
 		...(call.rosterBlock ? [call.rosterBlock] : []),
 		UNTRUSTED_NOTICE,
-		...(isCut ? [CUT_NOTICE] : []),
+		...noticesOf(kept),
 		[UNTRUSTED_OPEN, text, UNTRUSTED_CLOSE].join("\n"),
 	].join("\n\n")
 }

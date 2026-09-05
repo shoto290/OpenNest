@@ -8,6 +8,10 @@ import type {
 	MissionState,
 } from "./mission-contract"
 import {
+	missionRunOutputSchemaFor,
+	readMissionRunReport,
+} from "./mission-run-output"
+import {
 	type MissionRunCall,
 	type MissionRunCause,
 	missionRunPromptFor,
@@ -25,7 +29,6 @@ import type { ChatDriver } from "../chat/driver"
 import { needsFreshSession } from "../chat/screen-model"
 import type { ConversationRuntimes } from "../conversations/conversation-runtimes"
 import type { TranscriptStore } from "../conversations/store-port"
-import { RUN_OUTPUT_SCHEMA, readRunReport } from "../routines/run-output"
 
 export const MISSION_TRIGGER_SOURCE = "mission"
 
@@ -223,7 +226,7 @@ export const startMissionRunDriver = ({
 				scope,
 				undefined,
 				undefined,
-				RUN_OUTPUT_SCHEMA,
+				missionRunOutputSchemaFor(call.cause),
 			)
 			await driver.submitPrompt(scope, missionRunPromptFor(call))
 		} catch (thrown) {
@@ -284,7 +287,7 @@ export const startMissionRunDriver = ({
 			return raiseFailure(`the mission run's turn was ${ended.outcome}`)
 		}
 
-		const report = readRunReport(ended.structuredOutput)
+		const report = readMissionRunReport(held.call.cause, ended.structuredOutput)
 
 		if (!report) {
 			return raiseFailure("the mission run ended with no structured output")
