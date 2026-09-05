@@ -8,8 +8,7 @@ const SUBTYPE = "mission"
 const OBJECTIVE =
 	"What this mission delivers, in one sentence, written as an order to yourself."
 
-const TICKET_PLATFORM =
-	"Where the ticket lives, such as linear, github or jira."
+const TICKET_PLATFORM = "Where the ticket holding this objective lives."
 
 const TICKET_EXTERNAL_ID = "The id the ticket carries on its own platform."
 
@@ -17,7 +16,7 @@ const TICKET_URL = "The address the person opens to read the ticket."
 
 const TICKET_TITLE = "The title the ticket carries on its own platform."
 
-const TOOLS = "The tools this mission is allowed to run with."
+const TOOLS = "What this mission is allowed to reach for to meet its objective."
 
 const MISSION_ID = "The id mission_open answered."
 
@@ -30,7 +29,7 @@ const QUESTION =
 const REASON = "Why you cannot decide it yourself."
 
 const OUTCOME =
-	"done when the objective is met, failed when it is out of reach."
+	"done when the objective is reached, failed when it is given up."
 
 const SUMMARY = "What came out of the mission, in a few lines."
 
@@ -41,7 +40,7 @@ const REPOSITORY =
 	"The repository that branch lives in, written owner then slash then name."
 
 const WORKSPACE_PATH =
-	"The git checkout of that repository on this machine, a Superset worktree included. Only a git checkout is accepted, so the path names a directory holding a .git entry and nothing else is taken. A path given installs the agent hook in that checkout, so what you do there reaches the thread of the mission. Left out, the branch stays watched by its repository alone and no hook is installed."
+	"The git checkout of that repository on this machine, a linked worktree included. Only a git checkout is accepted, so the path names a directory holding a .git entry and nothing else is taken. A path given installs the agent hook in that checkout, so what you do there reaches the thread of the mission. Left out, the branch stays watched by its repository alone and no hook is installed."
 
 const OPEN =
 	"Open a mission on this conversation, owned by you, and get its own thread. Call this once you and the person agree on the objective and the ticket it carries."
@@ -53,7 +52,7 @@ const ESCALATE =
 	"Hand a mission back to the person with the one question that blocks you. The mission waits until they answer."
 
 const CLOSE =
-	"Close a mission of yours with its outcome and a summary. Nothing can be appended to it afterwards."
+	"Close a mission of yours, its objective reached or given up, with a summary of where it landed. Nothing can be appended to it afterwards."
 
 const WATCH =
 	"Arm a mission of yours on the branch it lands its work in, so what happens on that branch reaches its thread. It answers the address a call reaches the mission at, the key that call carries and the name of the header that key goes in. Call this once the branch exists."

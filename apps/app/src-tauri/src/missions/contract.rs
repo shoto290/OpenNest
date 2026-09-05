@@ -85,6 +85,34 @@ pub struct MissionNote {
 	pub payload: Value,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MissionOutcome {
+	Done,
+	Failed,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MissionClosing {
+	pub source: String,
+	pub outcome: MissionOutcome,
+	pub summary: String,
+}
+
+impl MissionClosing {
+	pub fn entry(&self) -> MissionEntry {
+		MissionEntry {
+			kind: match self.outcome {
+				MissionOutcome::Done => MissionEventKind::Closed,
+				MissionOutcome::Failed => MissionEventKind::Failed,
+			},
+			source: self.source.clone(),
+			payload: serde_json::json!({ "outcome": self.outcome, "summary": self.summary }),
+		}
+	}
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MissionEntry {

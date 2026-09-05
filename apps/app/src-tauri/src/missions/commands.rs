@@ -2,8 +2,9 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 
 use super::contract::{
-	ConversationMissions, Mission, MissionDetail, MissionDraft, MissionEntry, MissionError,
-	MissionEventKind, MissionNote, MissionOnBoard, MissionState, MissionWatch, MissionWatching,
+	ConversationMissions, Mission, MissionClosing, MissionDetail, MissionDraft, MissionEntry,
+	MissionError, MissionEventKind, MissionNote, MissionOnBoard, MissionState, MissionWatch,
+	MissionWatching,
 };
 use super::hook;
 use crate::avatars;
@@ -78,9 +79,12 @@ pub async fn mission_close<R: Runtime>(
 	app: AppHandle<R>,
 	state: State<'_, db::DatabaseState>,
 	mission_id: String,
-	note: MissionNote,
+	closing: MissionClosing,
 ) -> Result<Mission, MissionError> {
-	appended(&app, &state, mission_id, MissionEntry::of(MissionEventKind::Closed, note)).await
+	refuse_blank("source", &closing.source)?;
+	let written = ready(&state)?.missions().close(mission_id, closing).await?;
+	announce_change(&app, &written)?;
+	Ok(written)
 }
 
 async fn appended<R: Runtime>(
@@ -206,7 +210,7 @@ mod tests {
 	use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
 	use tauri::{App, Listener as _, Manager as _};
 
-	use super::super::contract::Ticket;
+	use super::super::contract::{MissionOutcome, Ticket};
 	use super::*;
 
 	const TWO_SPACES: &str = "
@@ -259,6 +263,14 @@ mod tests {
 		MissionNote { source: "human".to_owned(), payload: json!({}) }
 	}
 
+	fn a_closing(outcome: MissionOutcome) -> MissionClosing {
+		MissionClosing {
+			source: "human".to_owned(),
+			outcome,
+			summary: "The objective is settled".to_owned(),
+		}
+	}
+
 	fn cleaned(app: &App<MockRuntime>) {
 		if let Ok(dir) = app.path().app_data_dir() {
 			let _ = fs::remove_dir_all(&dir);
@@ -280,7 +292,7 @@ mod tests {
 		mission_escalate(app.handle().clone(), app.state(), here.id.clone(), a_note())
 			.await
 			.expect("the mission is escalated");
-		mission_close(app.handle().clone(), app.state(), done.id, a_note())
+		mission_close(app.handle().clone(), app.state(), done.id, a_closing(MissionOutcome::Done))
 			.await
 			.expect("the mission is closed");
 
@@ -297,6 +309,80 @@ mod tests {
 				(there.id, "Second".to_owned(), MissionState::Working),
 			],
 			"the board lost an open mission, its bot or its state"
+		);
+
+		cleaned(&app);
+	}
+
+	#[tokio::test]
+	async fn closing_on_a_failed_outcome_appends_failed_carries_the_summary_and_shuts_the_mission()
+	{
+		let app = a_host("failed-close").await;
+		let opened = mission_open(app.handle().clone(), app.state(), a_draft("c1", "b1", "Fix it"))
+			.await
+			.expect("the mission opens");
+
+		let closed = mission_close(
+			app.handle().clone(),
+			app.state(),
+			opened.id.clone(),
+			a_closing(MissionOutcome::Failed),
+		)
+		.await
+		.expect("the mission closes");
+
+		assert_eq!(closed.state, MissionState::Failed, "got {:?}", closed.state);
+		assert!(closed.closed_at.is_some(), "the failed close left the mission open");
+		let detail =
+			mission_detail(app.state(), opened.id.clone()).await.expect("the mission detail reads");
+		assert_eq!(detail.mission.closed_at, closed.closed_at, "the moment it closed moved");
+		let last = detail.events.last().expect("the close event is there");
+		assert_eq!(last.kind, MissionEventKind::Failed, "got {:?}", last.kind);
+		assert_eq!(
+			last.payload,
+			json!({ "outcome": "failed", "summary": "The objective is settled" }),
+			"the failed close lost its outcome or its summary"
+		);
+
+		let refused = mission_note(
+			app.handle().clone(),
+			app.state(),
+			opened.id.clone(),
+			MissionEntry::of(MissionEventKind::Note, a_note()),
+		)
+		.await
+		.expect_err("the closed mission refuses an event");
+		assert_eq!(refused, MissionError::MissionAlreadyClosed { id: opened.id });
+
+		cleaned(&app);
+	}
+
+	#[tokio::test]
+	async fn closing_on_a_done_outcome_appends_closed_and_carries_the_summary() {
+		let app = a_host("done-close").await;
+		let opened = mission_open(app.handle().clone(), app.state(), a_draft("c1", "b1", "Fix it"))
+			.await
+			.expect("the mission opens");
+
+		let closed = mission_close(
+			app.handle().clone(),
+			app.state(),
+			opened.id.clone(),
+			a_closing(MissionOutcome::Done),
+		)
+		.await
+		.expect("the mission closes");
+
+		assert_eq!(closed.state, MissionState::Done, "got {:?}", closed.state);
+		assert!(closed.closed_at.is_some(), "the done close left the mission open");
+		let detail =
+			mission_detail(app.state(), opened.id).await.expect("the mission detail reads");
+		let last = detail.events.last().expect("the close event is there");
+		assert_eq!(last.kind, MissionEventKind::Closed, "got {:?}", last.kind);
+		assert_eq!(
+			last.payload,
+			json!({ "outcome": "done", "summary": "The objective is settled" }),
+			"the done close lost its outcome or its summary"
 		);
 
 		cleaned(&app);
@@ -411,9 +497,14 @@ mod tests {
 		let done = mission_open(app.handle().clone(), app.state(), a_draft("c1", "b1", "Old work"))
 			.await
 			.expect("the mission opens");
-		mission_close(app.handle().clone(), app.state(), done.id.clone(), a_note())
-			.await
-			.expect("the mission closes");
+		mission_close(
+			app.handle().clone(),
+			app.state(),
+			done.id.clone(),
+			a_closing(MissionOutcome::Done),
+		)
+		.await
+		.expect("the mission closes");
 
 		let unknown = mission_watch(
 			app.handle().clone(),
@@ -493,9 +584,14 @@ mod tests {
 	async fn a_command_naming_a_mission_no_row_holds_refuses_and_writes_nothing() {
 		let app = a_host("unknown").await;
 
-		let refused = mission_close(app.handle().clone(), app.state(), "x9".to_owned(), a_note())
-			.await
-			.expect_err("the close is refused");
+		let refused = mission_close(
+			app.handle().clone(),
+			app.state(),
+			"x9".to_owned(),
+			a_closing(MissionOutcome::Done),
+		)
+		.await
+		.expect_err("the close is refused");
 
 		assert_eq!(refused, MissionError::UnknownMission { id: "x9".to_owned() });
 		let board =
