@@ -846,33 +846,28 @@ export const createConversationController = (
 		}
 	}
 
-	const startedTurn = async (reported: TranscriptMessage) => {
-		const turn: OpenTurn = { id: newId(), promptId: reported.id }
-		await enqueue(() =>
-			store.startTurn({
-				id: turn.id,
-				conversationId: reported.conversationId,
-				startedAt: now(),
-			}),
-		)
-		return turn
-	}
-
 	const openReportTurn = async (reported: TranscriptMessage) => {
 		if (speakers.size > 0) {
 			return true
 		}
+		const turn: OpenTurn = { id: newId(), promptId: reported.id }
 		try {
-			const turn = await startedTurn(reported)
-			if (activeTurn) {
-				completeTurn(activeTurn)
-			}
-			activeTurn = turn
-			return true
+			await enqueue(() =>
+				store.startTurn({
+					id: turn.id,
+					conversationId: reported.conversationId,
+					startedAt: now(),
+				}),
+			)
 		} catch (reason) {
 			noteFailure(toStoreError(reason))
 			return false
 		}
+		if (activeTurn) {
+			completeTurn(activeTurn)
+		}
+		activeTurn = turn
+		return true
 	}
 
 	const relayReport = async (reported: TranscriptMessage) => {
