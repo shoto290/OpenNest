@@ -70,7 +70,11 @@ type HarnessSeed = {
 	open?: MissionState
 	openEvents?: MissionEvent[]
 	stalled?: boolean
+	unreportedStalled?: boolean
 	boardFails?: boolean
+	unreportedFails?: boolean
+	reportedFails?: boolean
+	reports?: [missionId: string, turnId: string | null][]
 	soloOrigin?: boolean
 }
 
@@ -79,7 +83,11 @@ const createHarness = async ({
 	open,
 	openEvents = AGENT_ASKED,
 	stalled = false,
+	unreportedStalled = false,
 	boardFails = false,
+	unreportedFails = false,
+	reportedFails = false,
+	reports = [],
 	soloOrigin = false,
 }: HarnessSeed = {}): Promise<Harness> => {
 	const scripted = createScriptedDriver()
@@ -135,8 +143,24 @@ const createHarness = async ({
 		missions.stall()
 	}
 
+	if (unreportedStalled) {
+		missions.stallUnreported()
+	}
+
 	if (boardFails) {
 		missions.refuseBoard()
+	}
+
+	if (unreportedFails) {
+		missions.refuseUnreported()
+	}
+
+	for (const [missionId, turnId] of reports) {
+		await missions.reported(missionId, turnId)
+	}
+
+	if (reportedFails) {
+		missions.refuseReported()
 	}
 
 	const stop = startMissionRunDriver({
@@ -687,14 +711,100 @@ describe("startMissionRunDriver", () => {
 		expect(harness.driver.submissions).toHaveLength(1)
 	})
 
-	it("leaves an open mission that was closed before the start", async () => {
+	it("takes a mission closed before the start that still owes a report", async () => {
 		await restart({ open: "done", openEvents: closedBy("poller") })
+
+		expect(harness.starts).toHaveLength(1)
+		expect(harness.starts[0].scope).toMatchObject({
+			conversationId: harness.origin.id,
+		})
+	})
+
+	it("takes a mission that failed before the start and still owes a report", async () => {
+		await restart({ open: "failed", openEvents: failedBy("claude-code") })
+
+		await harness.endTurn(reported("The build will not pass."))
+
+		expect(spoken(harness.originTail())).toEqual([
+			[harness.mission.botId, "The build will not pass."],
+		])
+	})
+
+	it("records the report of a closing run with the turn it was written on", async () => {
+		await restart({ open: "done", openEvents: closedBy("poller") })
+		await harness.endTurn(reported("The walls stand."))
+
+		const [turnId] = [...harness.originTail().reportedCauses.keys()]
+		expect(harness.missions.reports).toEqual([[harness.mission.id, turnId]])
+	})
+
+	it("records the report of a closing run that had nothing to write", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => undefined)
+		await restart({ open: "done", openEvents: closedBy("poller") })
+		await harness.endTurn({ structuredOutput: { outcome: "nothing" } })
+
+		expect(harness.missions.reports).toEqual([[harness.mission.id, null]])
+	})
+
+	it("records nothing when the turn of a closing run does not complete", async () => {
+		await restart({ open: "done", openEvents: closedBy("poller") })
+		await harness.endTurn({ outcome: "failed" })
+
+		expect(harness.missions.reports).toEqual([])
+	})
+
+	it("records nothing for a run answering a mission still open", async () => {
+		await harness.enter("waiting_bot")
+		await harness.endTurn(reported("I cut the branch from main."))
+
+		expect(harness.missions.reports).toEqual([])
+	})
+
+	it("raises a failure notice when the report cannot be recorded", async () => {
+		await restart({
+			open: "done",
+			openEvents: closedBy("poller"),
+			reportedFails: true,
+		})
+		await harness.endTurn(reported("The walls stand."))
+
+		expect(harness.reportFailure).toHaveBeenCalledTimes(1)
+	})
+
+	it("starts no run for a mission whose report was recorded", async () => {
+		await restart({ open: "done", openEvents: closedBy("poller") })
+		await harness.endTurn(reported("The walls stand."))
+		const reports = [...harness.missions.reports]
+
+		await restart({ open: "done", openEvents: closedBy("poller"), reports })
 
 		expect(harness.starts).toEqual([])
 	})
 
-	it("leaves an open mission that failed before the start", async () => {
-		await restart({ open: "failed", openEvents: failedBy("claude-code") })
+	it("takes the open missions when the unreported missions cannot be read", async () => {
+		const logged = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => undefined)
+
+		await restart({ open: "waiting_bot", unreportedFails: true })
+
+		expect(harness.starts).toHaveLength(1)
+		expect(logged).toHaveBeenCalledWith(
+			"mission run driver: mission_unreported failed",
+			expect.any(Error),
+		)
+	})
+
+	it("starts no run when it is stopped before the unreported read resolves", async () => {
+		await restart({
+			open: "done",
+			openEvents: closedBy("poller"),
+			unreportedStalled: true,
+		})
+
+		harness.stop()
+		harness.missions.releaseUnreported()
+		await settled()
 
 		expect(harness.starts).toEqual([])
 	})

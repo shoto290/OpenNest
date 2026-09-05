@@ -37,6 +37,8 @@ export type MissionRunUnsubscribe = () => void
 
 export type MissionRunPort = {
 	board: () => Promise<Pick<MissionOnBoard, "mission">[]>
+	unreported: () => Promise<Pick<MissionOnBoard, "mission">[]>
+	reported: (missionId: string, turnId: string | null) => Promise<unknown>
 	onChanged: (
 		listener: (changed: MissionChanged) => void,
 	) => Promise<MissionRunUnsubscribe>
@@ -299,6 +301,21 @@ export const startMissionRunDriver = ({
 		})
 	}
 
+	const recordReport = async (
+		{ call }: LiveMissionRun,
+		reportedTurnId: string | null,
+	) => {
+		if (!isReportOwedBy(call.cause)) {
+			return
+		}
+
+		try {
+			await missions.reported(call.mission.id, reportedTurnId)
+		} catch (thrown) {
+			raiseFailure(`the report could not be recorded: ${detailOf(thrown)}`)
+		}
+	}
+
 	const settle = async (held: LiveMissionRun, ended: TurnEnded) => {
 		end(held)
 
@@ -309,18 +326,20 @@ export const startMissionRunDriver = ({
 		const report = readRunReport(ended.structuredOutput)
 
 		if (!report) {
-			return raiseFailure("the mission run ended with no structured output")
+			raiseFailure("the mission run ended with no structured output")
+			return recordReport(held, null)
 		}
 
 		if (report.outcome === "nothing") {
 			if (isReportOwedBy(held.call.cause)) {
 				raiseFailure("the closing mission run reported nothing")
 			}
-			return
+			return recordReport(held, null)
 		}
 
 		try {
-			await writeReport(held, report.text)
+			const reportedTurnId = await writeReport(held, report.text)
+			await recordReport(held, reportedTurnId)
 		} catch (thrown) {
 			raiseFailure(`the report could not be written: ${detailOf(thrown)}`)
 		}
@@ -358,16 +377,22 @@ export const startMissionRunDriver = ({
 		}
 	}
 
-	const catchUpOnOpenMissions = async () => {
-		const onBoard = await missions.board()
-
+	const startRunsFor = (caughtUp: Pick<MissionOnBoard, "mission">[]) => {
 		if (isStopped) {
 			return
 		}
 
-		for (const { mission } of onBoard.filter(isCaughtUpOn)) {
+		for (const { mission } of caughtUp) {
 			void consider({ missionId: mission.id, state: mission.state })
 		}
+	}
+
+	const catchUpOnOpenMissions = async () => {
+		startRunsFor((await missions.board()).filter(isCaughtUpOn))
+	}
+
+	const catchUpOnUnreportedMissions = async () => {
+		startRunsFor(await missions.unreported())
 	}
 
 	const changes = listening(
@@ -385,6 +410,7 @@ export const startMissionRunDriver = ({
 			reason,
 		)
 	})
+	void catchUpOnUnreportedMissions().catch(reporting("mission_unreported"))
 
 	return () => {
 		isStopped = true
