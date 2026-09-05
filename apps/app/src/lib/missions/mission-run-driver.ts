@@ -115,6 +115,7 @@ export const startMissionRunDriver = ({
 	now = () => Date.now(),
 }: MissionRunDriverOptions): (() => void) => {
 	const live = new Map<string, LiveMissionRun>()
+	const kept = new Map<string, MissionChanged>()
 	const starting = new Set<string>()
 	const states = createMissionStates()
 	let isStopped = false
@@ -134,9 +135,20 @@ export const startMissionRunDriver = ({
 		void driver.shutdown(scope).catch(reporting("agent_shutdown"))
 	}
 
+	const takeAgain = (missionId: string) => {
+		const dropped = kept.get(missionId)
+		kept.delete(missionId)
+
+		if (dropped && !isStopped) {
+			void consider(dropped)
+		}
+	}
+
 	const forget = (held: LiveMissionRun) => {
+		const { id } = held.call.mission
 		clearTimeout(held.deadline)
-		live.delete(held.call.mission.id)
+		live.delete(id)
+		takeAgain(id)
 	}
 
 	const end = (held: LiveMissionRun) => {
@@ -221,6 +233,7 @@ export const startMissionRunDriver = ({
 
 	const consider = async (changed: MissionChanged) => {
 		if (isBusy(changed.missionId)) {
+			kept.set(changed.missionId, changed)
 			return
 		}
 

@@ -432,11 +432,54 @@ describe("startMissionRunDriver", () => {
 	})
 
 	it("starts no second run when the bot closes its mission during its own run", async () => {
-		await harness.enter("waiting_bot")
 		await harness.enter("failed", failedBy("claude-code"))
+		await harness.enter("failed", failedBy("claude-code"))
+		await harness.endTurn({ structuredOutput: { outcome: "nothing" } })
 
 		expect(harness.starts).toHaveLength(1)
 		expect(harness.driver.submissions).toHaveLength(1)
+	})
+
+	it("takes a closing that landed while an answer run was live", async () => {
+		await harness.enter("waiting_bot")
+		await harness.enter("done", closedBy("claude-code"))
+		expect(harness.starts).toHaveLength(1)
+
+		await harness.endTurn(reported("I cut the branch from main."))
+
+		expect(harness.starts).toHaveLength(2)
+		expect(harness.starts[1].scope).toMatchObject({
+			conversationId: harness.origin.id,
+			botId: harness.mission.botId,
+		})
+
+		await harness.endTurn(reported("The walls stand, handing over."))
+
+		expect(spoken(harness.originTail())).toEqual([
+			[harness.mission.botId, "The walls stand, handing over."],
+		])
+	})
+
+	it("keeps none but the last change dropped while a run was live", async () => {
+		await harness.enter("waiting_bot")
+		await harness.enter("working")
+		await harness.enter("done", closedBy("poller"))
+		await harness.endTurn({ structuredOutput: { outcome: "nothing" } })
+
+		expect(harness.starts).toHaveLength(2)
+		expect(harness.starts[1].scope).toMatchObject({
+			conversationId: harness.origin.id,
+		})
+	})
+
+	it("takes no dropped change once it is stopped", async () => {
+		await harness.enter("waiting_bot")
+		await harness.enter("done", closedBy("poller"))
+
+		harness.stop()
+		await settled()
+
+		expect(harness.starts).toHaveLength(1)
 	})
 
 	it("lights no working row in the mission thread while the run is live", async () => {
