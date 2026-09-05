@@ -5,6 +5,7 @@ import {
 	type NotificationSwitches,
 	notificationsFor,
 	notifiesFinishedRound,
+	notifiesMission,
 } from "./notification-policy"
 import type {
 	NotificationPort,
@@ -220,10 +221,12 @@ export const startNotificationSource = ({
 		return requests
 	}
 
+	const currentFocus = (): boolean => windowFocus ?? hasFocus()
+
 	const compare = () => {
 		const reading: Reading = {
 			switches: switches(),
-			hasFocus: windowFocus ?? hasFocus(),
+			hasFocus: currentFocus(),
 		}
 		const requests = [
 			...botNotifications(reading),
@@ -239,14 +242,6 @@ export const startNotificationSource = ({
 		}
 	}
 
-	const raise = (request: NotificationRequest) => {
-		void notifications.send(request).catch(failWith("send"))
-
-		if (switches().notifyWithSound) {
-			playChime()
-		}
-	}
-
 	const missionChanged = async (changed: MissionChanged) => {
 		if (!missionStates.entered(changed)) {
 			return
@@ -258,6 +253,15 @@ export const startNotificationSource = ({
 			return
 		}
 
+		const reading: Reading = {
+			switches: switches(),
+			hasFocus: currentFocus(),
+		}
+
+		if (!notifiesMission({ state, ...reading })) {
+			return
+		}
+
 		const { mission } = await missions.detail(changed.missionId)
 		const bot = roster.getState().bots.find(({ id }) => id === mission.botId)
 
@@ -265,14 +269,20 @@ export const startNotificationSource = ({
 			return
 		}
 
-		raise({
-			target: { kind: "mission", id: mission.id },
-			...missionNotificationWordsFor({
-				name: bot.name,
-				ticket: mission.ticket.externalId,
-				state,
-			}),
-		})
+		void notifications
+			.send({
+				target: { kind: "mission", id: mission.id },
+				...missionNotificationWordsFor({
+					name: bot.name,
+					ticket: mission.ticket.externalId,
+					state,
+				}),
+			})
+			.catch(failWith("send"))
+
+		if (reading.switches.notifyWithSound) {
+			playChime()
+		}
 	}
 
 	const openMission = async (missionId: string) => {

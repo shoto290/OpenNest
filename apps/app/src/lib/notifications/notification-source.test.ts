@@ -677,6 +677,47 @@ describe("startNotificationSource on missions", () => {
 		expect(harness.notifications.sent).toHaveLength(1)
 	})
 
+	it("stays quiet while the window holds the focus", async () => {
+		const harness = await start()
+		harness.windowFocus.tell(true)
+
+		await escalate(harness, "waiting_human")
+
+		expect(harness.notifications.sent).toEqual([])
+		expect(harness.playChime).not.toHaveBeenCalled()
+	})
+
+	it("stays quiet on an escalation while the question switch is off", async () => {
+		const harness = await start({
+			switches: () => ({ ...ALL_ON, notifyOnQuestion: false }),
+		})
+
+		await escalate(harness, "waiting_human")
+
+		expect(harness.notifications.sent).toEqual([])
+	})
+
+	it("stays quiet on finished work while the finished turn switch is off", async () => {
+		const harness = await start({
+			switches: () => ({ ...ALL_ON, notifyOnFinishedTurn: false }),
+		})
+
+		await escalate(harness, "ready_to_merge")
+
+		expect(harness.notifications.sent).toEqual([])
+	})
+
+	it("stays quiet when a withheld state arrives again", async () => {
+		const harness = await start()
+		harness.windowFocus.tell(true)
+
+		await escalate(harness, "waiting_human")
+		harness.windowFocus.tell(false)
+		await escalate(harness, "waiting_human")
+
+		expect(harness.notifications.sent).toEqual([])
+	})
+
 	it("stays quiet on the states the reader is not called for", async () => {
 		const harness = await start()
 
