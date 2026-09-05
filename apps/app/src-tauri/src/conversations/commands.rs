@@ -801,6 +801,16 @@ pub async fn conversation_bounded_context(
 }
 
 #[tauri::command]
+pub async fn conversation_roster_block(
+	state: State<'_, db::DatabaseState>,
+	conversation_id: String,
+	bot_id: String,
+) -> Result<Option<String>, TranscriptStoreError> {
+	let participant = ParticipantKey { conversation_id, bot_id };
+	context::roster_block(ready(&state)?, participant).await
+}
+
+#[tauri::command]
 pub async fn conversation_capture_checkpoint(
 	state: State<'_, db::DatabaseState>,
 	conversation_id: String,

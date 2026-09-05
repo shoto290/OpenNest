@@ -138,6 +138,20 @@ fn unreadable(error: serde_json::Error) -> TranscriptStoreError {
 	TranscriptStoreError::UnreadableHistory { detail: error.to_string() }
 }
 
+pub async fn roster_block(
+	database: &Database,
+	participant: ParticipantKey,
+) -> Result<Option<String>, TranscriptStoreError> {
+	let known = database.conversations().conversation_ids().await?;
+	if !known.iter().any(|id| id == &participant.conversation_id) {
+		return Err(TranscriptStoreError::UnknownConversation { id: participant.conversation_id });
+	}
+	let Some(room) = room_around(database, &participant).await? else {
+		return Ok(None);
+	};
+	Ok(section_of(ROOM_LABEL, &room.roster()))
+}
+
 async fn room_around(
 	database: &Database,
 	participant: &ParticipantKey,
@@ -399,10 +413,14 @@ fn compose(parts: Parts<'_>) -> String {
 }
 
 fn push_section(sections: &mut Vec<String>, label: &str, body: &str) {
-	if body.trim().is_empty() {
-		return;
+	sections.extend(section_of(label, body));
+}
+
+fn section_of(label: &str, body: &str) -> Option<String> {
+	match body.trim().is_empty() {
+		true => None,
+		false => Some(format!("{label}\n{body}")),
 	}
-	sections.push(format!("{label}\n{body}"));
 }
 
 fn quoted(replied_to: &RepliedTo, room: Option<&Room>) -> String {
@@ -813,24 +831,77 @@ mod tests {
 	}
 
 	async fn another_bot(database: &Database, conversation_id: &str, id: &'static str) {
+		joined(database, conversation_id, id, "Second", 1).await;
+	}
+
+	async fn joined(
+		database: &Database,
+		conversation_id: &str,
+		id: &'static str,
+		name: &'static str,
+		join_seq: i64,
+	) {
 		let conversation_id = conversation_id.to_owned();
 		database
 			.call(move |connection| {
 				connection.execute(
 					"INSERT INTO bots (id, space_id, name, model, created_at)
-						VALUES (?1, 'personal', 'Second', 'sonnet', 1)",
-					rusqlite::params![id],
+						VALUES (?1, 'personal', ?2, 'sonnet', 1)",
+					rusqlite::params![id, name],
 				)?;
 				connection.execute(
 					"INSERT INTO conversation_participants
 						(conversation_id, bot_id, role, joined_at, join_seq)
-						VALUES (?1, ?2, 'assistant', 1, 1)",
-					rusqlite::params![conversation_id, id],
+						VALUES (?1, ?2, 'assistant', 1, ?3)",
+					rusqlite::params![conversation_id, id, join_seq],
 				)?;
 				Ok(())
 			})
 			.await
-			.expect("the second bot joins");
+			.expect("the bot joins");
+	}
+
+	async fn crowned(database: &Database, conversation_id: &str, bot_id: &'static str) {
+		let conversation_id = conversation_id.to_owned();
+		database
+			.call(move |connection| {
+				connection.execute(
+					"UPDATE conversation_participants SET role = 'lead'
+						WHERE conversation_id = ?1 AND bot_id = ?2",
+					rusqlite::params![conversation_id, bot_id],
+				)?;
+				Ok(())
+			})
+			.await
+			.expect("the bot takes the lead");
+	}
+
+	async fn left_seat(database: &Database, conversation_id: &str, bot_id: &'static str) {
+		let conversation_id = conversation_id.to_owned();
+		database
+			.call(move |connection| {
+				connection.execute(
+					"UPDATE conversation_participants SET left_at = 9
+						WHERE conversation_id = ?1 AND bot_id = ?2",
+					rusqlite::params![conversation_id, bot_id],
+				)?;
+				Ok(())
+			})
+			.await
+			.expect("the bot leaves its seat");
+	}
+
+	async fn deleted_bot(database: &Database, bot_id: &'static str) {
+		database
+			.call(move |connection| {
+				connection.execute(
+					"UPDATE bots SET deleted_at = 9 WHERE id = ?1",
+					rusqlite::params![bot_id],
+				)?;
+				Ok(())
+			})
+			.await
+			.expect("the bot is deleted");
 	}
 
 	async fn ruled(database: &Database, conversation_id: &str, instructions: &'static str) {
@@ -1800,6 +1871,127 @@ mod tests {
 			section(&context, RECENT_LABEL),
 			Some("user: message 1\nassistant: message 2"),
 			"a chat of one bot stopped reading as it did: {context}"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn the_roster_block_is_the_room_section_the_context_composes_for_the_same_reader() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let conversation = a_conversation(&database).await;
+		another_bot(&database, &conversation, "second").await;
+		crowned(&database, &conversation, "second").await;
+		prompt(&database, &conversation, "p1", None).await;
+		let run = a_run_of(&database, &conversation, "default").await;
+
+		let context = bounded_context(
+			&database,
+			participant_of(&conversation, "default"),
+			run,
+			"p1".to_owned(),
+		)
+		.await
+		.expect("the context is rebuilt");
+		let block = roster_block(&database, participant_of(&conversation, "default"))
+			.await
+			.expect("the block is rendered");
+
+		assert_eq!(
+			block.as_deref(),
+			context.split("\n\n").find(|part| part.starts_with(ROOM_LABEL)),
+			"the block drifted from the section the context composes: {context}"
+		);
+		assert_eq!(
+			block,
+			Some(format!(
+				"{ROOM_LABEL}\n- Claude — <@default> — this is you\n\
+				- Second — <@second> — holds the lead"
+			)),
+			"the reader and the lead were not marked"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_roster_block_of_a_conversation_the_file_does_not_hold_is_refused() {
+		let dir = temp_dir();
+		let database = open(&dir);
+
+		let refused = roster_block(&database, participant_of("nowhere", "default")).await;
+
+		assert_eq!(
+			refused,
+			Err(TranscriptStoreError::UnknownConversation { id: "nowhere".to_owned() }),
+			"an unknown conversation was read for its seats"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_conversation_of_a_single_bot_has_no_roster_block() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let conversation = a_conversation(&database).await;
+
+		let block = roster_block(&database, participant_of(&conversation, "default"))
+			.await
+			.expect("the block is rendered");
+
+		assert_eq!(block, None, "a chat of one bot was given a room");
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_reader_holding_no_seat_reads_the_roster_with_no_line_of_its_own() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let conversation = a_conversation(&database).await;
+		another_bot(&database, &conversation, "second").await;
+
+		let block = roster_block(&database, participant_of(&conversation, "onlooker"))
+			.await
+			.expect("the block is rendered");
+
+		assert_eq!(
+			block,
+			Some(format!("{ROOM_LABEL}\n- Claude — <@default>\n- Second — <@second>")),
+			"a reader outside the room was marked in it"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_bot_that_left_its_seat_or_is_deleted_stays_out_of_the_roster_block() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let conversation = a_conversation(&database).await;
+		another_bot(&database, &conversation, "second").await;
+		joined(&database, &conversation, "old", "Old", 2).await;
+		left_seat(&database, &conversation, "old").await;
+		joined(&database, &conversation, "ghost", "Ghost", 3).await;
+		deleted_bot(&database, "ghost").await;
+
+		let block = roster_block(&database, participant_of(&conversation, "default"))
+			.await
+			.expect("the block is rendered");
+
+		assert_eq!(
+			block,
+			Some(format!(
+				"{ROOM_LABEL}\n- Claude — <@default> — this is you\n- Second — <@second>"
+			)),
+			"a bot that is no longer there was seated in the room"
 		);
 
 		drop(database);
