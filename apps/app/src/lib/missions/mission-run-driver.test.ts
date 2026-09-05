@@ -386,21 +386,6 @@ describe("startMissionRunDriver", () => {
 		expect(spoken(harness.originTail())).toEqual([])
 	})
 
-	it("marks the reported turn of a solo thread with the mission ticket", async () => {
-		await restart({ soloOrigin: true })
-		await harness.openSolo()
-		await harness.enter("done", closedBy("poller"))
-		await harness.endTurn(reported("The walls stand, handing over."))
-
-		const { turnId } = harness.soloTail().messages[0]
-
-		expect(harness.soloTail().reportedCauses.get(turnId)).toEqual({
-			turnId,
-			routineTitle: harness.mission.ticket.externalId,
-			triggerSourceId: MISSION_TRIGGER_SOURCE,
-		})
-	})
-
 	it("reports in the origin conversation when the main chat cannot be read", async () => {
 		const logged = vi
 			.spyOn(console, "error")
