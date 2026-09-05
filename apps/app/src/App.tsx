@@ -156,6 +156,7 @@ export function App() {
 		driver,
 		store,
 		runtimes: conversationRuntimes,
+		chat: chat.controller,
 	})
 
 	useNotifications({

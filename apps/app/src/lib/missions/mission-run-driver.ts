@@ -20,6 +20,7 @@ import type {
 	TransportError,
 	TurnEnded,
 } from "../agent/contract"
+import type { ChatController } from "../chat/chat-controller"
 import { isSameRuntimeScope } from "../chat/chat-state"
 import type { ChatDriver } from "../chat/driver"
 import { needsFreshSession } from "../chat/screen-model"
@@ -51,8 +52,9 @@ export type MissionRunDriverOptions = {
 		| "shutdown"
 		| "subscribe"
 	>
-	store: Pick<TranscriptStore, "openRuntimeSession">
+	store: Pick<TranscriptStore, "openRuntimeSession" | "mainChat">
 	runtimes: Pick<ConversationRuntimes, "runtimeFor">
+	chat: Pick<ChatController, "reportRun">
 	missions: MissionRunPort
 	reportFailure: (notice: NoticeMessage) => void
 	now?: () => number
@@ -110,6 +112,7 @@ export const startMissionRunDriver = ({
 	driver,
 	store,
 	runtimes,
+	chat,
 	missions,
 	reportFailure,
 	now = () => Date.now(),
@@ -263,11 +266,29 @@ export const startMissionRunDriver = ({
 		}
 	}
 
-	const writeReport = ({ call, scope }: LiveMissionRun, text: string) => {
+	const mainChatIdOf = (botId: string) =>
+		store
+			.mainChat(botId)
+			.then(({ id }) => id)
+			.catch((reason) => {
+				reporting("conversation_main_chat")(reason)
+				return null
+			})
+
+	const reporterOf = async (conversationId: string, botId: string) => {
+		const mainChatId = await mainChatIdOf(botId)
+
+		return mainChatId === conversationId
+			? chat
+			: runtimes.runtimeFor(conversationId)
+	}
+
+	const writeReport = async ({ call, scope }: LiveMissionRun, text: string) => {
 		const { mission } = call
 		const conversationId = conversationOf(call)
+		const reporter = await reporterOf(conversationId, mission.botId)
 
-		return runtimes.runtimeFor(conversationId).reportRun({
+		return reporter.reportRun({
 			conversationId,
 			botId: mission.botId,
 			runtimeSessionId: scope.runtimeSessionId,
