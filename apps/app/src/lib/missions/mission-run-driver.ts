@@ -136,6 +136,10 @@ export const startMissionRunDriver = ({
 	}
 
 	const takeAgain = (missionId: string) => {
+		if (live.has(missionId)) {
+			return
+		}
+
 		const changed = kept.get(missionId)
 		kept.delete(missionId)
 
@@ -255,9 +259,7 @@ export const startMissionRunDriver = ({
 			raiseFailure(`the mission could not be read: ${detailOf(thrown)}`)
 		} finally {
 			starting.delete(changed.missionId)
-			if (!live.has(changed.missionId)) {
-				takeAgain(changed.missionId)
-			}
+			takeAgain(changed.missionId)
 		}
 	}
 
