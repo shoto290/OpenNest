@@ -47,7 +47,7 @@ type Harness = {
 	driver: ScriptedDriver
 	missions: FakeMissions
 	starts: Started[]
-	calls: string[]
+	agentCalls: string[]
 	thread: Conversation
 	mission: Mission
 	reportFailure: ReturnType<typeof vi.fn>
@@ -64,7 +64,7 @@ const createHarness = async (
 ): Promise<Harness> => {
 	const scripted = createScriptedDriver()
 	const starts: Started[] = []
-	const calls: string[] = []
+	const agentCalls: string[] = []
 	const driver: ScriptedDriver = {
 		...scripted,
 		startOrResumeSession: (scope, resume, cwd, outputSchema) => {
@@ -72,11 +72,11 @@ const createHarness = async (
 			return scripted.startOrResumeSession(scope, resume, cwd, outputSchema)
 		},
 		cancelTurn: (scope) => {
-			calls.push("cancelTurn")
+			agentCalls.push("cancelTurn")
 			return scripted.cancelTurn(scope)
 		},
 		shutdown: (scope) => {
-			calls.push("shutdown")
+			agentCalls.push("shutdown")
 			return scripted.shutdown(scope)
 		},
 	}
@@ -142,7 +142,7 @@ const createHarness = async (
 		driver,
 		missions,
 		starts,
-		calls,
+		agentCalls,
 		thread,
 		mission,
 		reportFailure,
@@ -234,7 +234,7 @@ describe("startMissionRunDriver", () => {
 			request: { id: "p-1", toolName: "Bash", title: "Run it", detail: null },
 		})
 
-		expect(harness.calls).toEqual(["cancelTurn", "shutdown"])
+		expect(harness.agentCalls).toEqual(["cancelTurn", "shutdown"])
 		expect(harness.reportFailure).toHaveBeenCalledTimes(1)
 	})
 
@@ -244,7 +244,7 @@ describe("startMissionRunDriver", () => {
 
 		await vi.advanceTimersByTimeAsync(RUN_DEADLINE_MS)
 
-		expect(harness.calls).toEqual(["cancelTurn", "shutdown"])
+		expect(harness.agentCalls).toEqual(["cancelTurn", "shutdown"])
 		expect(harness.reportFailure).toHaveBeenCalledTimes(1)
 
 		vi.useRealTimers()

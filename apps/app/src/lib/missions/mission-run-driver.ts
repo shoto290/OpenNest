@@ -115,7 +115,7 @@ export const startMissionRunDriver = ({
 	const states = createMissionStates()
 
 	const raiseFailure = (reason: unknown) => {
-		console.error("mission run driver: the run was refused", reason)
+		console.error("mission run driver: the run failed", reason)
 		reportFailure({
 			title: i18n.t("chat:missions.failure.run.title"),
 			description: i18n.t("chat:missions.failure.run.description"),
