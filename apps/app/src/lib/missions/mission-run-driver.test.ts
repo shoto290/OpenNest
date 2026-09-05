@@ -10,6 +10,8 @@ import {
 } from "./mission-run-driver"
 
 import type { AgentEvent, RuntimeScope, TurnEnded } from "../agent/contract"
+import { createChatController } from "../chat/chat-controller"
+import type { ChatState } from "../chat/chat-state"
 import type { ConversationState } from "../conversations/conversation-controller"
 import { createConversationRuntimes } from "../conversations/conversation-runtimes"
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
@@ -59,6 +61,8 @@ type Harness = {
 	endTurn: (ended: Partial<TurnEnded>) => Promise<void>
 	tail: () => ConversationState
 	originTail: () => ConversationState
+	soloTail: () => ChatState
+	openSolo: () => Promise<void>
 }
 
 type HarnessSeed = {
@@ -67,6 +71,7 @@ type HarnessSeed = {
 	openEvents?: MissionEvent[]
 	stalled?: boolean
 	boardFails?: boolean
+	soloOrigin?: boolean
 }
 
 const createHarness = async ({
@@ -75,6 +80,7 @@ const createHarness = async ({
 	openEvents = AGENT_ASKED,
 	stalled = false,
 	boardFails = false,
+	soloOrigin = false,
 }: HarnessSeed = {}): Promise<Harness> => {
 	const scripted = createScriptedDriver()
 	const starts: Started[] = []
@@ -110,12 +116,14 @@ const createHarness = async ({
 		botIds: [bot.id],
 	})
 	const runtimes = createConversationRuntimes(driver, store)
+	const chat = createChatController(driver, store)
+	const soloChat = await base.mainChat(bot.id)
 	const missions = createFakeMissions()
 	const reportFailure = vi.fn()
 	const mission = aMission({
 		botId: bot.id,
 		threadConversationId: thread.id,
-		originConversationId: origin.id,
+		originConversationId: soloOrigin ? soloChat.id : origin.id,
 	})
 
 	if (open) {
@@ -135,6 +143,7 @@ const createHarness = async ({
 		driver,
 		store,
 		runtimes,
+		chat,
 		missions,
 		reportFailure,
 		now: () => 7,
@@ -172,9 +181,16 @@ const createHarness = async ({
 	await originReader.open(origin)
 	await settled()
 
+	const openSolo = async () => {
+		await chat.open(bot.id)
+		await settled()
+	}
+
 	const tail = () => reader.getState()
 
 	const originTail = () => originReader.getState()
+
+	const soloTail = () => chat.stateFor(bot.id)
 
 	return {
 		driver,
@@ -192,6 +208,8 @@ const createHarness = async ({
 		endTurn,
 		tail,
 		originTail,
+		soloTail,
+		openSolo,
 	}
 }
 
@@ -349,6 +367,58 @@ describe("startMissionRunDriver", () => {
 			[harness.mission.botId, "The walls stand, handing over."],
 		])
 		expect(spoken(harness.tail())).toEqual([])
+	})
+
+	it("shows the report in the open solo thread when the origin is the main chat", async () => {
+		await restart({ soloOrigin: true })
+		await harness.openSolo()
+		await harness.enter("done", closedBy("poller"))
+		await harness.endTurn(reported("The walls stand, handing over."))
+
+		expect(harness.soloTail().messages).toEqual([
+			expect.objectContaining({
+				role: "assistant",
+				authorBotId: harness.mission.botId,
+				content: "The walls stand, handing over.",
+				completion: "complete",
+			}),
+		])
+		expect(spoken(harness.originTail())).toEqual([])
+	})
+
+	it("marks the reported turn of a solo thread with the mission ticket", async () => {
+		await restart({ soloOrigin: true })
+		await harness.openSolo()
+		await harness.enter("done", closedBy("poller"))
+		await harness.endTurn(reported("The walls stand, handing over."))
+
+		const { turnId } = harness.soloTail().messages[0]
+
+		expect(harness.soloTail().reportedCauses.get(turnId)).toEqual({
+			turnId,
+			routineTitle: harness.mission.ticket.externalId,
+			triggerSourceId: MISSION_TRIGGER_SOURCE,
+		})
+	})
+
+	it("reports in the origin conversation when the main chat cannot be read", async () => {
+		const logged = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => undefined)
+		await restart({
+			store: { mainChat: () => Promise.reject(new Error("refused")) },
+		})
+		await harness.enter("done", closedBy("poller"))
+		await harness.endTurn(reported("The walls stand, handing over."))
+
+		expect(spoken(harness.originTail())).toEqual([
+			[harness.mission.botId, "The walls stand, handing over."],
+		])
+		expect(harness.reportFailure).not.toHaveBeenCalled()
+		expect(logged).toHaveBeenCalledWith(
+			"mission run driver: conversation_main_chat failed",
+			expect.any(Error),
+		)
 	})
 
 	it("reports a question of the agent in the mission thread", async () => {
