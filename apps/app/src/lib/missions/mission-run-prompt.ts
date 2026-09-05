@@ -75,14 +75,16 @@ type ShortenedEvents = {
 	cutCount: number
 }
 
-const shortened = (events: MissionEvent[]): ShortenedEvents => {
+const shortenedEventsOf = (events: MissionEvent[]): ShortenedEvents => {
 	const recent = events.slice(-EVENT_LIMIT)
 	const cut = recent.map(cutEventOf)
 
 	return {
 		events: cut,
 		droppedCount: events.length - recent.length,
-		cutCount: cut.filter((event, index) => event !== recent[index]).length,
+		cutCount: cut.filter(
+			(event, index) => event.payload !== recent[index].payload,
+		).length,
 	}
 }
 
@@ -105,14 +107,14 @@ const noticesOf = ({ droppedCount, cutCount }: ShortenedEvents) => [
 ]
 
 export const missionRunPromptFor = (call: MissionRunCall): string => {
-	const kept = shortened(call.events)
-	const text = withoutFence(payloadTextOf(call, kept.events))
+	const shortEvents = shortenedEventsOf(call.events)
+	const text = withoutFence(payloadTextOf(call, shortEvents.events))
 
 	return [
 		INSTRUCTION_OF[call.cause],
 		...(call.rosterBlock ? [call.rosterBlock] : []),
 		UNTRUSTED_NOTICE,
-		...noticesOf(kept),
+		...noticesOf(shortEvents),
 		[UNTRUSTED_OPEN, text, UNTRUSTED_CLOSE].join("\n"),
 	].join("\n\n")
 }
