@@ -19,6 +19,8 @@ const CONFIG_NAME: &str = "agent-hook.json";
 
 const CLAUDE_DIR: &str = ".claude";
 
+const GIT_ENTRY: &str = ".git";
+
 const SETTINGS_NAME: &str = "settings.local.json";
 
 const HOOKS_KEY: &str = "hooks";
@@ -38,7 +40,7 @@ pub fn dir<R: Runtime>(app: &AppHandle<R>, mission_id: &str) -> Result<PathBuf, 
 }
 
 pub fn installed(dir: &Path, workspace: &str, url: &str, key: &str) -> Result<(), MissionError> {
-	let root = opened(workspace)?;
+	let root = checkout(workspace)?;
 	let script = laid_out(dir, url, key)?;
 	let settings = root.join(CLAUDE_DIR).join(SETTINGS_NAME);
 	let held = read(&settings)?;
@@ -66,14 +68,19 @@ fn written(path: &Path, bytes: &[u8]) -> Result<(), MissionError> {
 		.map_err(|error| unreachable(format!("a hook file was not written: {error}")))
 }
 
-fn opened(workspace: &str) -> Result<PathBuf, MissionError> {
+pub fn checkout(workspace: &str) -> Result<PathBuf, MissionError> {
 	let root = Path::new(workspace)
 		.canonicalize()
-		.map_err(|error| unreachable(format!("the workspace was not opened: {error}")))?;
-	match root.is_dir() {
-		true => Ok(root),
-		false => Err(unreachable("the workspace is not a directory".to_owned())),
+		.map_err(|_| unreachable(format!("the workspace {workspace} is nowhere on this machine")))?;
+	if !root.is_dir() {
+		return Err(unreachable(format!("the workspace {workspace} is not a directory")));
 	}
+	if !root.join(GIT_ENTRY).exists() {
+		return Err(unreachable(format!(
+			"the workspace {workspace} holds no {GIT_ENTRY}, so it is no git checkout"
+		)));
+	}
+	Ok(root)
 }
 
 fn read(settings: &Path) -> Result<Value, MissionError> {
@@ -160,7 +167,7 @@ mod tests {
 		let path =
 			std::env::temp_dir().join(format!("opennest-hook-{name}-{}", std::process::id()));
 		let _ = fs::remove_dir_all(&path);
-		fs::create_dir_all(path.join("workspace")).expect("the workspace is there");
+		fs::create_dir_all(path.join("workspace").join(GIT_ENTRY)).expect("the workspace is there");
 		path
 	}
 
@@ -294,6 +301,31 @@ mod tests {
 			.expect("the config is JSON"),
 			json!({ "url": A_URL, "key": A_KEY }),
 		);
+
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[test]
+	fn a_workspace_that_is_no_git_checkout_is_refused_and_nothing_is_written_in_it() {
+		let dir = a_dir("no-git");
+		let bare = dir.join("bare");
+		fs::create_dir_all(&bare).expect("the bare directory is there");
+		let file = dir.join("a-file");
+		fs::write(&file, "held").expect("the file lands");
+		let absent = dir.join("nowhere");
+
+		let refused = [&bare, &file, &absent].map(|path| {
+			installed(&dir.join("hook"), &path.to_string_lossy(), A_URL, A_KEY)
+				.expect_err("the install is refused")
+		});
+
+		assert!(
+			refused.iter().all(|held| matches!(held, MissionError::Undeliverable { detail }
+				if detail.contains(&*dir.to_string_lossy()))),
+			"a refusal is not an Undeliverable naming the path: {refused:?}"
+		);
+		assert!(files_in(&bare).is_empty(), "the refused workspace was written in");
+		assert!(files_in(&dir.join("hook")).is_empty(), "the refused install laid the hook out");
 
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}

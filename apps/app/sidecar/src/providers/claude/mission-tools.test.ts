@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test"
 
+import { z } from "zod"
+
 import { missionTools } from "./mission-tools"
 
 import type { SessionFrame } from "../provider"
@@ -137,6 +139,17 @@ describe("missionTools", () => {
 			"mission_watch",
 			"mission_list",
 		])
+	})
+
+	it("tells the agent only a git checkout is taken as a workspace path", () => {
+		const armed = z.toJSONSchema(
+			z.object(toolNamed(SESSION, "mission_watch").inputSchema),
+		)
+
+		const said = JSON.stringify(armed.properties?.workspacePath)
+
+		expect(said).toContain("git checkout")
+		expect(said).toContain("Superset worktree")
 	})
 
 	it("takes neither a conversation nor a bot from the agent", () => {

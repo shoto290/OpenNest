@@ -412,6 +412,8 @@ mod tests {
 			.join(format!("opennest-mission-host-{name}-{}", std::process::id()));
 		let _ = fs::remove_dir_all(&path);
 		fs::create_dir_all(&path).expect("the workspace is there");
+		fs::write(path.join(".git"), "gitdir: /elsewhere/.git/worktrees/one")
+			.expect("the git file lands");
 		path
 	}
 
