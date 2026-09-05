@@ -13,11 +13,16 @@ const openingRunIndex = (runs: TranscriptRow[][], mission: Mission): number => {
 	const spoken = runs.flatMap(([opening], index) =>
 		opening.authorBotId === mission.botId ? [index] : [],
 	)
-	const opened = spoken.filter(
-		(index) => runs[index][0].timestamp <= mission.openedAt,
-	)
+	const distanceOf = (index: number) =>
+		Math.abs(runs[index][0].timestamp - mission.openedAt)
 
-	return opened.at(-1) ?? spoken[0] ?? NOT_PLACED
+	return spoken.reduce(
+		(nearest, index) =>
+			nearest === NOT_PLACED || distanceOf(index) <= distanceOf(nearest)
+				? index
+				: nearest,
+		NOT_PLACED,
+	)
 }
 
 export const placeMissions = (

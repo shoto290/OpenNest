@@ -44,6 +44,8 @@ const LATER_PROMPT = [rowOf(null, 400)]
 const LATER_ANSWER = [rowOf("bot-1", 500)]
 
 describe("placeMissions", () => {
+	const RUNS = [PROMPT, ANSWER, LATER_PROMPT, LATER_ANSWER]
+
 	it("places a mission after the run of the bot that opened it", () => {
 		expect(
 			placeMissions([PROMPT, ANSWER, LATER_PROMPT], [missionOf("m-1", 200)]),
@@ -62,13 +64,22 @@ describe("placeMissions", () => {
 		])
 	})
 
-	it("places a mission opened before its bot wrote after the first run of that bot", () => {
-		expect(
-			placeMissions(
-				[PROMPT, ANSWER, LATER_PROMPT, LATER_ANSWER],
-				[missionOf("m-1", 50)],
-			),
-		).toEqual([{ mission: missionOf("m-1", 50), runIndex: 1 }])
+	it("places a mission on the run of its bot opening nearest to it", () => {
+		expect(placeMissions(RUNS, [missionOf("m-1", 50)])).toEqual([
+			{ mission: missionOf("m-1", 50), runIndex: 1 },
+		])
+	})
+
+	it("places a mission opened shortly before a later run of its bot on that run", () => {
+		expect(placeMissions(RUNS, [missionOf("m-1", 450)])).toEqual([
+			{ mission: missionOf("m-1", 450), runIndex: 3 },
+		])
+	})
+
+	it("places a mission opened halfway between two runs of its bot on the later one", () => {
+		expect(placeMissions(RUNS, [missionOf("m-1", 300)])).toEqual([
+			{ mission: missionOf("m-1", 300), runIndex: 3 },
+		])
 	})
 
 	it("holds a mission of a bot the transcript carries no run of", () => {
