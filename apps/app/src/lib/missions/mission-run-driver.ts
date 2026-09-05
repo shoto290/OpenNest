@@ -245,12 +245,19 @@ export const startMissionRunDriver = ({
 		try {
 			const call = callFor(await missions.detail(changed.missionId))
 			if (call) {
+				states.remember({
+					missionId: changed.missionId,
+					state: call.mission.state,
+				})
 				await begin({ ...call, rosterBlock: await rosterBlockOf(call) })
 			}
 		} catch (thrown) {
 			raiseFailure(`the mission could not be read: ${detailOf(thrown)}`)
 		} finally {
 			starting.delete(changed.missionId)
+			if (!live.has(changed.missionId)) {
+				takeAgain(changed.missionId)
+			}
 		}
 	}
 

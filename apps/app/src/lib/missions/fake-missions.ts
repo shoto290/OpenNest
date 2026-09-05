@@ -17,6 +17,9 @@ export type FakeMissions = {
 	place: (missions: Mission[]) => void
 	stall: () => void
 	release: () => void
+	stallDetail: () => void
+	releaseDetail: () => void
+	refuseOnce: (missionId: string) => void
 	refuseBoard: () => void
 	refuse: (missionId: string) => void
 	change: (changed: MissionChanged) => void
@@ -25,6 +28,7 @@ export type FakeMissions = {
 export const createFakeMissions = (): FakeMissions => {
 	const details = new Map<string, MissionDetail>()
 	const refused = new Set<string>()
+	const refusedOnce = new Set<string>()
 	const listeners = new Set<(changed: MissionChanged) => void>()
 	const opened: OpenedMission[] = []
 	const rosterCalls: [conversationId: string, botId: string][] = []
@@ -34,6 +38,8 @@ export const createFakeMissions = (): FakeMissions => {
 	let isBoardRefused = false
 	let readable = Promise.resolve()
 	let makeReadable: () => void = () => undefined
+	let detailGate: Promise<void> | null = null
+	let openDetailGate: () => void = () => undefined
 
 	return {
 		opened,
@@ -89,11 +95,30 @@ export const createFakeMissions = (): FakeMissions => {
 		},
 
 		detail: async (missionId) => {
+			if (detailGate) {
+				await detailGate
+			}
 			const held = details.get(missionId)
-			if (refused.has(missionId) || !held) {
+			const isRefusedOnce = refusedOnce.delete(missionId)
+			if (isRefusedOnce || refused.has(missionId) || !held) {
 				throw new Error(`no mission answers ${missionId}`)
 			}
 			return held
+		},
+
+		stallDetail: () => {
+			detailGate = new Promise<void>((resolve) => {
+				openDetailGate = resolve
+			})
+		},
+
+		releaseDetail: () => {
+			openDetailGate()
+			detailGate = null
+		},
+
+		refuseOnce: (missionId) => {
+			refusedOnce.add(missionId)
 		},
 
 		open: (next) => {

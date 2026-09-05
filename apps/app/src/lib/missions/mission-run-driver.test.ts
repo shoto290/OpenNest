@@ -472,6 +472,49 @@ describe("startMissionRunDriver", () => {
 		})
 	})
 
+	it("runs once when a change lands while the read already carries its state", async () => {
+		harness.hold("done", closedBy("poller"))
+		harness.missions.stallDetail()
+		harness.missions.change({
+			missionId: harness.mission.id,
+			state: "waiting_bot",
+		})
+		await settled()
+		harness.missions.change({ missionId: harness.mission.id, state: "done" })
+		await settled()
+		harness.missions.releaseDetail()
+		await settled()
+
+		await harness.endTurn(reported("The walls stand, handing over."))
+
+		expect(harness.starts).toHaveLength(1)
+		expect(spoken(harness.originTail())).toEqual([
+			[harness.mission.botId, "The walls stand, handing over."],
+		])
+	})
+
+	it("takes a change kept while a read that failed was in flight", async () => {
+		harness.hold("done", closedBy("poller"))
+		harness.missions.stallDetail()
+		harness.missions.refuseOnce(harness.mission.id)
+		harness.missions.change({
+			missionId: harness.mission.id,
+			state: "waiting_bot",
+		})
+		await settled()
+		harness.missions.change({ missionId: harness.mission.id, state: "done" })
+		await settled()
+		harness.missions.releaseDetail()
+		await settled()
+
+		expect(harness.reportFailure).toHaveBeenCalledTimes(1)
+		expect(harness.starts).toHaveLength(1)
+		expect(harness.starts[0].scope).toMatchObject({
+			conversationId: harness.origin.id,
+			botId: harness.mission.botId,
+		})
+	})
+
 	it("takes no dropped change once it is stopped", async () => {
 		await harness.enter("waiting_bot")
 		await harness.enter("done", closedBy("poller"))
