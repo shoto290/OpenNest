@@ -5,12 +5,14 @@ import {
 	RoutinesPanel,
 } from "@workspace/ui/components/routines-panel"
 
-import { useMissions } from "@/lib/missions/use-missions"
+import { useRosterClock } from "@/lib/bots/use-roster-clock"
+import type { ConversationMissionsRead } from "@/lib/missions/use-missions"
 import { useRoutines } from "@/lib/routines/use-routines"
 
 type ThreadRoutinesProps = {
 	conversationId: string | null
 	leadBotId?: string
+	missions: ConversationMissionsRead
 	onOpenMission: (missionId: string) => void
 	children: ReactNode
 }
@@ -29,13 +31,14 @@ const activityFailure = (
 const ThreadRoutines = ({
 	conversationId,
 	leadBotId,
+	missions,
 	onOpenMission,
 	children,
 }: ThreadRoutinesProps) => {
 	const [isOpen, setOpen] = useState(false)
+	const now = useRosterClock()
 	const { routines, failure, reload, setEnabled, remove, form, detail } =
 		useRoutines(conversationId, leadBotId)
-	const missions = useMissions(conversationId)
 
 	const reloadActivity = () => {
 		reload()
@@ -48,7 +51,7 @@ const ThreadRoutines = ({
 			failure={activityFailure(failure, missions.hasFailed)}
 			form={form}
 			isOpen={isOpen}
-			missions={{ ...missions.missions, onOpen: onOpenMission }}
+			missions={{ ...missions.rows, now, onOpen: onOpenMission }}
 			onDelete={remove}
 			onEnabledChange={setEnabled}
 			onOpenChange={setOpen}

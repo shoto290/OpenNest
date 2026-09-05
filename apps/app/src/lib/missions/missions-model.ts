@@ -3,7 +3,11 @@ import type {
 	AppSidebarBotMission,
 } from "@workspace/ui/components/app-sidebar"
 import type { BotBadge, BotMissionState } from "@workspace/ui/components/badge"
-import type { MissionEventModel } from "@workspace/ui/components/mission"
+import type {
+	MissionBot,
+	MissionEventModel,
+} from "@workspace/ui/components/mission"
+import type { MissionCardModel } from "@workspace/ui/components/mission-card"
 import type { MissionRowModel } from "@workspace/ui/components/mission-row"
 
 import type {
@@ -31,6 +35,21 @@ export const toMissionRows = (missions: Mission[]): MissionRowModel[] =>
 		openedAt: mission.openedAt,
 		badge: BADGE_BY_STATE[mission.state],
 	}))
+
+export const toMissionCard = (
+	mission: Mission,
+	bot: MissionBot,
+): MissionCardModel => ({
+	id: mission.id,
+	bot,
+	objective: mission.objective,
+	ticket: {
+		externalId: mission.ticket.externalId,
+		title: mission.ticket.title,
+	},
+	state: mission.state,
+	isClosed: mission.closedAt !== null,
+})
 
 const spokenTextOf = (payload: unknown): string | undefined => {
 	if (typeof payload !== "object" || payload === null) {

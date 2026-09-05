@@ -5,7 +5,7 @@ import type {
 
 import type { Mission } from "./mission-contract"
 
-import { faceOfBot } from "@/lib/chat/thread-contract"
+import { faceOfBot, type ThreadFace } from "@/lib/chat/thread-contract"
 import type { Bot, Conversation } from "@/lib/conversations/store-contract"
 import type { TranscriptMessage } from "@/lib/conversations/transcript-contract"
 
@@ -25,11 +25,13 @@ type MissionThreadRead = {
 	sources: SpokenSources
 }
 
-export const toMissionBot = (bot: Bot): MissionBot => {
-	const { id, ...face } = faceOfBot(bot)
+export const toMissionFace = ({ id, ...face }: ThreadFace): MissionBot => ({
+	...face,
+	seed: id,
+})
 
-	return { ...face, seed: id }
-}
+export const toMissionBot = (bot: Bot): MissionBot =>
+	toMissionFace(faceOfBot(bot))
 
 export const toMissionConversation = ({
 	mission,
