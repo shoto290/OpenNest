@@ -70,6 +70,8 @@ const CAUSE_OF_STATE: Partial<Record<MissionState, MissionRunCause>> = {
 	done: "merge",
 }
 
+const CAUGHT_UP_STATES: MissionState[] = ["waiting_bot"]
+
 const detailOf = (thrown: unknown) =>
 	thrown instanceof Error ? thrown.message : String(thrown)
 
@@ -300,7 +302,9 @@ export const startMissionRunDriver = ({
 		}
 
 		for (const { mission } of onBoard) {
-			void consider({ missionId: mission.id, state: mission.state })
+			if (CAUGHT_UP_STATES.includes(mission.state)) {
+				void consider({ missionId: mission.id, state: mission.state })
+			}
 		}
 	}
 

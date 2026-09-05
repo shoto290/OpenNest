@@ -62,6 +62,7 @@ type Harness = {
 type HarnessSeed = {
 	store?: Partial<TranscriptStore>
 	open?: MissionState
+	openEvents?: MissionEvent[]
 	stalled?: boolean
 	boardFails?: boolean
 }
@@ -69,6 +70,7 @@ type HarnessSeed = {
 const createHarness = async ({
 	store: overrides = {},
 	open,
+	openEvents = AGENT_ASKED,
 	stalled = false,
 	boardFails = false,
 }: HarnessSeed = {}): Promise<Harness> => {
@@ -108,7 +110,7 @@ const createHarness = async ({
 	})
 
 	if (open) {
-		missions.hold({ mission: { ...mission, state: open }, events: AGENT_ASKED })
+		missions.hold({ mission: { ...mission, state: open }, events: openEvents })
 		missions.place([{ ...mission, state: open }])
 	}
 
@@ -369,6 +371,12 @@ describe("startMissionRunDriver", () => {
 
 		expect(harness.starts).toHaveLength(1)
 		expect(harness.driver.submissions).toHaveLength(1)
+	})
+
+	it("leaves an open mission that github merged before the start", async () => {
+		await restart({ open: "done", openEvents: closedBy("github") })
+
+		expect(harness.starts).toEqual([])
 	})
 
 	it("leaves an open mission that is already working at start", async () => {
