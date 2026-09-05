@@ -6,6 +6,7 @@ import {
 	type MissionChanged,
 	type MissionDetail,
 	type MissionEvent,
+	type MissionOnBoard,
 	type MissionState,
 } from "./mission-contract"
 import {
@@ -35,6 +36,7 @@ export const RUN_DEADLINE_MS = 30 * 60_000
 export type MissionRunUnsubscribe = () => void
 
 export type MissionRunPort = {
+	board: () => Promise<Pick<MissionOnBoard, "mission">[]>
 	onChanged: (
 		listener: (changed: MissionChanged) => void,
 	) => Promise<MissionRunUnsubscribe>
@@ -113,6 +115,7 @@ export const startMissionRunDriver = ({
 	const live = new Map<string, LiveMissionRun>()
 	const starting = new Set<string>()
 	const states = createMissionStates()
+	let isStopped = false
 
 	const raiseFailure = (reason: unknown) => {
 		console.error("mission run driver: the run failed", reason)
@@ -289,6 +292,18 @@ export const startMissionRunDriver = ({
 		}
 	}
 
+	const catchUpOnOpenMissions = async () => {
+		const onBoard = await missions.board()
+
+		if (isStopped) {
+			return
+		}
+
+		for (const { mission } of onBoard) {
+			void consider({ missionId: mission.id, state: mission.state })
+		}
+	}
+
 	const changes = listening(
 		missions.onChanged((changed) => void consider(changed)),
 		"mission run driver: mission changes could not be listened to",
@@ -298,7 +313,16 @@ export const startMissionRunDriver = ({
 		"mission run driver: agent events could not be listened to",
 	)
 
+	void catchUpOnOpenMissions().catch((reason) => {
+		console.error(
+			"mission run driver: the open missions could not be read",
+			reason,
+		)
+	})
+
 	return () => {
+		isStopped = true
+
 		for (const held of [...live.values()]) {
 			end(held)
 		}

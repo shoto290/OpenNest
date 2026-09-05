@@ -59,9 +59,19 @@ type Harness = {
 	tail: () => ConversationState
 }
 
-const createHarness = async (
-	overrides: Partial<TranscriptStore> = {},
-): Promise<Harness> => {
+type HarnessSeed = {
+	store?: Partial<TranscriptStore>
+	open?: MissionState
+	stalled?: boolean
+	boardFails?: boolean
+}
+
+const createHarness = async ({
+	store: overrides = {},
+	open,
+	stalled = false,
+	boardFails = false,
+}: HarnessSeed = {}): Promise<Harness> => {
 	const scripted = createScriptedDriver()
 	const starts: Started[] = []
 	const agentCalls: string[] = []
@@ -96,6 +106,19 @@ const createHarness = async (
 		botId: bot.id,
 		threadConversationId: thread.id,
 	})
+
+	if (open) {
+		missions.hold({ mission: { ...mission, state: open }, events: AGENT_ASKED })
+		missions.place([{ ...mission, state: open }])
+	}
+
+	if (stalled) {
+		missions.stall()
+	}
+
+	if (boardFails) {
+		missions.refuseBoard()
+	}
 
 	const stop = startMissionRunDriver({
 		driver,
@@ -178,6 +201,7 @@ describe("startMissionRunDriver", () => {
 	afterEach(() => {
 		harness.stop()
 		vi.useRealTimers()
+		vi.restoreAllMocks()
 	})
 
 	it("opens a session of its own on the mission thread for the owning bot", async () => {
@@ -317,7 +341,9 @@ describe("startMissionRunDriver", () => {
 	it("raises a failure notice and writes nothing when the session cannot open", async () => {
 		harness.stop()
 		harness = await createHarness({
-			openRuntimeSession: () => Promise.reject(new Error("no runtime")),
+			store: {
+				openRuntimeSession: () => Promise.reject(new Error("no runtime")),
+			},
 		})
 
 		await harness.enter("waiting_bot")
@@ -332,6 +358,69 @@ describe("startMissionRunDriver", () => {
 
 		expect(harness.reportFailure).toHaveBeenCalledTimes(1)
 		expect(spoken(harness.tail())).toEqual([])
+	})
+
+	it("takes an open mission that waits on the bot at start", async () => {
+		harness.stop()
+		harness = await createHarness({ open: "waiting_bot" })
+
+		expect(harness.starts).toHaveLength(1)
+		expect(harness.driver.submissions).toHaveLength(1)
+	})
+
+	it("leaves an open mission that is already working at start", async () => {
+		harness.stop()
+		harness = await createHarness({ open: "working" })
+
+		expect(harness.starts).toEqual([])
+	})
+
+	it("runs once when a change arrives while the start read is in flight", async () => {
+		harness.stop()
+		harness = await createHarness({ open: "waiting_bot", stalled: true })
+
+		await harness.enter("waiting_bot")
+		harness.missions.release()
+		await settled()
+
+		expect(harness.starts).toHaveLength(1)
+	})
+
+	it("runs no second time on a change carrying the state read at start", async () => {
+		harness.stop()
+		harness = await createHarness({ open: "waiting_bot" })
+		await harness.endTurn({ structuredOutput: { outcome: "nothing" } })
+
+		await harness.enter("waiting_bot")
+
+		expect(harness.starts).toHaveLength(1)
+	})
+
+	it("keeps listening to mission changes when the open missions cannot be read", async () => {
+		const logged = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => undefined)
+		harness.stop()
+		harness = await createHarness({ boardFails: true })
+
+		await harness.enter("waiting_bot")
+
+		expect(harness.starts).toHaveLength(1)
+		expect(logged).toHaveBeenCalledWith(
+			"mission run driver: the open missions could not be read",
+			expect.any(Error),
+		)
+	})
+
+	it("starts no run when it is stopped before the start read resolves", async () => {
+		harness.stop()
+		harness = await createHarness({ open: "waiting_bot", stalled: true })
+
+		harness.stop()
+		harness.missions.release()
+		await settled()
+
+		expect(harness.starts).toEqual([])
 	})
 
 	it("raises a failure notice when the mission cannot be read", async () => {
