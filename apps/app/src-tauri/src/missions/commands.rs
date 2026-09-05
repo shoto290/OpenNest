@@ -263,14 +263,6 @@ mod tests {
 		MissionNote { source: "human".to_owned(), payload: json!({}) }
 	}
 
-	fn an_entry() -> MissionEntry {
-		MissionEntry {
-			kind: MissionEventKind::Note,
-			source: "human".to_owned(),
-			payload: json!({ "line": "still moving" }),
-		}
-	}
-
 	fn a_closing(outcome: MissionOutcome) -> MissionClosing {
 		MissionClosing {
 			source: "human".to_owned(),
@@ -352,10 +344,14 @@ mod tests {
 			"the failed close lost its outcome or its summary"
 		);
 
-		let refused =
-			mission_note(app.handle().clone(), app.state(), opened.id.clone(), an_entry())
-				.await
-				.expect_err("the closed mission refuses an event");
+		let refused = mission_note(
+			app.handle().clone(),
+			app.state(),
+			opened.id.clone(),
+			MissionEntry::of(MissionEventKind::Note, a_note()),
+		)
+		.await
+		.expect_err("the closed mission refuses an event");
 		assert_eq!(refused, MissionError::MissionAlreadyClosed { id: opened.id });
 
 		cleaned(&app);

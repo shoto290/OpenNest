@@ -92,15 +92,6 @@ pub enum MissionOutcome {
 	Failed,
 }
 
-impl MissionOutcome {
-	pub fn kind(self) -> MissionEventKind {
-		match self {
-			MissionOutcome::Done => MissionEventKind::Closed,
-			MissionOutcome::Failed => MissionEventKind::Failed,
-		}
-	}
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MissionClosing {
@@ -112,7 +103,10 @@ pub struct MissionClosing {
 impl MissionClosing {
 	pub fn entry(&self) -> MissionEntry {
 		MissionEntry {
-			kind: self.outcome.kind(),
+			kind: match self.outcome {
+				MissionOutcome::Done => MissionEventKind::Closed,
+				MissionOutcome::Failed => MissionEventKind::Failed,
+			},
 			source: self.source.clone(),
 			payload: serde_json::json!({ "outcome": self.outcome, "summary": self.summary }),
 		}

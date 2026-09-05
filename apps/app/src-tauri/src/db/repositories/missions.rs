@@ -319,12 +319,7 @@ fn appended(
 	delivery_id: &str,
 ) -> Result<Mission, MissionError> {
 	let transaction = write_transaction(connection)?;
-	let Some(standing) = held(&transaction, mission_id)? else {
-		return Err(MissionError::UnknownMission { id: mission_id.to_owned() });
-	};
-	if standing.closed_at.is_some() {
-		return Err(MissionError::MissionAlreadyClosed { id: mission_id.to_owned() });
-	}
+	refuse_a_shut_mission(&transaction, mission_id)?;
 	if !already_delivered(&transaction, mission_id, delivery_id)? {
 		let at = now();
 		record(&transaction, mission_id, entry, delivery_id, at)?;
@@ -337,18 +332,26 @@ fn appended(
 	Ok(stored)
 }
 
+fn refuse_a_shut_mission(
+	transaction: &Transaction<'_>,
+	mission_id: &str,
+) -> Result<(), MissionError> {
+	let Some(standing) = held(transaction, mission_id)? else {
+		return Err(MissionError::UnknownMission { id: mission_id.to_owned() });
+	};
+	match standing.closed_at {
+		Some(_) => Err(MissionError::MissionAlreadyClosed { id: mission_id.to_owned() }),
+		None => Ok(()),
+	}
+}
+
 fn closed(
 	connection: &mut Connection,
 	mission_id: &str,
 	closing: &MissionClosing,
 ) -> Result<Mission, MissionError> {
 	let transaction = write_transaction(connection)?;
-	let Some(standing) = held(&transaction, mission_id)? else {
-		return Err(MissionError::UnknownMission { id: mission_id.to_owned() });
-	};
-	if standing.closed_at.is_some() {
-		return Err(MissionError::MissionAlreadyClosed { id: mission_id.to_owned() });
-	}
+	refuse_a_shut_mission(&transaction, mission_id)?;
 	let at = now();
 	record(&transaction, mission_id, &closing.entry(), "", at)?;
 	transaction.execute(CLOSE_MISSION, params![mission_id, at])?;
@@ -364,12 +367,7 @@ fn armed(
 	minted_key: &str,
 ) -> Result<(Mission, String), MissionError> {
 	let transaction = write_transaction(connection)?;
-	let Some(standing) = held(&transaction, mission_id)? else {
-		return Err(MissionError::UnknownMission { id: mission_id.to_owned() });
-	};
-	if standing.closed_at.is_some() {
-		return Err(MissionError::MissionAlreadyClosed { id: mission_id.to_owned() });
-	}
+	refuse_a_shut_mission(&transaction, mission_id)?;
 	let held_key: String = transaction.query_row(SELECT_KEY, [mission_id], |row| row.get(0))?;
 	let key = match held_key.is_empty() {
 		true => minted_key.to_owned(),
