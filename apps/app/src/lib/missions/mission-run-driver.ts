@@ -72,6 +72,9 @@ const CAUSE_OF_STATE: Partial<Record<MissionState, MissionRunCause>> = {
 
 const CAUGHT_UP_STATES: MissionState[] = ["waiting_bot"]
 
+const isCaughtUpOn = ({ mission }: Pick<MissionOnBoard, "mission">) =>
+	CAUGHT_UP_STATES.includes(mission.state)
+
 const detailOf = (thrown: unknown) =>
 	thrown instanceof Error ? thrown.message : String(thrown)
 
@@ -301,10 +304,8 @@ export const startMissionRunDriver = ({
 			return
 		}
 
-		for (const { mission } of onBoard) {
-			if (CAUGHT_UP_STATES.includes(mission.state)) {
-				void consider({ missionId: mission.id, state: mission.state })
-			}
+		for (const { mission } of onBoard.filter(isCaughtUpOn)) {
+			void consider({ missionId: mission.id, state: mission.state })
 		}
 	}
 
