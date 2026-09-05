@@ -11,6 +11,7 @@ import { createElement } from "react"
 import { afterEach, expect, it } from "vitest"
 
 import "@workspace/ui/lib/i18n"
+
 import {
 	NoticeSurface,
 	raiseFailureNotice,
@@ -21,6 +22,7 @@ import type { NotificationPort } from "./notification-port"
 import { startNotificationSource } from "./notification-source"
 
 import { initialChatState } from "../chat/chat-state"
+import { createFakeMissions } from "../missions/fake-missions"
 
 const CLICK_FAILURE_TITLE =
 	"Clicking a notification will no longer open its conversation"
@@ -76,6 +78,7 @@ const watchAlongside = async ({
 		runtimes: idleRuntimes,
 		roster: emptyRoster,
 		spaces: { select: () => undefined },
+		missions: createFakeMissions(),
 		notifications,
 		switches: () => SWITCHES,
 		hasFocus: () => false,

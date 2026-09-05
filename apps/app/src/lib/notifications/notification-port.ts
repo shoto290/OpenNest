@@ -1,5 +1,5 @@
 export type NotificationTarget = {
-	kind: "bot" | "conversation"
+	kind: "bot" | "conversation" | "mission"
 	id: string
 }
 

@@ -28,6 +28,10 @@ import type {
 	MissionEvent,
 } from "@/lib/missions/mission-contract"
 import { missionsTransport } from "@/lib/missions/missions-transport"
+import {
+	createOpenedMissionController,
+	type SelectedRow,
+} from "@/lib/missions/opened-mission-controller"
 import { type FakeLayout, fakeLayout } from "@/lib/perf/fake-layout"
 import { routinesTransport } from "@/lib/routines/routines-transport"
 import { triggerSourcesTransport } from "@/lib/routines/trigger-sources-transport"
@@ -110,6 +114,33 @@ const attachments = createAttachmentsController({
 	send: () => true,
 })
 
+const createFakeRoster = () => {
+	const listeners = new Set<() => void>()
+	let selected: SelectedRow = {
+		selectedBotId: null,
+		selectedConversationId: null,
+	}
+
+	return {
+		getState: () => selected,
+		subscribe: (listener: () => void) => {
+			listeners.add(listener)
+			return () => {
+				listeners.delete(listener)
+			}
+		},
+		select: (conversationId: string) => {
+			selected = {
+				selectedBotId: null,
+				selectedConversationId: conversationId,
+			}
+			for (const listener of [...listeners]) {
+				listener()
+			}
+		},
+	}
+}
+
 type Workspace = {
 	bot: Bot
 	conversation: Conversation
@@ -135,14 +166,17 @@ const workspaceOf = async (store = createFakeTranscriptStore()) => {
 	const driver = createScriptedDriver()
 	const runtimes = createConversationRuntimes(driver, store)
 	const chatController = createChatController(createScriptedDriver(), store)
+	const roster = createFakeRoster()
+	const missions = createOpenedMissionController(roster)
 
 	const workspace: Workspace = {
 		bot,
 		conversation,
 		otherConversation,
 		driver,
-		body: (selected = conversation) =>
-			createElement(WorkspaceBody, {
+		body: (selected = conversation) => {
+			roster.select(selected.id)
+			return createElement(WorkspaceBody, {
 				attachments,
 				bots: [bot],
 				chat: { state: initialChatState, controller: chatController },
@@ -153,11 +187,13 @@ const workspaceOf = async (store = createFakeTranscriptStore()) => {
 				isConversationSettingsOpen: false,
 				isOverlayOpen: false,
 				isSettingsOpen: false,
+				missions,
 				onOpenConversationSettings: () => undefined,
 				onRetrySpaces: () => undefined,
 				onToggleSettings: () => undefined,
 				readerName: "Reader",
-			}),
+			})
+		},
 	}
 
 	return workspace

@@ -3,6 +3,8 @@ import { i18n } from "@workspace/ui/lib/i18n"
 import type { NotifiedEvent } from "./notification-policy"
 import type { NotificationRequest } from "./notification-port"
 
+import type { MissionState } from "../missions/mission-contract"
+
 const BODY_KEY = {
 	question: "common:notification.question",
 	permission: "common:notification.permission",
@@ -26,6 +28,38 @@ export type NotificationWordsInput = {
 	name: string
 	event: NotifiedEvent
 }
+
+export type NotifiedMissionState = Extract<
+	MissionState,
+	"waiting_human" | "ready_to_merge"
+>
+
+const MISSION_BODY_KEY = {
+	waiting_human: "common:notification.mission.waiting_human",
+	ready_to_merge: "common:notification.mission.ready_to_merge",
+} as const satisfies Record<NotifiedMissionState, string>
+
+export const isNotifiedMissionState = (
+	state: MissionState,
+): state is NotifiedMissionState => state in MISSION_BODY_KEY
+
+export type MissionNotificationWordsInput = {
+	name: string
+	ticket: string
+	state: NotifiedMissionState
+}
+
+export const missionNotificationWordsFor = ({
+	name,
+	ticket,
+	state,
+}: MissionNotificationWordsInput): Pick<
+	NotificationRequest,
+	"title" | "body"
+> => ({
+	title: name,
+	body: i18n.t(MISSION_BODY_KEY[state], { ticket }),
+})
 
 export const notificationWordsFor = ({
 	name,

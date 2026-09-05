@@ -10,6 +10,8 @@ import { revealWindow, watchWindowFocus } from "../host"
 import type { RosterController } from "../bots/roster-controller"
 import type { ChatController } from "../chat/chat-controller"
 import type { ConversationRuntimes } from "../conversations/conversation-runtimes"
+import { missionsTransport } from "../missions/missions-transport"
+import type { OpenedMissionController } from "../missions/opened-mission-controller"
 import type { SpacesController } from "../spaces/spaces-controller"
 import type { UserController } from "../user/preferences-controller"
 
@@ -18,6 +20,7 @@ export type NotificationsMount = {
 	runtimes: ConversationRuntimes
 	roster: RosterController
 	spaces: SpacesController
+	missions: OpenedMissionController
 	user: UserController
 }
 
@@ -26,6 +29,7 @@ export const useNotifications = ({
 	runtimes,
 	roster,
 	spaces,
+	missions,
 	user,
 }: NotificationsMount) => {
 	useEffect(
@@ -35,6 +39,11 @@ export const useNotifications = ({
 				runtimes,
 				roster,
 				spaces,
+				missions: {
+					onChanged: missionsTransport.onChanged,
+					detail: missionsTransport.detail,
+					open: missions.open,
+				},
 				notifications: createNotifications(),
 				switches: () => user.getState().preferences,
 				hasFocus: () => document.hasFocus(),
@@ -43,6 +52,6 @@ export const useNotifications = ({
 				playChime: createChime(),
 				reportFailure: raiseFailureNotice,
 			}),
-		[chat, runtimes, roster, spaces, user],
+		[chat, runtimes, roster, spaces, missions, user],
 	)
 }

@@ -12,6 +12,8 @@ import type {
 	NotificationTarget,
 } from "./notification-port"
 import {
+	isNotifiedMissionState,
+	missionNotificationWordsFor,
 	type NotificationFailure,
 	notificationFailureTitleFor,
 	notificationWordsFor,
@@ -20,6 +22,12 @@ import {
 import type { ChatState } from "../chat/chat-state"
 import { conversationName } from "../conversations/roster-conversations"
 import type { Conversation } from "../conversations/store-contract"
+import type {
+	MissionChanged,
+	MissionDetail,
+} from "../missions/mission-contract"
+import { createMissionStates } from "../missions/mission-states"
+import type { OpenedMission } from "../missions/opened-mission-controller"
 import type { UserPreferences } from "../user/preferences-contract"
 
 type NotifiedBot = {
@@ -51,6 +59,14 @@ type SpacesSource = {
 	select: (spaceId: string) => void
 }
 
+type MissionsSource = {
+	onChanged: (
+		listener: (changed: MissionChanged) => void,
+	) => Promise<() => void>
+	detail: (missionId: string) => Promise<MissionDetail>
+	open: (opened: OpenedMission) => void
+}
+
 export type NotificationSourceSwitches = NotificationSwitches &
 	Pick<UserPreferences, "notifyWithSound">
 
@@ -61,6 +77,7 @@ export type NotificationSourceOptions = {
 	runtimes: RuntimeSource
 	roster: RosterSource
 	spaces: SpacesSource
+	missions: MissionsSource
 	notifications: NotificationPort
 	switches: () => NotificationSourceSwitches
 	hasFocus: () => boolean
@@ -94,6 +111,7 @@ export const startNotificationSource = ({
 	runtimes,
 	roster,
 	spaces,
+	missions,
 	notifications,
 	switches,
 	hasFocus,
@@ -104,6 +122,7 @@ export const startNotificationSource = ({
 }: NotificationSourceOptions): (() => void) => {
 	const seen = new Map<string, ChatState>()
 	const seenRounds = new Map<string, ConversationRound>()
+	const missionStates = createMissionStates()
 
 	let windowFocus: boolean | undefined
 
@@ -220,6 +239,55 @@ export const startNotificationSource = ({
 		}
 	}
 
+	const raise = (request: NotificationRequest) => {
+		void notifications.send(request).catch(failWith("send"))
+
+		if (switches().notifyWithSound) {
+			playChime()
+		}
+	}
+
+	const missionChanged = async (changed: MissionChanged) => {
+		if (!missionStates.entered(changed)) {
+			return
+		}
+
+		const { state } = changed
+
+		if (!isNotifiedMissionState(state)) {
+			return
+		}
+
+		const { mission } = await missions.detail(changed.missionId)
+		const bot = roster.getState().bots.find(({ id }) => id === mission.botId)
+
+		if (!bot) {
+			return
+		}
+
+		raise({
+			target: { kind: "mission", id: mission.id },
+			...missionNotificationWordsFor({
+				name: bot.name,
+				ticket: mission.ticket.externalId,
+				state,
+			}),
+		})
+	}
+
+	const openMission = async (missionId: string) => {
+		const { mission } = await missions.detail(missionId)
+		const spaceId = roster.spaceOfBot(mission.botId)
+
+		if (!spaceId) {
+			return
+		}
+
+		roster.select(mission.botId)
+		spaces.select(spaceId)
+		missions.open({ missionId, rowId: mission.botId })
+	}
+
 	const windowRaised = (): Promise<void> => {
 		try {
 			return raiseWindow()
@@ -230,6 +298,10 @@ export const startNotificationSource = ({
 
 	const activate = ({ kind, id }: NotificationTarget) => {
 		void windowRaised().catch(failWith("reveal"))
+
+		if (kind === "mission") {
+			return void openMission(id).catch(failWith("clicks"))
+		}
 
 		const spaceId =
 			kind === "bot" ? roster.spaceOfBot(id) : roster.spaceOfConversation(id)
@@ -249,6 +321,11 @@ export const startNotificationSource = ({
 
 	const stopChat = chat.subscribe(compare)
 	const stopRuntimes = runtimes.subscribe(compare)
+	const missionChanges = missions
+		.onChanged(
+			(changed) => void missionChanged(changed).catch(failWith("send")),
+		)
+		.catch(failWith("send"))
 	const focus = watchFocus((isFocused) => {
 		windowFocus = isFocused
 	}).catch(failWith("focus"))
@@ -259,6 +336,7 @@ export const startNotificationSource = ({
 	return () => {
 		stopChat()
 		stopRuntimes()
+		void missionChanges.then((stop) => stop?.())
 		void focus.then((stop) => stop?.())
 		void activation.then((stop) => stop?.())
 	}

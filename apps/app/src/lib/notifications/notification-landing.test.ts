@@ -11,6 +11,8 @@ import { newBotIdentity } from "../bots/bot-settings"
 import { createRosterController } from "../bots/roster-controller"
 import { initialChatState } from "../chat/chat-state"
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
+import { createFakeMissions } from "../missions/fake-missions"
+import { aMission } from "../missions/mission-fixtures"
 import { createSpacesController } from "../spaces/spaces-controller"
 import { useSpaceEntry } from "../spaces/use-space-entry"
 
@@ -75,6 +77,7 @@ const aWorld = async () => {
 	})
 
 	const notifications = createFakeNotificationPort()
+	const missions = createFakeMissions()
 	const reader = aReader()
 
 	startNotificationSource({
@@ -82,6 +85,7 @@ const aWorld = async () => {
 		runtimes: idleRuntimes,
 		roster,
 		spaces,
+		missions,
 		notifications,
 		switches: () => ALL_ON,
 		hasFocus: () => false,
@@ -103,6 +107,7 @@ const aWorld = async () => {
 	return {
 		spaces,
 		roster,
+		missions,
 		notifications,
 		reader,
 		elsewhere,
@@ -150,4 +155,33 @@ it("lands on a bot of the space already on screen without changing space", async
 
 	expect(spaces.getState().selectedSpaceId).toBe(HOME)
 	expect(roster.getState().selectedBotId).toBe(neighbour.id)
+})
+
+it("enters the space of the mission's bot and opens that mission thread", async () => {
+	const { spaces, roster, notifications, missions, elsewhere, away } =
+		await aWorld()
+	const mission = aMission({ id: "mission-9", botId: away.id })
+	missions.hold({ mission, events: [] })
+
+	await act(async () => {
+		notifications.activate({ kind: "mission", id: mission.id })
+	})
+
+	expect(spaces.getState().selectedSpaceId).toBe(elsewhere.id)
+	expect(roster.getState().selectedBotId).toBe(away.id)
+	expect(missions.opened).toEqual([{ missionId: mission.id, rowId: away.id }])
+})
+
+it("opens a mission of the space already on screen without changing space", async () => {
+	const { spaces, roster, notifications, missions, neighbour } = await aWorld()
+	const mission = aMission({ id: "mission-10", botId: neighbour.id })
+	missions.hold({ mission, events: [] })
+
+	await act(async () => {
+		notifications.activate({ kind: "mission", id: mission.id })
+	})
+
+	expect(spaces.getState().selectedSpaceId).toBe(HOME)
+	expect(roster.getState().selectedBotId).toBe(neighbour.id)
+	expect(missions.opened).toHaveLength(1)
 })

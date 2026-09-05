@@ -538,6 +538,11 @@ const chat = {
 				description:
 					"Nothing was recorded on the mission. Send your answer again.",
 			},
+			run: {
+				title: "The bot could not be run on its mission",
+				description:
+					"Nothing was changed on the mission. Open its thread to see where it stands.",
+			},
 		},
 	},
 } as const
