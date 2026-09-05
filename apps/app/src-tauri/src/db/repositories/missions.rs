@@ -404,7 +404,7 @@ fn reported(
 	if standing.reported_at.is_some() {
 		return Err(MissionError::MissionAlreadyReported { id: mission_id.to_owned() });
 	}
-	refuse_an_unreportable_turn(&transaction, &standing, turn_id)?;
+	refuse_an_unreportable_turn(&transaction, &standing.origin_conversation_id, turn_id)?;
 	transaction.execute(REPORT_MISSION, params![mission_id, now(), turn_id])?;
 	let stored = read(&transaction, mission_id)?;
 	transaction.commit()?;
@@ -413,7 +413,7 @@ fn reported(
 
 fn refuse_an_unreportable_turn(
 	transaction: &Transaction<'_>,
-	standing: &Mission,
+	origin_conversation_id: &str,
 	turn_id: Option<&str>,
 ) -> Result<(), MissionError> {
 	let Some(turn_id) = turn_id else {
@@ -424,7 +424,7 @@ fn refuse_an_unreportable_turn(
 	let Some(conversation_id) = of_turn else {
 		return Err(MissionError::UnknownTurn { id: turn_id.to_owned() });
 	};
-	if conversation_id != standing.origin_conversation_id {
+	if conversation_id != origin_conversation_id {
 		return Err(MissionError::TurnOfAnotherConversation {
 			turn_id: turn_id.to_owned(),
 			conversation_id,
