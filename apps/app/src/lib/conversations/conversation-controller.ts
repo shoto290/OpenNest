@@ -39,6 +39,7 @@ import {
 	chatErrorOf,
 	isSameRuntimeScope,
 	toReadError,
+	toStoreError,
 	toTransportError,
 } from "../chat/chat-state"
 import type { ChatDriver } from "../chat/driver"
@@ -845,29 +846,47 @@ export const createConversationController = (
 		}
 	}
 
-	const openReportTurn = (reported: TranscriptMessage) => {
-		if (speakers.size > 0) {
-			return
-		}
-		if (activeTurn) {
-			completeTurn(activeTurn)
-		}
-		activeTurn = { id: reported.turnId, promptId: reported.id }
+	const startedTurn = async (reported: TranscriptMessage) => {
+		const turn: OpenTurn = { id: newId(), promptId: reported.id }
+		await enqueue(() =>
+			store.startTurn({
+				id: turn.id,
+				conversationId: reported.conversationId,
+				startedAt: now(),
+			}),
+		)
+		return turn
 	}
 
-	const relayReport = (reported: TranscriptMessage) => {
+	const openReportTurn = async (reported: TranscriptMessage) => {
+		if (speakers.size > 0) {
+			return true
+		}
+		try {
+			const turn = await startedTurn(reported)
+			if (activeTurn) {
+				completeTurn(activeTurn)
+			}
+			activeTurn = turn
+			return true
+		} catch (reason) {
+			noteFailure(toStoreError(reason))
+			return false
+		}
+	}
+
+	const relayReport = async (reported: TranscriptMessage) => {
 		const author = reported.authorBotId
 		if (!author) {
 			return
 		}
 		const summoned = addresseesIn(reported.content, presentBotIds())
-		if (summoned.length === 0) {
+		if (summoned.length === 0 || !(await openReportTurn(reported))) {
 			return
 		}
 		for (const botId of summoned) {
 			queue = handedOver(queue, author, { botId, promptId: reported.id })
 		}
-		openReportTurn(reported)
 		sync()
 		drive()
 	}
@@ -883,7 +902,7 @@ export const createConversationController = (
 		rememberCause(causeOf(draft, reported.turnId))
 		transcript.append(reported)
 		if (isSeated) {
-			relayReport(reported)
+			await relayReport(reported)
 		}
 		return reported.turnId
 	}

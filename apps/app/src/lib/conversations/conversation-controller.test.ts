@@ -1866,6 +1866,48 @@ describe("a run report relaying the bots it names", () => {
 		expect(driver.submissions[0].prompt).toContain(`<@${nyx}>`)
 	})
 
+	it("stores the answer of a summoned bot outside the turn of the report", async () => {
+		const { driver, store, controller, conversation } = await createReporting()
+		const ada = idOf(conversation, "Ada")
+		const nyx = idOf(conversation, "Nyx")
+
+		const reportTurnId = await controller.reportRun(
+			draftFor(conversation.id, ada, "Walls are up. @Nyx, read it."),
+		)
+		await settled()
+		driver.pushTo(nyx, spoke(nyx, "read and noted"))
+		await settled()
+
+		const page = await store.loadPage(conversation.id, null)
+		const answer = page.messages.find(({ authorBotId }) => authorBotId === nyx)
+		expect(answer?.content).toBe("read and noted")
+		expect(answer?.turnId).not.toBe(reportTurnId)
+	})
+
+	it("summons nobody when the turn of the summoned bots cannot be started", async () => {
+		const base = createFakeTranscriptStore()
+		let startedTurns = 0
+		const { driver, store, controller, conversation } = await createReporting({
+			...base,
+			startTurn: (turn) => {
+				startedTurns += 1
+				return startedTurns > 1
+					? Promise.reject(new Error("refused"))
+					: base.startTurn(turn)
+			},
+		})
+		const ada = idOf(conversation, "Ada")
+
+		await controller.reportRun(
+			draftFor(conversation.id, ada, "Walls are up. @Nyx, read it."),
+		)
+		await settled()
+
+		const page = await store.loadPage(conversation.id, null)
+		expect(page.messages).toHaveLength(1)
+		expect(driver.submissions).toHaveLength(0)
+	})
+
 	it("stores the report carrying the tokens of the bots it names", async () => {
 		const { store, controller, conversation } = await createReporting()
 		const ada = idOf(conversation, "Ada")
