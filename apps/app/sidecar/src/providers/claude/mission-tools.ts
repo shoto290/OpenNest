@@ -40,7 +40,7 @@ const REPOSITORY =
 	"The repository that branch lives in, written owner then slash then name."
 
 const WORKSPACE_PATH =
-	"The git checkout of that repository on this machine, a Superset worktree included. Only a git checkout is accepted, so the path names a directory holding a .git entry and nothing else is taken. A path given installs the agent hook in that checkout, so what you do there reaches the thread of the mission. Left out, the branch stays watched by its repository alone and no hook is installed."
+	"The git checkout of that repository on this machine, a linked worktree included. Only a git checkout is accepted, so the path names a directory holding a .git entry and nothing else is taken. A path given installs the agent hook in that checkout, so what you do there reaches the thread of the mission. Left out, the branch stays watched by its repository alone and no hook is installed."
 
 const OPEN =
 	"Open a mission on this conversation, owned by you, and get its own thread. Call this once you and the person agree on the objective and the ticket it carries."

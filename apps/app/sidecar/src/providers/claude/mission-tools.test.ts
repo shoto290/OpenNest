@@ -149,7 +149,8 @@ describe("missionTools", () => {
 		const said = JSON.stringify(armed.properties?.workspacePath)
 
 		expect(said).toContain("git checkout")
-		expect(said).toContain("Superset worktree")
+		expect(said).toContain("linked worktree")
+		expect(said).not.toMatch(/superset/i)
 	})
 
 	it("words the mission tools of the objective and names no tool it runs with", () => {
