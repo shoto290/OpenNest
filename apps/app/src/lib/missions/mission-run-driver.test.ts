@@ -194,6 +194,11 @@ const closedBy = (source: string) =>
 describe("startMissionRunDriver", () => {
 	let harness: Harness
 
+	const restart = async (seed: HarnessSeed) => {
+		harness.stop()
+		harness = await createHarness(seed)
+	}
+
 	beforeEach(async () => {
 		harness = await createHarness()
 	})
@@ -339,8 +344,7 @@ describe("startMissionRunDriver", () => {
 	})
 
 	it("raises a failure notice and writes nothing when the session cannot open", async () => {
-		harness.stop()
-		harness = await createHarness({
+		await restart({
 			store: {
 				openRuntimeSession: () => Promise.reject(new Error("no runtime")),
 			},
@@ -361,23 +365,20 @@ describe("startMissionRunDriver", () => {
 	})
 
 	it("takes an open mission that waits on the bot at start", async () => {
-		harness.stop()
-		harness = await createHarness({ open: "waiting_bot" })
+		await restart({ open: "waiting_bot" })
 
 		expect(harness.starts).toHaveLength(1)
 		expect(harness.driver.submissions).toHaveLength(1)
 	})
 
 	it("leaves an open mission that is already working at start", async () => {
-		harness.stop()
-		harness = await createHarness({ open: "working" })
+		await restart({ open: "working" })
 
 		expect(harness.starts).toEqual([])
 	})
 
 	it("runs once when a change arrives while the start read is in flight", async () => {
-		harness.stop()
-		harness = await createHarness({ open: "waiting_bot", stalled: true })
+		await restart({ open: "waiting_bot", stalled: true })
 
 		await harness.enter("waiting_bot")
 		harness.missions.release()
@@ -387,8 +388,7 @@ describe("startMissionRunDriver", () => {
 	})
 
 	it("runs no second time on a change carrying the state read at start", async () => {
-		harness.stop()
-		harness = await createHarness({ open: "waiting_bot" })
+		await restart({ open: "waiting_bot" })
 		await harness.endTurn({ structuredOutput: { outcome: "nothing" } })
 
 		await harness.enter("waiting_bot")
@@ -400,8 +400,7 @@ describe("startMissionRunDriver", () => {
 		const logged = vi
 			.spyOn(console, "error")
 			.mockImplementation(() => undefined)
-		harness.stop()
-		harness = await createHarness({ boardFails: true })
+		await restart({ boardFails: true })
 
 		await harness.enter("waiting_bot")
 
@@ -413,8 +412,7 @@ describe("startMissionRunDriver", () => {
 	})
 
 	it("starts no run when it is stopped before the start read resolves", async () => {
-		harness.stop()
-		harness = await createHarness({ open: "waiting_bot", stalled: true })
+		await restart({ open: "waiting_bot", stalled: true })
 
 		harness.stop()
 		harness.missions.release()
