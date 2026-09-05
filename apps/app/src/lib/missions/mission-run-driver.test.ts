@@ -257,12 +257,38 @@ describe("startMissionRunDriver", () => {
 		})
 	})
 
-	it("raises a failure notice when a closing run reports nothing", async () => {
-		await harness.enter("done", closedBy("poller"))
-		await harness.endTurn({ structuredOutput: { outcome: "nothing" } })
+	it.each([
+		["it ends on nothing", { outcome: "nothing" }],
+		["its report text is blank", { outcome: "report", report: "   " }],
+	])(
+		"names a closing run that reported nothing when %s",
+		async (_name, structuredOutput) => {
+			const logged = vi
+				.spyOn(console, "error")
+				.mockImplementation(() => undefined)
+			await harness.enter("done", closedBy("poller"))
+			await harness.endTurn({ structuredOutput })
 
-		expect(harness.reportFailure).toHaveBeenCalledTimes(1)
-		expect(spoken(harness.originTail())).toEqual([])
+			expect(harness.reportFailure).toHaveBeenCalledTimes(1)
+			expect(logged).toHaveBeenCalledWith(
+				"mission run driver: the run failed",
+				"the closing mission run reported nothing",
+			)
+			expect(spoken(harness.originTail())).toEqual([])
+		},
+	)
+
+	it("names a closing run whose turn carried no structured output", async () => {
+		const logged = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => undefined)
+		await harness.enter("done", closedBy("poller"))
+		await harness.endTurn({ structuredOutput: undefined })
+
+		expect(logged).toHaveBeenCalledWith(
+			"mission run driver: the run failed",
+			"the mission run ended with no structured output",
+		)
 	})
 
 	it("fences the mission events and the agent last message under the instruction", async () => {

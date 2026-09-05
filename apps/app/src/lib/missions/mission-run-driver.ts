@@ -7,10 +7,7 @@ import type {
 	MissionOnBoard,
 	MissionState,
 } from "./mission-contract"
-import {
-	missionRunOutputSchemaFor,
-	readMissionRunReport,
-} from "./mission-run-output"
+import { isReportOwedBy, missionRunOutputSchemaFor } from "./mission-run-output"
 import {
 	type MissionRunCall,
 	type MissionRunCause,
@@ -29,6 +26,7 @@ import type { ChatDriver } from "../chat/driver"
 import { needsFreshSession } from "../chat/screen-model"
 import type { ConversationRuntimes } from "../conversations/conversation-runtimes"
 import type { TranscriptStore } from "../conversations/store-port"
+import { readRunReport } from "../routines/run-output"
 
 export const MISSION_TRIGGER_SOURCE = "mission"
 
@@ -287,14 +285,16 @@ export const startMissionRunDriver = ({
 			return raiseFailure(`the mission run's turn was ${ended.outcome}`)
 		}
 
-		const report = readMissionRunReport(held.call.cause, ended.structuredOutput)
+		const report = readRunReport(ended.structuredOutput)
 
 		if (!report) {
 			return raiseFailure("the mission run ended with no structured output")
 		}
 
 		if (report.outcome === "nothing") {
-			return
+			return isReportOwedBy(held.call.cause)
+				? raiseFailure("the closing mission run reported nothing")
+				: undefined
 		}
 
 		try {

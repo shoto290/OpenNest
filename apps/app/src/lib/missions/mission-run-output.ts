@@ -1,10 +1,8 @@
 import type { MissionRunCause } from "./mission-run-prompt"
 
-import { type RunReport, readRunReport } from "../routines/run-output"
-
 const REPORTING_CAUSES: MissionRunCause[] = ["done", "failed"]
 
-const isReportOwed = (cause: MissionRunCause) =>
+export const isReportOwedBy = (cause: MissionRunCause) =>
 	REPORTING_CAUSES.includes(cause)
 
 const REPORT_OWED_SCHEMA: Record<string, unknown> = {
@@ -17,6 +15,7 @@ const REPORT_OWED_SCHEMA: Record<string, unknown> = {
 		},
 		report: {
 			type: "string",
+			minLength: 1,
 			description: "the report text of the mission run, never empty",
 		},
 	},
@@ -46,17 +45,4 @@ const REPORT_FREE_SCHEMA: Record<string, unknown> = {
 export const missionRunOutputSchemaFor = (
 	cause: MissionRunCause,
 ): Record<string, unknown> =>
-	isReportOwed(cause) ? REPORT_OWED_SCHEMA : REPORT_FREE_SCHEMA
-
-export const readMissionRunReport = (
-	cause: MissionRunCause,
-	structuredOutput: unknown,
-): RunReport | null => {
-	const report = readRunReport(structuredOutput)
-
-	if (report?.outcome === "nothing" && isReportOwed(cause)) {
-		return null
-	}
-
-	return report
-}
+	isReportOwedBy(cause) ? REPORT_OWED_SCHEMA : REPORT_FREE_SCHEMA
