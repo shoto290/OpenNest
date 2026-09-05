@@ -1,6 +1,7 @@
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { addresseesIn, toMentionTokens } from "./mentions"
+import { readConversation } from "./read-conversation"
 import { isNameless, leadOf, presentParticipants } from "./roster-conversations"
 import type { Conversation, MessagePin } from "./store-contract"
 import type { TranscriptStore } from "./store-port"
@@ -827,12 +828,61 @@ export const createConversationController = (
 		sync()
 	}
 
+	const holdForReport = async (conversationId: string) => {
+		if (conversation?.id === conversationId) {
+			return
+		}
+		try {
+			const seated = await readConversation(store, conversationId)
+			if (seated) {
+				await open(seated)
+			}
+		} catch (reason) {
+			noteFailure(toReadError(reason))
+		}
+	}
+
+	const openReportTurn = (reported: TranscriptMessage) => {
+		if (speakers.size > 0) {
+			return
+		}
+		if (activeTurn) {
+			completeTurn(activeTurn)
+		}
+		activeTurn = { id: reported.turnId, promptId: reported.id }
+	}
+
+	const relayReport = (reported: TranscriptMessage) => {
+		const author = reported.authorBotId
+		if (!author) {
+			return
+		}
+		const summoned = addresseesIn(reported.content, presentBotIds())
+		if (summoned.length === 0) {
+			return
+		}
+		for (const botId of summoned) {
+			queue = handedOver(queue, author, { botId, promptId: reported.id })
+		}
+		openReportTurn(reported)
+		sync()
+		drive()
+	}
+
 	const reportRun = async (draft: RunReportDraft) => {
+		await holdForReport(draft.conversationId)
+		const isSeated = conversation?.id === draft.conversationId
+		const text = isSeated
+			? toMentionTokens(draft.text, mentionBots())
+			: draft.text
 		const reported = await enqueue(() =>
-			writeReportTurn({ store, draft, newId, now }),
+			writeReportTurn({ store, draft: { ...draft, text }, newId, now }),
 		)
 		rememberCause(causeOf(draft, reported.turnId))
 		transcript.append(reported)
+		if (isSeated) {
+			relayReport(reported)
+		}
 		return reported.turnId
 	}
 
