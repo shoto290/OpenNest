@@ -16,7 +16,11 @@ A conversation seats as many bots as you name in it, and every bot named in one 
 
 **Its routines.** A routine is a standing instruction of one conversation: a trigger fires, the bot carries out the instruction, and its report lands in that conversation. Three triggers ship: a cron schedule, a watched file changing, and a call on the local webhook. Each routine filters the trigger payload field by field, and a bot creates, edits, runs, lists and deletes its own routines through the `routine_*` tools on the `opennest` server.
 
-**Its missions.** A mission is a longer piece of work a bot owns: an objective, the ticket it comes from, and a thread of its own. It moves through events — opened, note, agent_asked, answered, escalated, ready, failed, closed — and rests in a state you can read from the roster. A bot opens, notes, escalates, closes and lists its missions through the `mission_*` tools, and `mission_watch` arms a branch so what happens to it on GitHub reaches the mission thread; pointed at a git checkout, it also installs an agent hook there.
+**Its missions.** A mission is a longer piece of work a bot owns: an objective, the ticket it comes from, and a thread of its own. It moves through events — opened, note, agent_asked, answered, escalated, ready, failed, closed — and rests in a state you can read from the roster; closed on a failed outcome, it rests failed rather than done. A bot opens, notes, escalates, closes and lists its missions through the `mission_*` tools, and `mission_watch` arms a branch so what happens to it on GitHub reaches the mission thread; pointed at a git checkout, it also installs an agent hook there.
+
+A mission left waiting on its bot calls that bot back into the mission thread. A mission that reaches an outcome — finished, or blocked for good — is reported in the conversation it was opened from instead: the bot is handed the room of that conversation, closes the mission if it is still open, says in a few lines where the work landed or what blocks it, and names whoever takes it from here.
+
+A report landing in a conversation summons the bots its at-names name: every one of them seated there, the reporter aside, is handed the turn, so the work carries on without you.
 
 Every bot also holds `delegate`, which hands a self-contained job to a nested read-only agent and brings its report back in the same turn.
 
