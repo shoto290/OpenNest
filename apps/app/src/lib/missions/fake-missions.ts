@@ -1,8 +1,18 @@
-import type { Mission, MissionChanged, MissionDetail } from "./mission-contract"
+import type {
+	Mission,
+	MissionChanged,
+	MissionDetail,
+	MissionState,
+} from "./mission-contract"
 import type { OpenedMission } from "./opened-mission-controller"
+
+const CLOSED_STATES: MissionState[] = ["done", "failed"]
 
 export type FakeMissions = {
 	board: () => Promise<{ mission: Mission }[]>
+	unreported: () => Promise<{ mission: Mission }[]>
+	reported: (missionId: string, turnId: string | null) => Promise<void>
+	reports: [missionId: string, turnId: string | null][]
 	onChanged: (
 		listener: (changed: MissionChanged) => void,
 	) => Promise<() => void>
@@ -21,6 +31,10 @@ export type FakeMissions = {
 	releaseDetail: () => void
 	refuseOnce: (missionId: string) => void
 	refuseBoard: () => void
+	stallUnreported: () => void
+	releaseUnreported: () => void
+	refuseUnreported: () => void
+	refuseReported: () => void
 	refuse: (missionId: string) => void
 	change: (changed: MissionChanged) => void
 }
@@ -32,18 +46,28 @@ export const createFakeMissions = (): FakeMissions => {
 	const listeners = new Set<(changed: MissionChanged) => void>()
 	const opened: OpenedMission[] = []
 	const rosterCalls: [conversationId: string, botId: string][] = []
+	const reports: [missionId: string, turnId: string | null][] = []
 	let rosterBlock: string | null = null
 	let isRosterRefused = false
 	let placed: Mission[] = []
 	let isBoardRefused = false
 	let readable = Promise.resolve()
 	let makeReadable: () => void = () => undefined
+	let unreportedReadable = Promise.resolve()
+	let makeUnreportedReadable: () => void = () => undefined
+	let isUnreportedRefused = false
+	let isReportedRefused = false
 	let detailGate: Promise<void> | null = null
 	let openDetailGate: () => void = () => undefined
+
+	const isStillOwingAReport = ({ id, state }: Mission) =>
+		CLOSED_STATES.includes(state) &&
+		!reports.some(([missionId]) => missionId === id)
 
 	return {
 		opened,
 		rosterCalls,
+		reports,
 
 		rosterBlock: async (conversationId, botId) => {
 			rosterCalls.push([conversationId, botId])
@@ -85,6 +109,39 @@ export const createFakeMissions = (): FakeMissions => {
 
 		refuseBoard: () => {
 			isBoardRefused = true
+		},
+
+		unreported: async () => {
+			await unreportedReadable
+			if (isUnreportedRefused) {
+				throw new Error("the unreported missions could not be read")
+			}
+			return placed.filter(isStillOwingAReport).map((mission) => ({ mission }))
+		},
+
+		reported: async (missionId, turnId) => {
+			if (isReportedRefused) {
+				throw new Error("the mission report could not be recorded")
+			}
+			reports.push([missionId, turnId])
+		},
+
+		stallUnreported: () => {
+			unreportedReadable = new Promise<void>((resolve) => {
+				makeUnreportedReadable = resolve
+			})
+		},
+
+		releaseUnreported: () => {
+			makeUnreportedReadable()
+		},
+
+		refuseUnreported: () => {
+			isUnreportedRefused = true
+		},
+
+		refuseReported: () => {
+			isReportedRefused = true
 		},
 
 		onChanged: async (listener) => {
