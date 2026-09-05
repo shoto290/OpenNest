@@ -136,11 +136,11 @@ export const startMissionRunDriver = ({
 	}
 
 	const takeAgain = (missionId: string) => {
-		const dropped = kept.get(missionId)
+		const changed = kept.get(missionId)
 		kept.delete(missionId)
 
-		if (dropped && !isStopped) {
-			void consider(dropped)
+		if (changed && !isStopped) {
+			void consider(changed)
 		}
 	}
 
