@@ -7,6 +7,10 @@ export type FakeMissions = {
 		listener: (changed: MissionChanged) => void,
 	) => Promise<() => void>
 	detail: (missionId: string) => Promise<MissionDetail>
+	rosterBlock: (conversationId: string, botId: string) => Promise<string | null>
+	rosterCalls: [conversationId: string, botId: string][]
+	holdRosterBlock: (block: string | null) => void
+	refuseRosterBlock: () => void
 	open: (opened: OpenedMission) => void
 	opened: OpenedMission[]
 	hold: (detail: MissionDetail) => void
@@ -23,6 +27,9 @@ export const createFakeMissions = (): FakeMissions => {
 	const refused = new Set<string>()
 	const listeners = new Set<(changed: MissionChanged) => void>()
 	const opened: OpenedMission[] = []
+	const rosterCalls: [conversationId: string, botId: string][] = []
+	let rosterBlock: string | null = null
+	let isRosterRefused = false
 	let placed: Mission[] = []
 	let isBoardRefused = false
 	let readable = Promise.resolve()
@@ -30,6 +37,23 @@ export const createFakeMissions = (): FakeMissions => {
 
 	return {
 		opened,
+		rosterCalls,
+
+		rosterBlock: async (conversationId, botId) => {
+			rosterCalls.push([conversationId, botId])
+			if (isRosterRefused) {
+				throw new Error("the roster block could not be read")
+			}
+			return rosterBlock
+		},
+
+		holdRosterBlock: (block) => {
+			rosterBlock = block
+		},
+
+		refuseRosterBlock: () => {
+			isRosterRefused = true
+		},
 
 		board: async () => {
 			await readable

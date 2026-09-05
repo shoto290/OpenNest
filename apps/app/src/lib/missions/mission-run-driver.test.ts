@@ -49,6 +49,7 @@ type Harness = {
 	starts: Started[]
 	agentCalls: string[]
 	thread: Conversation
+	origin: Conversation
 	mission: Mission
 	reportFailure: ReturnType<typeof vi.fn>
 	stop: () => void
@@ -57,6 +58,7 @@ type Harness = {
 	emitAtRun: (event: AgentEvent) => Promise<void>
 	endTurn: (ended: Partial<TurnEnded>) => Promise<void>
 	tail: () => ConversationState
+	originTail: () => ConversationState
 }
 
 type HarnessSeed = {
@@ -101,12 +103,19 @@ const createHarness = async ({
 		title: "Ship the walls",
 		botIds: [bot.id],
 	})
+	const origin = await store.createConversation({
+		spaceId: SPACE,
+		sectionId: null,
+		title: "The war room",
+		botIds: [bot.id],
+	})
 	const runtimes = createConversationRuntimes(driver, store)
 	const missions = createFakeMissions()
 	const reportFailure = vi.fn()
 	const mission = aMission({
 		botId: bot.id,
 		threadConversationId: thread.id,
+		originConversationId: origin.id,
 	})
 
 	if (open) {
@@ -159,9 +168,13 @@ const createHarness = async ({
 
 	const reader = runtimes.runtimeFor(thread.id)
 	await reader.open(thread)
+	const originReader = runtimes.runtimeFor(origin.id)
+	await originReader.open(origin)
 	await settled()
 
 	const tail = () => reader.getState()
+
+	const originTail = () => originReader.getState()
 
 	return {
 		driver,
@@ -169,6 +182,7 @@ const createHarness = async ({
 		starts,
 		agentCalls,
 		thread,
+		origin,
 		mission,
 		reportFailure,
 		stop,
@@ -177,6 +191,7 @@ const createHarness = async ({
 		emitAtRun,
 		endTurn,
 		tail,
+		originTail,
 	}
 }
 
@@ -190,7 +205,17 @@ const reported = (report: string): Partial<TurnEnded> => ({
 const closedBy = (source: string) =>
 	missionEvents([
 		{ kind: "opened", source: "human" },
-		{ kind: "closed", source, payload: { pull: 12 } },
+		{ kind: "closed", source, payload: { summary: "The walls stand." } },
+	])
+
+const failedBy = (source: string) =>
+	missionEvents([
+		{ kind: "opened", source: "human" },
+		{
+			kind: "failed",
+			source,
+			payload: { summary: "The build will not pass." },
+		},
 	])
 
 describe("startMissionRunDriver", () => {
@@ -247,7 +272,7 @@ describe("startMissionRunDriver", () => {
 	})
 
 	it("keeps the state of a change it dropped for being busy", async () => {
-		await harness.enter("done", closedBy("github"))
+		await harness.enter("done", closedBy("poller"))
 		await harness.enter("waiting_bot")
 		expect(harness.starts).toHaveLength(1)
 
@@ -294,18 +319,124 @@ describe("startMissionRunDriver", () => {
 		expect(harness.starts).toHaveLength(2)
 	})
 
-	it("tells the bot to report the merge when github closed the mission", async () => {
-		await harness.enter("done", closedBy("github"))
+	it("reports a mission its bot closed as failed in the origin conversation", async () => {
+		await harness.enter("failed", failedBy("claude-code"))
 
-		const [{ prompt }] = harness.driver.submissions
-		expect(prompt).toContain("merged on GitHub")
-		expect(prompt).toContain("take your next ticket")
+		expect(harness.starts[0].scope).toMatchObject({
+			conversationId: harness.origin.id,
+			botId: harness.mission.botId,
+		})
+
+		await harness.endTurn(reported("The build will not pass, I am blocked."))
+
+		expect(spoken(harness.originTail())).toEqual([
+			[harness.mission.botId, "The build will not pass, I am blocked."],
+		])
+		expect(spoken(harness.tail())).toEqual([])
 	})
 
-	it("leaves the bot alone when the mission was closed by anyone else", async () => {
-		await harness.enter("done", closedBy("human"))
+	it("reports a closing written by the poller in the origin conversation", async () => {
+		await harness.enter("done", closedBy("poller"))
 
-		expect(harness.starts).toEqual([])
+		expect(harness.starts[0].scope).toMatchObject({
+			conversationId: harness.origin.id,
+			botId: harness.mission.botId,
+		})
+
+		await harness.endTurn(reported("The walls stand, handing over."))
+
+		expect(spoken(harness.originTail())).toEqual([
+			[harness.mission.botId, "The walls stand, handing over."],
+		])
+		expect(spoken(harness.tail())).toEqual([])
+	})
+
+	it("reports a question of the agent in the mission thread", async () => {
+		await harness.enter("waiting_bot")
+
+		expect(harness.starts[0].scope).toMatchObject({
+			conversationId: harness.thread.id,
+			botId: harness.mission.botId,
+		})
+
+		await harness.endTurn(reported("I cut the branch from main."))
+
+		expect(spoken(harness.tail())).toEqual([
+			[harness.mission.botId, "I cut the branch from main."],
+		])
+		expect(spoken(harness.originTail())).toEqual([])
+	})
+
+	it("tells a closed mission to close itself, report and hand over", async () => {
+		await harness.enter("done", closedBy("poller"))
+
+		const [{ prompt }] = harness.driver.submissions
+		expect(prompt).toContain("Your mission is finished")
+		expect(prompt).toContain("Close it if it is still open")
+		expect(prompt).toContain("mention whoever takes it from here")
+	})
+
+	it("tells a failed mission it is blocked and cannot go further", async () => {
+		await harness.enter("failed", failedBy("claude-code"))
+
+		const [{ prompt }] = harness.driver.submissions
+		expect(prompt).toContain("blocked and cannot go further")
+		expect(prompt).toContain("mention whoever takes it from here")
+	})
+
+	it("carries the roster block of the origin conversation on a closing run", async () => {
+		harness.missions.holdRosterBlock("The room holds @ada and @grace.")
+		await harness.enter("done", closedBy("poller"))
+
+		expect(harness.missions.rosterCalls).toEqual([
+			[harness.origin.id, harness.mission.botId],
+		])
+		const [{ prompt }] = harness.driver.submissions
+		expect(prompt).toContain("The room holds @ada and @grace.")
+		expect(prompt.indexOf("The room holds @ada and @grace.")).toBeLessThan(
+			prompt.indexOf("<untrusted-data>"),
+		)
+	})
+
+	it("runs with no roster block when the roster block is absent", async () => {
+		harness.missions.holdRosterBlock(null)
+		await harness.enter("failed", failedBy("claude-code"))
+
+		expect(harness.driver.submissions).toHaveLength(1)
+		expect(harness.driver.submissions[0].prompt).toContain(
+			"blocked and cannot go further",
+		)
+	})
+
+	it("runs with no roster block when its call rejects", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => undefined)
+		harness.missions.holdRosterBlock("The room holds @ada.")
+		harness.missions.refuseRosterBlock()
+		await harness.enter("done", closedBy("poller"))
+
+		expect(harness.driver.submissions).toHaveLength(1)
+		expect(harness.driver.submissions[0].prompt).not.toContain(
+			"The room holds @ada.",
+		)
+		expect(harness.reportFailure).not.toHaveBeenCalled()
+	})
+
+	it("reads no roster block for a run the agent asked for", async () => {
+		harness.missions.holdRosterBlock("The room holds @ada.")
+		await harness.enter("waiting_bot")
+
+		expect(harness.missions.rosterCalls).toEqual([])
+		expect(harness.driver.submissions[0].prompt).not.toContain(
+			"The room holds @ada.",
+		)
+	})
+
+	it("starts no second run when the bot closes its mission during its own run", async () => {
+		await harness.enter("waiting_bot")
+		await harness.enter("failed", failedBy("claude-code"))
+
+		expect(harness.starts).toHaveLength(1)
+		expect(harness.driver.submissions).toHaveLength(1)
 	})
 
 	it("lights no working row in the mission thread while the run is live", async () => {
@@ -373,8 +504,14 @@ describe("startMissionRunDriver", () => {
 		expect(harness.driver.submissions).toHaveLength(1)
 	})
 
-	it("leaves an open mission that github merged before the start", async () => {
-		await restart({ open: "done", openEvents: closedBy("github") })
+	it("leaves an open mission that was closed before the start", async () => {
+		await restart({ open: "done", openEvents: closedBy("poller") })
+
+		expect(harness.starts).toEqual([])
+	})
+
+	it("leaves an open mission that failed before the start", async () => {
+		await restart({ open: "failed", openEvents: failedBy("claude-code") })
 
 		expect(harness.starts).toEqual([])
 	})

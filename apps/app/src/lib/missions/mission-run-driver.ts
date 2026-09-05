@@ -1,13 +1,11 @@
 import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
-import {
-	GITHUB_SOURCE,
-	type MissionChanged,
-	type MissionDetail,
-	type MissionEvent,
-	type MissionOnBoard,
-	type MissionState,
+import type {
+	MissionChanged,
+	MissionDetail,
+	MissionOnBoard,
+	MissionState,
 } from "./mission-contract"
 import {
 	type MissionRunCall,
@@ -41,6 +39,7 @@ export type MissionRunPort = {
 		listener: (changed: MissionChanged) => void,
 	) => Promise<MissionRunUnsubscribe>
 	detail: (missionId: string) => Promise<MissionDetail>
+	rosterBlock: (conversationId: string, botId: string) => Promise<string | null>
 }
 
 export type MissionRunDriverOptions = {
@@ -67,8 +66,18 @@ type LiveMissionRun = {
 
 const CAUSE_OF_STATE: Partial<Record<MissionState, MissionRunCause>> = {
 	waiting_bot: "answer",
-	done: "merge",
+	done: "done",
+	failed: "failed",
 }
+
+const ORIGIN_CAUSES: MissionRunCause[] = ["done", "failed"]
+
+const isOnOrigin = (cause: MissionRunCause) => ORIGIN_CAUSES.includes(cause)
+
+const conversationOf = ({ cause, mission }: MissionRunCall) =>
+	isOnOrigin(cause)
+		? mission.originConversationId
+		: mission.threadConversationId
 
 const CAUGHT_UP_STATES: MissionState[] = ["waiting_bot"]
 
@@ -91,22 +100,10 @@ const listening = (
 		return () => undefined
 	})
 
-const isMergedOnGitHub = (events: MissionEvent[]) =>
-	[...events].reverse().find((event) => event.kind === "closed")?.source ===
-	GITHUB_SOURCE
-
 const callFor = ({ mission, events }: MissionDetail): MissionRunCall | null => {
 	const cause = CAUSE_OF_STATE[mission.state]
 
-	if (!cause) {
-		return null
-	}
-
-	if (cause === "merge" && !isMergedOnGitHub(events)) {
-		return null
-	}
-
-	return { cause, mission, events }
+	return cause ? { cause, mission, events } : null
 }
 
 export const startMissionRunDriver = ({
@@ -165,10 +162,26 @@ export const startMissionRunDriver = ({
 		await refuse(held, "the mission run outlived its deadline")
 	}
 
-	const openScope = async ({ mission }: MissionRunCall) => {
+	const rosterBlockOf = async (call: MissionRunCall) => {
+		if (!isOnOrigin(call.cause)) {
+			return null
+		}
+
+		try {
+			return await missions.rosterBlock(
+				call.mission.originConversationId,
+				call.mission.botId,
+			)
+		} catch (thrown) {
+			reporting("conversation_roster_block")(thrown)
+			return null
+		}
+	}
+
+	const openScope = async (call: MissionRunCall) => {
 		const opened = await store.openRuntimeSession(
-			mission.threadConversationId,
-			mission.botId,
+			conversationOf(call),
+			call.mission.botId,
 			now(),
 			null,
 			null,
@@ -219,7 +232,7 @@ export const startMissionRunDriver = ({
 		try {
 			const call = callFor(await missions.detail(changed.missionId))
 			if (call) {
-				await begin(call)
+				await begin({ ...call, rosterBlock: await rosterBlockOf(call) })
 			}
 		} catch (thrown) {
 			raiseFailure(`the mission could not be read: ${detailOf(thrown)}`)
@@ -230,9 +243,10 @@ export const startMissionRunDriver = ({
 
 	const writeReport = ({ call, scope }: LiveMissionRun, text: string) => {
 		const { mission } = call
+		const conversationId = conversationOf(call)
 
-		return runtimes.runtimeFor(mission.threadConversationId).reportRun({
-			conversationId: mission.threadConversationId,
+		return runtimes.runtimeFor(conversationId).reportRun({
+			conversationId,
 			botId: mission.botId,
 			runtimeSessionId: scope.runtimeSessionId,
 			text,
