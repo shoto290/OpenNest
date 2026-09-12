@@ -91,16 +91,6 @@ const AppWindow = ({ children }: AppWindowProps) => (
 	</div>
 )
 
-const Capabilities = () => (
-	<ul
-		className={`${HERO_COPY_MEASURE} flex flex-col gap-2 text-sm leading-5 text-muted-foreground lg:gap-0.5 lg:text-[15px] lg:leading-[22px] ultrawide:text-base ultrawide:leading-6`}
-	>
-		{WEBSITE_COPY.capabilities.map((line) => (
-			<li key={line}>{line}</li>
-		))}
-	</ul>
-)
-
 const HERO_COPY_MEASURE =
 	"max-w-[310px] text-balance lg:max-w-[740px] ultrawide:max-w-[880px]"
 
@@ -162,8 +152,7 @@ export const WebsitePage = ({ children }: WebsitePageProps) => (
 			>
 				{WEBSITE_COPY.lead}
 			</p>
-			<Capabilities />
-			<div className="flex flex-col items-center gap-3.5 pt-3.5 lg:flex-row lg:gap-3 lg:pt-1">
+			<div className="flex flex-col items-center gap-3.5 lg:flex-row lg:gap-3">
 				<p className="max-w-[302px] text-[15px] leading-[22px] text-foreground lg:hidden">
 					{WEBSITE_COPY.mobileNote}
 				</p>
