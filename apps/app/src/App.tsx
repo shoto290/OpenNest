@@ -22,11 +22,11 @@ import {
 	toRosterBots,
 	toSettingsValue,
 } from "@/lib/bots/bot-settings"
-import { oldestHistoryDate, toHistoryDays } from "@/lib/bots/history-days"
 import { toSkillDraft, toSkillFiles, toSkillItem } from "@/lib/bots/skill-draft"
 import { useBotHistory } from "@/lib/bots/use-bot-history"
 import { useBotSkills } from "@/lib/bots/use-bot-skills"
 import { useEvolution } from "@/lib/bots/use-evolution"
+import { useHistoryView } from "@/lib/bots/use-history-view"
 import { useMcpServers } from "@/lib/bots/use-mcp-servers"
 import { useModelCatalogue } from "@/lib/bots/use-model-catalogue"
 import { useRoster } from "@/lib/bots/use-roster"
@@ -295,6 +295,30 @@ export function App() {
 	const selectedSpace = spaces.state.spaces.find(
 		(space) => space.id === selectedSpaceId,
 	)
+
+	const botHistory = useHistoryView({
+		...history.state,
+		isOpen: isEditing,
+		onOpenRun: history.controller.openFiles,
+		onUndoRun: (oldestCommitId, newestCommitId) => {
+			history.controller.revert(oldestCommitId, newestCommitId)
+			if (settingsBotId) chat.controller.redescribe(settingsBotId)
+		},
+	})
+
+	const spaceHistory = useHistoryView({
+		...spacePlugin.state,
+		isOpen: isSpaceEditing,
+		onOpenRun: spacePlugin.controller.openFiles,
+		onUndoRun: spacePlugin.controller.revert,
+	})
+
+	const userHistory = useHistoryView({
+		...userPlugin.state,
+		isOpen: user.state.isSettingsOpen,
+		onOpenRun: userPlugin.controller.openFiles,
+		onUndoRun: userPlugin.controller.revert,
+	})
 
 	const closeSettingsTab = () => setSettingsTab(undefined)
 
@@ -828,15 +852,7 @@ export function App() {
 			/>
 			{settingsBot ? (
 				<BotSettingsDialog
-					history={{
-						days: toHistoryDays(history.state.commits),
-						oldestDate: oldestHistoryDate(history.state.commits),
-						haveFailedToLoad: history.state.hasFailedToLoad,
-						onUndo: (change) => {
-							history.controller.revert(change.id, change.id)
-							chat.controller.redescribe(settingsBot.id)
-						},
-					}}
+					history={botHistory}
 					haveMcpServersFailedToLoad={botMcpServers.state.hasFailedToLoad}
 					{...toConnectorSettings({
 						servers: botMcpServers.state.servers,
@@ -1002,12 +1018,7 @@ export function App() {
 							serverEnvironment.controller.set(name, value),
 						onDelete: serverEnvironment.controller.remove,
 					}}
-					history={{
-						days: toHistoryDays(spacePlugin.state.commits),
-						oldestDate: oldestHistoryDate(spacePlugin.state.commits),
-						onUndo: (change) =>
-							spacePlugin.controller.revert(change.id, change.id),
-					}}
+					history={spaceHistory}
 					isDeletable={spaces.state.spaces.length > 1}
 					onClose={() => {
 						closeSettingsTab()
@@ -1048,12 +1059,7 @@ export function App() {
 				/>
 			) : null}
 			<UserSettingsDialog
-				history={{
-					days: toHistoryDays(userPlugin.state.commits),
-					oldestDate: oldestHistoryDate(userPlugin.state.commits),
-					onUndo: (change) =>
-						userPlugin.controller.revert(change.id, change.id),
-				}}
+				history={userHistory}
 				onClose={() => user.controller.setSettingsOpen(false)}
 				language={preferences.language}
 				onLanguageChange={(next) => {

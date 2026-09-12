@@ -30,6 +30,30 @@ const movingSkill = (store: TranscriptStore, id: string): TranscriptStore => ({
 })
 
 describe("space plugin controller", () => {
+	it("reports a history it could not read instead of an empty panel", async () => {
+		const store = createFakeTranscriptStore()
+		const refusing: TranscriptStore = {
+			...store,
+			spacePluginHistory: () => Promise.reject(new Error("no bundle")),
+		}
+
+		const controller = await opened(refusing)
+
+		expect(controller.getState().hasFailedToLoad).toBe(true)
+	})
+
+	it("reads the files of an opened change", async () => {
+		const store = createFakeTranscriptStore()
+		await store.createSpacePluginSkill(A_SPACE, A_SKILL)
+		const controller = await opened(store)
+		const [latest] = controller.getState().commits
+
+		controller.openFiles(latest.id, latest.id)
+		await settled()
+
+		expect(controller.getState().files).toHaveLength(1)
+	})
+
 	it("carries an open file to the id a renamed skill comes back under", async () => {
 		const store = createFakeTranscriptStore()
 		const written = await store.createSpacePluginSkill(A_SPACE, A_SKILL)

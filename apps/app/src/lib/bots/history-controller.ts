@@ -1,14 +1,16 @@
-import { joinedPatches } from "./changed-files"
+import {
+	createHistoryFilesReader,
+	type HistoryFilesState,
+	initialHistoryFilesState,
+} from "./history-files-controller"
 
 import { createQueue } from "../queue"
 import type { BotHistoryEntry } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
 
-export type BotCommit = BotHistoryEntry & { diff?: string }
-
-export type HistoryState = {
+export type HistoryState = HistoryFilesState & {
 	botId: string | null
-	commits: BotCommit[]
+	commits: BotHistoryEntry[]
 	hasFailedToLoad: boolean
 }
 
@@ -17,11 +19,12 @@ export type HistoryController = {
 	subscribe: (listener: () => void) => () => void
 	open: (botId: string) => Promise<void>
 	reload: () => void
-	loadDiff: (oldestCommitId: string, newestCommitId: string) => void
+	openFiles: (oldestCommitId: string, newestCommitId: string) => void
 	revert: (oldestCommitId: string, newestCommitId: string) => void
 }
 
 const INITIAL_STATE: HistoryState = {
+	...initialHistoryFilesState,
 	botId: null,
 	commits: [],
 	hasFailedToLoad: false,
@@ -74,6 +77,16 @@ export const createHistoryController = (
 		}
 	}
 
+	const readFiles = createHistoryFilesReader(
+		(oldestCommitId, newestCommitId) =>
+			store.botHistoryDiff(state.botId ?? "", oldestCommitId, newestCommitId),
+		{
+			run: (task) => onOpenBot(task),
+			getState: () => state,
+			setState: set,
+		},
+	)
+
 	return {
 		getState: () => state,
 
@@ -85,27 +98,21 @@ export const createHistoryController = (
 		},
 
 		open: (botId: string) => {
-			set({ botId, commits: [], hasFailedToLoad: false })
+			set({
+				...initialHistoryFilesState,
+				botId,
+				commits: [],
+				hasFailedToLoad: false,
+			})
 			return enqueue(() => read(botId)).catch(noteFailedRead)
 		},
 
 		reload,
 
-		loadDiff: (oldestCommitId: string, newestCommitId: string) => {
-			const known = state.commits.find((commit) => commit.id === newestCommitId)
-			if (known?.diff !== undefined) {
-				return
+		openFiles: (oldestCommitId: string, newestCommitId: string) => {
+			if (state.botId) {
+				readFiles(oldestCommitId, newestCommitId)
 			}
-			onOpenBot(async (botId) => {
-				const diff = joinedPatches(
-					await store.botHistoryDiff(botId, oldestCommitId, newestCommitId),
-				)
-				applyTo(botId, {
-					commits: state.commits.map((commit) =>
-						commit.id === newestCommitId ? { ...commit, diff } : commit,
-					),
-				})
-			})
 		},
 
 		revert: (oldestCommitId: string, newestCommitId: string) =>

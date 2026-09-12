@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 
-import { joinedPatches } from "./changed-files"
 import { createHistoryController } from "./history-controller"
+import { UNDONE_TITLE_PREFIX } from "./history-runs"
 
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
 import type { TranscriptStore } from "../conversations/store-port"
@@ -50,22 +50,48 @@ describe("history controller", () => {
 		expect(controller.getState().hasFailedToLoad).toBe(false)
 	})
 
-	it("reads a diff onto the commit it was asked for", async () => {
+	it("reads the files of the run it was asked for", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = await written(store)
 		const [commit] = controller.getState().commits
 
-		controller.loadDiff(commit.id, commit.id)
+		controller.openFiles(commit.id, commit.id)
 		await settled()
 
-		expect(controller.getState().commits[0].diff).toBe(
-			joinedPatches(
-				await store.botHistoryDiff("default", commit.id, commit.id),
-			),
+		expect(controller.getState().files).toEqual(
+			await store.botHistoryDiff("default", commit.id, commit.id),
 		)
+		expect(controller.getState().areFilesReading).toBe(false)
 	})
 
-	it("reads a commit's diff once", async () => {
+	it("reports the files as reading while the read is in flight", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = await written(store)
+		const [commit] = controller.getState().commits
+
+		controller.openFiles(commit.id, commit.id)
+
+		expect(controller.getState().areFilesReading).toBe(true)
+		expect(controller.getState().haveFilesFailedToRead).toBe(false)
+	})
+
+	it("reports the files it could not read", async () => {
+		const store = createFakeTranscriptStore()
+		const refusing: TranscriptStore = {
+			...store,
+			botHistoryDiff: () => Promise.reject({ kind: "unwritableBundle" }),
+		}
+		const controller = await written(refusing)
+		const [commit] = controller.getState().commits
+
+		controller.openFiles(commit.id, commit.id)
+		await settled()
+
+		expect(controller.getState().haveFilesFailedToRead).toBe(true)
+		expect(controller.getState().areFilesReading).toBe(false)
+	})
+
+	it("reads the files of an open run once", async () => {
 		const store = createFakeTranscriptStore()
 		const asked: string[] = []
 		const counted: TranscriptStore = {
@@ -78,9 +104,9 @@ describe("history controller", () => {
 		const controller = await written(counted)
 		const [commit] = controller.getState().commits
 
-		controller.loadDiff(commit.id, commit.id)
+		controller.openFiles(commit.id, commit.id)
 		await settled()
-		controller.loadDiff(commit.id, commit.id)
+		controller.openFiles(commit.id, commit.id)
 		await settled()
 
 		expect(asked).toEqual([commit.id])
@@ -95,7 +121,7 @@ describe("history controller", () => {
 		await settled()
 
 		expect(controller.getState().commits).toMatchObject([
-			{ title: `Undone: ${commit.title}` },
+			{ title: `${UNDONE_TITLE_PREFIX}${commit.title}` },
 			{ id: commit.id },
 		])
 	})
@@ -128,7 +154,7 @@ describe("history controller", () => {
 		}
 		const controller = createHistoryController(counted)
 
-		controller.loadDiff("commit-1", "commit-1")
+		controller.openFiles("commit-1", "commit-1")
 		controller.revert("commit-1", "commit-1")
 		await settled()
 

@@ -53,6 +53,7 @@ import {
 
 import type { AgentCommand } from "@/lib/agent/contract"
 import { deniesChanges, FACES } from "../bots/bot-settings"
+import { UNDONE_TITLE_PREFIX } from "../bots/history-runs"
 import { messageUri } from "../links/message-uri"
 
 export type FakeTranscriptStoreOptions = {
@@ -124,6 +125,8 @@ type Seat = {
 
 const refuse = (error: TranscriptStoreError | SpaceError | SectionError) =>
 	Promise.reject(error)
+
+const SERVERS_PATH = ".mcp.json"
 
 const USER_PLUGIN = "me"
 
@@ -372,7 +375,7 @@ export const createFakeTranscriptStore = (
 	const isPlainObject = (value: unknown) =>
 		typeof value === "object" && value !== null && !Array.isArray(value)
 
-	const recorded = (botId: string, title: string) => {
+	const recorded = (botId: string, title: string, paths: string[]) => {
 		committed += 1
 		const entry: BotHistoryEntry = {
 			id: `commit-${committed}`,
@@ -380,10 +383,12 @@ export const createFakeTranscriptStore = (
 			author: "user",
 			title,
 			body: "",
-			paths: [],
+			paths,
 		}
 		history.set(botId, [entry, ...(history.get(botId) ?? [])])
 	}
+
+	const skillPath = (skillId: string) => `skills/${skillId}/SKILL.md`
 
 	const historyOf = (botId: string) => [...(history.get(botId) ?? [])]
 
@@ -415,6 +420,7 @@ export const createFakeTranscriptStore = (
 			skillId,
 			(skill) => skill,
 			`file "${path}" saved from settings`,
+			[`skills/${skillId}/${path}`],
 		).then((skill) => {
 			skillFiles.set(
 				filesKey(owner, skillId),
@@ -432,6 +438,7 @@ export const createFakeTranscriptStore = (
 			skillId,
 			(skill) => skill,
 			`file "${path}" taken away`,
+			[`skills/${skillId}/${path}`],
 		).then(() => {
 			heldFiles(owner, skillId).delete(path)
 		})
@@ -465,7 +472,7 @@ export const createFakeTranscriptStore = (
 		const declared = servers.get(owner) ?? new Map()
 		declared.set(name, config)
 		servers.set(owner, declared)
-		recorded(owner, `Server "${name}" saved from settings`)
+		recorded(owner, `Server "${name}" saved from settings`, [SERVERS_PATH])
 		return Promise.resolve({ name, config })
 	}
 
@@ -473,7 +480,7 @@ export const createFakeTranscriptStore = (
 		if (!servers.get(owner)?.delete(name)) {
 			return refuse({ kind: "unwritableBundle", detail: "no such server" })
 		}
-		recorded(owner, `Server "${name}" taken away`)
+		recorded(owner, `Server "${name}" taken away`, [SERVERS_PATH])
 		return Promise.resolve()
 	}
 
@@ -488,7 +495,9 @@ export const createFakeTranscriptStore = (
 			files: [],
 		}
 		skills.set(owner, [...held, created])
-		recorded(owner, `Skill "${created.name}" saved from settings`)
+		recorded(owner, `Skill "${created.name}" saved from settings`, [
+			skillPath(created.id),
+		])
 		return Promise.resolve(created)
 	}
 
@@ -509,7 +518,7 @@ export const createFakeTranscriptStore = (
 		if (!run) {
 			return refuse({ kind: "unwritableBundle", detail: "no such commit" })
 		}
-		recorded(owner, `Undone: ${run[0].title}`)
+		recorded(owner, `${UNDONE_TITLE_PREFIX}${run[0].title}`, touchedPaths(run))
 		return Promise.resolve(historyOf(owner))
 	}
 
@@ -527,6 +536,9 @@ export const createFakeTranscriptStore = (
 		return entries.slice(newest, oldest + 1)
 	}
 
+	const touchedPaths = (run: BotHistoryEntry[]) =>
+		[...new Set(run.flatMap((entry) => entry.paths))].sort()
+
 	const changedFiles = (
 		owner: string,
 		oldestCommitId: string,
@@ -537,11 +549,11 @@ export const createFakeTranscriptStore = (
 			return refuse({ kind: "unwritableBundle", detail: "no such commit" })
 		}
 		return Promise.resolve(
-			run.map((entry) => ({
-				path: `${entry.id}.md`,
+			touchedPaths(run).map((path) => ({
+				path,
 				previousPath: null,
 				change: "modified" as const,
-				patch: `@@ ${entry.title} @@`,
+				patch: `@@ ${path} @@`,
 			})),
 		)
 	}
@@ -551,6 +563,7 @@ export const createFakeTranscriptStore = (
 		skillId: string,
 		change: (skill: BotSkill) => BotSkill,
 		verb = "saved from settings",
+		touched = [skillPath(skillId)],
 	): Promise<BotSkill> => {
 		if (!isPluginOwner(botId) && !bots.has(botId)) {
 			return refuse({ kind: "unknownBot", id: botId })
@@ -568,7 +581,7 @@ export const createFakeTranscriptStore = (
 			botId,
 			held.map((skill) => (skill.id === skillId ? written : skill)),
 		)
-		recorded(botId, `Skill "${written.name}" ${verb}`)
+		recorded(botId, `Skill "${written.name}" ${verb}`, touched)
 		return Promise.resolve(withFiles(botId, written))
 	}
 

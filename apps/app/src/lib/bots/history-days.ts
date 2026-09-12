@@ -4,13 +4,12 @@ import type {
 } from "@workspace/ui/components/plugin-settings/history-panel"
 import { i18n } from "@workspace/ui/lib/i18n"
 
-import type { BotCommit } from "./history-controller"
+import { dayKeyOf, type HistoryRun } from "./history-runs"
+
+import type { BotHistoryEntry } from "../conversations/store-contract"
 
 const format = (options: Intl.DateTimeFormatOptions) =>
 	new Intl.DateTimeFormat(i18n.language, options)
-
-const dayKeyOf = (at: Date) =>
-	`${at.getFullYear()}-${at.getMonth()}-${at.getDate()}`
 
 const dayBefore = (now: Date) => {
 	const before = new Date(now)
@@ -28,44 +27,46 @@ const dayLabelOf = (at: Date, now: Date) => {
 	return format({ day: "numeric", month: "long" }).format(at)
 }
 
-const toChange = (commit: BotCommit, at: Date): HistoryChange => ({
-	id: commit.id,
-	author: commit.author,
-	sentence: commit.title,
-	detail: commit.body || undefined,
+const toChange = (run: HistoryRun, at: Date): HistoryChange => ({
+	id: run.id,
+	author: run.author,
+	sentence: run.title,
+	detail: run.body || undefined,
 	at: at.toISOString(),
 	time: format({ hour: "2-digit", minute: "2-digit", hour12: false }).format(
 		at,
 	),
+	retouchCount: run.entryCount > 1 ? run.entryCount : undefined,
+	isUndone: run.isUndone || undefined,
 })
 
 export const toHistoryDays = (
-	commits: BotCommit[],
+	runs: HistoryRun[],
 	now = new Date(),
 ): HistoryDay[] => {
 	const days: HistoryDay[] = []
 
-	for (const commit of [...commits].sort((a, b) => b.timestamp - a.timestamp)) {
-		const at = new Date(commit.timestamp * 1000)
+	for (const run of runs) {
+		const at = new Date(run.timestamp * 1000)
 		const id = dayKeyOf(at)
 		const last = days.at(-1)
 
-		if (last?.id === id) last.changes.push(toChange(commit, at))
+		if (last?.id === id) last.changes.push(toChange(run, at))
 		else
 			days.push({
 				id,
 				label: dayLabelOf(at, now),
-				changes: [toChange(commit, at)],
+				changes: [toChange(run, at)],
 			})
 	}
 
 	return days
 }
 
-export const oldestHistoryDate = (commits: BotCommit[]): string => {
-	if (commits.length === 0) return ""
+export const oldestHistoryDate = (entries: BotHistoryEntry[]): string => {
+	if (entries.length === 0) return ""
 
-	const oldest = Math.min(...commits.map((commit) => commit.timestamp))
+	const oldest = Math.min(...entries.map((entry) => entry.timestamp))
 
 	return format({ year: "numeric", month: "long", day: "numeric" }).format(
 		oldest * 1000,

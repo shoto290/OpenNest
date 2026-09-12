@@ -1,17 +1,25 @@
 import { createQueue } from "../queue"
-import { joinedPatches } from "../bots/changed-files"
-import type { BotCommit } from "../bots/history-controller"
+import {
+	createHistoryFilesReader,
+	type HistoryFilesState,
+	initialHistoryFilesState,
+} from "../bots/history-files-controller"
 import {
 	createSkillFilesController,
 	type OpenedSkillFile,
 	type SkillFilesController,
 } from "../bots/skill-files-controller"
-import type { BotSkill, BotSkillDraft } from "../conversations/store-contract"
+import type {
+	BotHistoryEntry,
+	BotSkill,
+	BotSkillDraft,
+} from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
 
-export type UserPluginState = {
+export type UserPluginState = HistoryFilesState & {
 	skills: BotSkill[]
-	commits: BotCommit[]
+	commits: BotHistoryEntry[]
+	hasFailedToLoad: boolean
 	file: OpenedSkillFile | null
 }
 
@@ -24,13 +32,15 @@ export type UserPluginController = SkillFilesController & {
 	saveSkill: (skillId: string, draft: BotSkillDraft) => void
 	setSkillPreloaded: (skillId: string, isPreloaded: boolean) => void
 	removeSkill: (skillId: string) => void
-	loadDiff: (oldestCommitId: string, newestCommitId: string) => void
+	openFiles: (oldestCommitId: string, newestCommitId: string) => void
 	revert: (oldestCommitId: string, newestCommitId: string) => void
 }
 
 export const initialUserPluginState: UserPluginState = {
+	...initialHistoryFilesState,
 	skills: [],
 	commits: [],
+	hasFailedToLoad: false,
 	file: null,
 }
 
@@ -54,11 +64,13 @@ export const createUserPluginController = (
 			store.userPluginSkills(),
 			store.userPluginHistory(),
 		])
-		set({ skills, commits })
+		set({ skills, commits, hasFailedToLoad: false })
 	}
 
+	const noteFailedRead = () => set({ hasFailedToLoad: true })
+
 	const reload = () => {
-		void enqueue(read).catch(() => undefined)
+		void enqueue(read).catch(noteFailedRead)
 	}
 
 	const run = (task: () => Promise<void>) => {
@@ -73,7 +85,13 @@ export const createUserPluginController = (
 		})
 
 	const readHistory = async () =>
-		set({ commits: await store.userPluginHistory() })
+		set({ commits: await store.userPluginHistory(), hasFailedToLoad: false })
+
+	const readFiles = createHistoryFilesReader(
+		(oldestCommitId, newestCommitId) =>
+			store.userPluginHistoryDiff(oldestCommitId, newestCommitId),
+		{ run, getState: () => state, setState: set },
+	)
 
 	const files = createSkillFilesController(
 		{
@@ -102,7 +120,7 @@ export const createUserPluginController = (
 			}
 		},
 
-		open: () => enqueue(read).catch(() => undefined),
+		open: () => enqueue(read).catch(noteFailedRead),
 
 		reload,
 
@@ -142,22 +160,7 @@ export const createUserPluginController = (
 				await readHistory()
 			}),
 
-		loadDiff: (oldestCommitId: string, newestCommitId: string) => {
-			const known = state.commits.find((commit) => commit.id === newestCommitId)
-			if (known?.diff !== undefined) {
-				return
-			}
-			run(async () => {
-				const diff = joinedPatches(
-					await store.userPluginHistoryDiff(oldestCommitId, newestCommitId),
-				)
-				set({
-					commits: state.commits.map((commit) =>
-						commit.id === newestCommitId ? { ...commit, diff } : commit,
-					),
-				})
-			})
-		},
+		openFiles: readFiles,
 
 		revert: (oldestCommitId: string, newestCommitId: string) =>
 			run(async () => {

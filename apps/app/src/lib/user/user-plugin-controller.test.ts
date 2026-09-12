@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import { createUserPluginController } from "./user-plugin-controller"
 
+import { UNDONE_TITLE_PREFIX } from "../bots/history-runs"
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
 import type { TranscriptStore } from "../conversations/store-port"
 
@@ -92,19 +93,34 @@ describe("user plugin controller", () => {
 		controller.revert(latest.id, latest.id)
 		await settled()
 
-		expect(controller.getState().commits[0].title).toContain("Undone")
+		expect(controller.getState().commits[0].title).toContain(
+			UNDONE_TITLE_PREFIX,
+		)
 	})
 
-	it("reads a diff once and holds on to it", async () => {
+	it("reads the files of an opened change", async () => {
 		const store = createFakeTranscriptStore()
 		await store.createUserPluginSkill(A_SKILL)
 		const controller = await opened(store)
 		const [latest] = controller.getState().commits
 
-		controller.loadDiff(latest.id, latest.id)
+		controller.openFiles(latest.id, latest.id)
 		await settled()
 
-		expect(controller.getState().commits[0].diff).toContain(latest.title)
+		expect(controller.getState().files).toHaveLength(1)
+		expect(controller.getState().areFilesReading).toBe(false)
+	})
+
+	it("reports a history it could not read instead of an empty panel", async () => {
+		const store = createFakeTranscriptStore()
+		const refusing: TranscriptStore = {
+			...store,
+			userPluginHistory: () => Promise.reject(new Error("no bundle")),
+		}
+
+		const controller = await opened(refusing)
+
+		expect(controller.getState().hasFailedToLoad).toBe(true)
 	})
 
 	it("reads the plugin again when a write is refused", async () => {
