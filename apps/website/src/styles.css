@@ -4,7 +4,7 @@
 @source "../../../packages/ui/src";
 
 @theme {
-	--breakpoint-ultrawide: 2000px;
+	--breakpoint-ultrawide: 125rem;
 	--font-mono:
 		"Roboto Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
 }

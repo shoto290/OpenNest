@@ -137,10 +137,7 @@ export const WebsitePage = ({ children }: WebsitePageProps) => (
 	>
 		<PageWash />
 		<div className="on-wash relative z-10 flex w-full shrink-0 flex-col items-center gap-4 px-7 pt-33 text-center lg:min-h-[60dvh] lg:justify-center lg:gap-[18px] lg:pt-7 ultrawide:gap-5 ultrawide:pt-10">
-			<AppIconMark
-				className="lg:max-ultrawide:size-18 ultrawide:size-20"
-				size={64}
-			/>
+			<AppIconMark className="lg:size-18 ultrawide:size-20" size={64} />
 			<h1 className="font-heading text-[28px] leading-[34px] font-medium tracking-[-0.028em] text-foreground lg:text-[54px] lg:leading-[60px] ultrawide:text-[64px] ultrawide:leading-[72px]">
 				{WEBSITE_COPY.headline}
 			</h1>
