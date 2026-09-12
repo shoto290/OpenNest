@@ -5,7 +5,9 @@ import preview from "@workspace/storybook/preview"
 import { AppHeader } from "@workspace/ui/components/app-header"
 import { ChatEmptyState } from "@workspace/ui/components/chat-empty-state"
 import { ConnectionStatus } from "@workspace/ui/components/connection-status"
+import { MessageBubbleGroup } from "@workspace/ui/components/message-bubble"
 import { Notice } from "@workspace/ui/components/notice"
+import { OnboardingWelcomeCard } from "@workspace/ui/components/onboarding-welcome-card"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
 import type { RosterBot } from "@workspace/ui/components/roster"
 import {
@@ -16,7 +18,9 @@ import {
 	ToolApproval,
 	ToolApprovalCode,
 } from "@workspace/ui/components/tool-approval"
+import type { TranscriptItem } from "@workspace/ui/components/transcript"
 import { AssistantTurn, UserTurn } from "@workspace/ui/components/turn"
+import { Button } from "@workspace/ui/components/ui/button"
 
 const ANSWER =
 	"Two packages: `@workspace/ui` holds the design system, `app` holds the Tauri shell."
@@ -52,6 +56,24 @@ const CONVERSATION = (
 	</>
 )
 
+const CONVERSATION_ROWS: TranscriptItem[] = [
+	{
+		key: "question",
+		render: () => <UserTurn>How is this workspace laid out?</UserTurn>,
+	},
+	{
+		key: "answer",
+		render: () => (
+			<AssistantTurn copyText={ANSWER} identity={BOT}>
+				{ANSWER}
+			</AssistantTurn>
+		),
+	},
+]
+
+const STREAMED_CHUNK =
+	" Each package keeps its own stories, tests and build step.".repeat(12)
+
 const SCROLLING_TRANSCRIPT = LONG_TRANSCRIPT.map((question) => (
 	<UserTurn key={question}>{question}</UserTurn>
 ))
@@ -74,6 +96,76 @@ const spaceUnderLastRow = (transcript: HTMLElement, scroller: HTMLElement) => {
 	return Math.round(
 		scroller.getBoundingClientRect().bottom -
 			lastRow.getBoundingClientRect().bottom,
+	)
+}
+
+const restOf = (canvasElement: HTMLElement) => {
+	const viewport = canvasElement.querySelector<HTMLElement>(
+		'[data-slot="message-scroller-viewport"]',
+	)
+	const content = canvasElement.querySelector<HTMLElement>(
+		'[data-slot="message-scroller-content"]',
+	)
+	const rows = Array.from(content?.children ?? []).filter(
+		(child) => !child.hasAttribute("data-message-scroller-spacer"),
+	)
+	const first = rows.at(0)
+	const last = rows.at(-1)
+	if (!viewport || !first || !last)
+		throw new globalThis.Error("This transcript holds no row")
+
+	const frame = viewport.getBoundingClientRect()
+	return {
+		above: Math.round(first.getBoundingClientRect().top - frame.top),
+		below: Math.round(frame.bottom - last.getBoundingClientRect().bottom),
+	}
+}
+
+const expectRestingAtBottom = (canvasElement: HTMLElement) =>
+	waitFor(() => {
+		const { above, below } = restOf(canvasElement)
+		expect(below).toBeLessThan(above)
+	})
+
+const settledRestOf = async (canvasElement: HTMLElement) => {
+	let previous = restOf(canvasElement)
+	await waitFor(async () => {
+		await new Promise((resolve) => setTimeout(resolve, 50))
+		const next = restOf(canvasElement)
+		const isSettled =
+			next.above === previous.above && next.below === previous.below
+		previous = next
+		expect(isSettled).toBe(true)
+	})
+	return previous
+}
+
+const StreamingAnswer = (props: ThreadLayoutProps) => {
+	const [answer, setAnswer] = useState(ANSWER)
+
+	return (
+		<ThreadLayout
+			{...props}
+			busy
+			notice={
+				<Button
+					onClick={() => setAnswer((current) => current + STREAMED_CHUNK)}
+				>
+					Stream a paragraph
+				</Button>
+			}
+			rows={[
+				CONVERSATION_ROWS[0],
+				{
+					key: "answer",
+					render: () => (
+						<AssistantTurn identity={BOT} state="streaming">
+							{answer}
+						</AssistantTurn>
+					),
+				},
+			]}
+		/>
 	)
 }
 
@@ -106,7 +198,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The whole chat screen shell: a fixed header, a transcript that always fills every pixel between header and composer, and a composer that keeps its natural height. The transcript region stretches even when it holds one short row, so a lone child can centre itself with `m-auto` instead of stranding itself at the top. It owns no data and no scroll logic of its own — it wraps MessageScroller and lets the transcript run the full width of the shell.",
+					"The whole chat screen shell: a fixed header, a transcript that always fills every pixel between header and composer, and a composer that keeps its natural height. A transcript shorter than its viewport rests its last row against the composer and leaves the free space above its first row, the way a conversation reads. The transcript region still stretches, so a lone child that centres itself with `m-auto` stays centred in the free space. It owns no data and no scroll logic of its own: it wraps MessageScroller and lets the transcript run the full width of the shell.",
 			},
 		},
 	},
@@ -117,12 +209,12 @@ const meta = preview.meta({
 })
 
 export const Default = meta.story({
-	args: { children: CONVERSATION },
+	args: { rows: CONVERSATION_ROWS, children: null },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Reach for this for a live conversation short enough not to scroll. Check that the two turns stay anchored to the top of the transcript while the region below them still belongs to the transcript, and that the composer sits flush at the bottom rather than floating up to meet the last message. Pick `Empty` for the first launch.",
+					"Reach for this for a live conversation short enough not to scroll. Check that the two turns rest against the bottom of the transcript, one small gap above the composer, with the free space above the first turn rather than below the last one. Pick `Empty` for the first launch.",
 			},
 		},
 	},
@@ -132,6 +224,53 @@ export const Default = meta.story({
 		await expect(
 			canvasElement.querySelector('[data-slot="message-scroller-older"]'),
 		).toBeNull()
+		await expectRestingAtBottom(canvasElement)
+	},
+})
+
+export const StreamingIntoShortTranscript = meta.story({
+	args: { children: null },
+	render: (args) => <StreamingAnswer {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this while an answer streams into a conversation short enough not to scroll. Each press of *Stream a paragraph* appends one to the answer: check that the growing turn keeps its bottom edge against the composer and pushes the first turn up, never down. Pick `LongContent` once the transcript scrolls.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		await expectRestingAtBottom(canvasElement)
+		const before = await settledRestOf(canvasElement)
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Stream a paragraph" }),
+		)
+
+		const after = await settledRestOf(canvasElement)
+		await expect(after.above).toBeLessThan(before.above)
+		await expect(Math.abs(after.below - before.below)).toBeLessThanOrEqual(1)
+	},
+})
+
+export const OnboardingCards = meta.story({
+	args: {
+		children: (
+			<MessageBubbleGroup spacing="default">
+				<OnboardingWelcomeCard onStart={fn()} onTellMore={fn()} />
+			</MessageBubbleGroup>
+		),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this for the first-run thread, where the onboarding cards are handed in as children rather than rows. Check that they take the same rest as a conversation: against the composer, with the free space above them. Pick `Empty` for a thread with nothing to show.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expectRestingAtBottom(canvasElement)
 	},
 })
 
@@ -149,10 +288,16 @@ export const Empty = meta.story({
 			},
 		},
 	},
-	play: async ({ canvas }) => {
+	play: async ({ canvas, canvasElement }) => {
 		await expect(
 			canvas.getByRole("heading", { name: "Nest Keeper" }),
 		).toBeVisible()
+		await waitFor(() => {
+			const { above, below } = restOf(canvasElement)
+			expect(Math.abs(above - below)).toBeLessThanOrEqual(
+				TRANSCRIPT_TOP_PADDING,
+			)
+		})
 	},
 })
 
