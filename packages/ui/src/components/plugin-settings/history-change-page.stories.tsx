@@ -78,7 +78,7 @@ export const Default = meta.story({
 		await readsStartAlignedBehindItsGlyph(only)
 
 		await userEvent.hover(only)
-		await expect(screen.queryByRole("tooltip")).toBeNull()
+		await expect(screen.findByRole("tooltip")).rejects.toThrow()
 		await readsStartAlignedBehindItsGlyph(only)
 
 		await expect(
