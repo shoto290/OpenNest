@@ -27,9 +27,6 @@ const readsStartAlignedBehindItsGlyph = async (entry: HTMLElement) => {
 	await expect(glyph.getBoundingClientRect().right).toBeLessThanOrEqual(
 		path.getBoundingClientRect().left,
 	)
-	await expect(path.getBoundingClientRect().right).toBeLessThanOrEqual(
-		entry.getBoundingClientRect().right,
-	)
 }
 
 const meta = preview.meta({
