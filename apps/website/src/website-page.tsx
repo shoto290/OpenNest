@@ -91,9 +91,6 @@ const AppWindow = ({ children }: AppWindowProps) => (
 	</div>
 )
 
-const HERO_COPY_MEASURE =
-	"max-w-[310px] text-balance lg:max-w-[740px] ultrawide:max-w-[880px]"
-
 const CREDIT_LINK = `${FOCUS_RING} inline-flex items-center gap-1.5 rounded-sm border border-transparent px-1.5 py-1 transition-colors hover:text-foreground`
 
 type CreditProps = {
@@ -147,9 +144,7 @@ export const WebsitePage = ({ children }: WebsitePageProps) => (
 			<h1 className="font-heading text-[28px] leading-[34px] font-medium tracking-[-0.028em] text-foreground lg:text-[54px] lg:leading-[60px] ultrawide:text-[64px] ultrawide:leading-[72px]">
 				{WEBSITE_COPY.headline}
 			</h1>
-			<p
-				className={`${HERO_COPY_MEASURE} text-base leading-6 text-muted-foreground lg:text-[19px] lg:leading-7 ultrawide:text-[21px] ultrawide:leading-[30px]`}
-			>
+			<p className="max-w-[310px] text-base leading-6 text-balance text-muted-foreground lg:max-w-[740px] lg:text-[19px] lg:leading-7 ultrawide:max-w-[880px] ultrawide:text-[21px] ultrawide:leading-[30px]">
 				{WEBSITE_COPY.lead}
 			</p>
 			<div className="flex flex-col items-center gap-3.5 lg:flex-row lg:gap-3">
