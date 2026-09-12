@@ -35,7 +35,10 @@ const FOOT_CLASS =
 
 const UNDO_CLASS = "shrink-0 rounded-md font-medium text-xs/4"
 
-const FILE_ROW_CLASS = cn(RAIL_ITEM_CLASS, "relative overflow-hidden")
+const FILE_ROW_CLASS = cn(
+	RAIL_ITEM_CLASS,
+	"relative overflow-hidden text-start",
+)
 
 const CANDIDATES_CLASS = "pointer-events-none invisible absolute top-0 w-max"
 
@@ -74,6 +77,11 @@ const HistoryFileTab = ({ path }: HistoryFileTabProps) => {
 
 	const row = (
 		<Tabs.Tab className={FILE_ROW_CLASS} data-slot="history-file" value={path}>
+			<Icons.File
+				aria-hidden="true"
+				className="size-4 shrink-0"
+				data-slot="history-file-glyph"
+			/>
 			<span aria-hidden="true" className={CANDIDATES_CLASS} ref={setCandidates}>
 				{folds.map((fold) => (
 					<span className={CANDIDATE_CLASS} key={fold}>
@@ -81,7 +89,11 @@ const HistoryFileTab = ({ path }: HistoryFileTabProps) => {
 					</span>
 				))}
 			</span>
-			<span className="block min-w-0 flex-1 truncate" ref={setLabel}>
+			<span
+				className="block min-w-0 flex-1 truncate"
+				data-slot="history-file-path"
+				ref={setLabel}
+			>
 				{folds[fitting] ?? path}
 			</span>
 		</Tabs.Tab>

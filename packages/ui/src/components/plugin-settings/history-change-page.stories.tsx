@@ -1,7 +1,10 @@
-import { expect, fn, waitFor, within } from "storybook/test"
+import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { A11Y_CONTRAST_AWAITING_DESIGN_DECISION } from "@workspace/storybook/story-utils"
+import {
+	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+	slotIn,
+} from "@workspace/storybook/story-utils"
 import {
 	MANY_CHANGE_FILES,
 	ONE_CHANGE_FILE,
@@ -9,6 +12,22 @@ import {
 import { HistoryChangePage } from "@workspace/ui/components/plugin-settings/history-change-page"
 
 const DEEP_PATH = "skills/release-notes/references/wording/house-style.md"
+
+const FOLDED_DEEP_PATH = /^…\/.*house-style\.md$/
+
+const foldedAwayOf = (entry: HTMLElement) =>
+	slotIn(entry, "history-file-path").textContent?.replace(/^…\//, "") ?? ""
+
+const readsStartAlignedBehindItsGlyph = async (entry: HTMLElement) => {
+	const glyph = slotIn(entry, "history-file-glyph")
+	const path = slotIn(entry, "history-file-path")
+
+	await expect(glyph).toHaveAttribute("aria-hidden", "true")
+	await expect(getComputedStyle(entry).textAlign).toBe("start")
+	await expect(glyph.getBoundingClientRect().right).toBeLessThanOrEqual(
+		path.getBoundingClientRect().left,
+	)
+}
 
 const meta = preview.meta({
 	title: "Settings/Plugins/HistoryChangePage",
@@ -46,16 +65,21 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"A change that touched one file, which is the shape most changes take. Check that the rail reads Back then that single file already chosen, that the header carries the title above who and when, that the file heading names the whole path and how much of it moved, and that the foot sentence counts one file rather than a plural. Pick `LongContent` for a change spread over several files.",
+					"A change that touched one file, which is the shape most changes take. Check that the rail reads Back then that single file already chosen, that the entry reads start-aligned behind a file glyph and, fitting whole beside it, carries no tooltip, that the header carries the title above who and when, that the file heading names the whole path and how much of it moved, and that the foot sentence counts one file rather than a plural. Pick `LongContent` for a change spread over several files.",
 			},
 		},
 	},
-	play: async ({ canvas }) => {
+	play: async ({ canvas, userEvent }) => {
 		await expect(canvas.getByRole("button", { name: "History" })).toBeVisible()
 
-		await expect(
-			canvas.getByRole("tab", { name: "AGENTS.md" }),
-		).toHaveAttribute("aria-selected", "true")
+		const only = canvas.getByRole("tab", { name: "AGENTS.md" })
+
+		await expect(only).toHaveAttribute("aria-selected", "true")
+		await readsStartAlignedBehindItsGlyph(only)
+
+		await userEvent.hover(only)
+		await expect(screen.findByRole("tooltip")).rejects.toThrow()
+		await readsStartAlignedBehindItsGlyph(only)
 
 		await expect(
 			canvas.getByRole("heading", { name: "Rewrote the instructions" }),
@@ -74,19 +98,26 @@ export const LongContent = meta.story({
 		docs: {
 			description: {
 				story:
-					"A change spread over four files, one of them nested deep enough that its path outgrows the rail. Reach for this to check what a narrow rail owes a reader: the row folds on a segment boundary, dropping leading folders one at a time until the rest fits, so more than the bare file name survives behind the fold mark, and the whole path is still readable in a tooltip on that row. Check too that the first file is chosen on open and that the arrow keys walk the rail without the pointer.",
+					"A change spread over four files, one of them nested deep enough that its path outgrows the rail. Reach for this to check what a narrow rail owes a reader: every row puts a file glyph before a start-aligned path, and the deep one folds on a segment boundary against the room left beside that glyph, dropping leading folders one at a time until the rest fits, so what survives behind the fold mark is always a whole run of segments rather than a cut word, and the whole path is still readable in a tooltip on that row. Check too that the first file is chosen on open, that glyph and alignment hold under hover and keyboard focus, and that the arrow keys walk the rail without the pointer.",
 			},
 		},
 	},
 	play: async ({ canvas, userEvent }) => {
-		await expect(canvas.getAllByRole("tab")).toHaveLength(4)
-		await expect(
-			canvas.getByRole("tab", { name: "AGENTS.md" }),
-		).toHaveAttribute("aria-selected", "true")
+		const entries = canvas.getAllByRole("tab")
+
+		await expect(entries).toHaveLength(4)
+
+		const chosen = canvas.getByRole("tab", { name: "AGENTS.md" })
+
+		await expect(chosen).toHaveAttribute("aria-selected", "true")
+		for (const entry of entries) await readsStartAlignedBehindItsGlyph(entry)
 
 		const deep = await waitFor(() =>
-			canvas.getByRole("tab", { name: /^…\/[^/]+\/.*house-style\.md$/ }),
+			canvas.getByRole("tab", { name: FOLDED_DEEP_PATH }),
 		)
+
+		await readsStartAlignedBehindItsGlyph(deep)
+		await expect(DEEP_PATH.endsWith(`/${foldedAwayOf(deep)}`)).toBe(true)
 
 		await userEvent.tab()
 		await userEvent.tab()
@@ -94,6 +125,7 @@ export const LongContent = meta.story({
 
 		await expect(deep).toHaveFocus()
 		await expect(deep).toHaveAttribute("aria-selected", "true")
+		await readsStartAlignedBehindItsGlyph(deep)
 		await expect(
 			within(canvas.getByRole("tabpanel")).getByText(DEEP_PATH),
 		).toBeVisible()
@@ -102,6 +134,7 @@ export const LongContent = meta.story({
 		await expect(
 			await within(document.body).findByRole("tooltip"),
 		).toHaveTextContent(DEEP_PATH)
+		await readsStartAlignedBehindItsGlyph(deep)
 	},
 })
 
