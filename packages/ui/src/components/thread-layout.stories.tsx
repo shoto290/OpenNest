@@ -99,12 +99,7 @@ const spaceUnderLastRow = (transcript: HTMLElement, scroller: HTMLElement) => {
 	)
 }
 
-type Rest = {
-	above: number
-	below: number
-}
-
-const restOf = (canvasElement: HTMLElement): Rest => {
+const restOf = (canvasElement: HTMLElement) => {
 	const viewport = canvasElement.querySelector<HTMLElement>(
 		'[data-slot="message-scroller-viewport"]',
 	)
@@ -203,7 +198,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The whole chat screen shell: a fixed header, a transcript that always fills every pixel between header and composer, and a composer that keeps its natural height. A transcript shorter than its viewport rests its last row against the composer and leaves the free space above its first row, the way a conversation reads. The transcript region still stretches, so a lone child that centres itself with `m-auto` stays centred in the free space. It owns no data and no scroll logic of its own — it wraps MessageScroller and lets the transcript run the full width of the shell.",
+					"The whole chat screen shell: a fixed header, a transcript that always fills every pixel between header and composer, and a composer that keeps its natural height. A transcript shorter than its viewport rests its last row against the composer and leaves the free space above its first row, the way a conversation reads. The transcript region still stretches, so a lone child that centres itself with `m-auto` stays centred in the free space. It owns no data and no scroll logic of its own: it wraps MessageScroller and lets the transcript run the full width of the shell.",
 			},
 		},
 	},
@@ -252,9 +247,6 @@ export const StreamingIntoShortTranscript = meta.story({
 			canvas.getByRole("button", { name: "Stream a paragraph" }),
 		)
 
-		await waitFor(() =>
-			expect(restOf(canvasElement).above).toBeLessThan(before.above),
-		)
 		const after = await settledRestOf(canvasElement)
 		await expect(after.above).toBeLessThan(before.above)
 		await expect(Math.abs(after.below - before.below)).toBeLessThanOrEqual(1)
