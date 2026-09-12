@@ -358,7 +358,7 @@ const TranscriptBody = ({
 				<MessageScrollerContent
 					aria-busy={busy}
 					aria-relevant="additions text"
-					className={cn("gap-6", contentClassName)}
+					className={cn("justify-end gap-6", contentClassName)}
 				>
 					<MessageHighlightProvider messageId={highlightedMessageId}>
 						{rows.map((row) => (
