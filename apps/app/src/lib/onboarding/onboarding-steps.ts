@@ -252,7 +252,9 @@ const apiKeyFailedStep = (
 		choices: [
 			{
 				label: i18n.t("chat:onboarding.connection.keyFailed.anotherKey"),
-				description: i18n.t("chat:onboarding.apiKeyFailed.retryDescription"),
+				description: i18n.t(
+					"chat:onboarding.connection.keyFailed.anotherKeyDescription",
+				),
 				choose: controller.askApiKey,
 			},
 			signInChoice(

@@ -674,14 +674,12 @@ const chat = {
 				description: "Ouvre votre navigateur une nouvelle fois.",
 			},
 		},
-		apiKeyFailed: {
-			retryDescription: "Collez une autre clé API Anthropic.",
-		},
 		connection: {
 			keyFailed: {
 				title: "Impossible d'utiliser cette clé",
 				sentence: "Cette clé a été refusée, donc rien n'a été enregistré.",
 				anotherKey: "Essayer une autre clé",
+				anotherKeyDescription: "Collez une autre clé API Anthropic.",
 				signIn: "Se connecter à la place",
 			},
 		},

@@ -654,14 +654,12 @@ const chat = {
 				description: "Opens your browser once more.",
 			},
 		},
-		apiKeyFailed: {
-			retryDescription: "Paste a different Anthropic API key.",
-		},
 		connection: {
 			keyFailed: {
 				title: "Couldn't use that key",
 				sentence: "That key was refused, so nothing was saved.",
 				anotherKey: "Try another key",
+				anotherKeyDescription: "Paste a different Anthropic API key.",
 				signIn: "Sign in instead",
 			},
 		},
