@@ -26,7 +26,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The shell every onboarding card is drawn on: the surface, its title line with the step counter trailing, and the rhythm its blocks stack on. Reach for it when a new onboarding step needs a card; reach for `OnboardingWelcomeCard`, `OnboardingConnectionCard`, `OnboardingTestCard`, `OnboardingPickerCard` or `OnboardingHandoffCard` for the steps that already exist.",
+					"The shell every onboarding card is drawn on: the surface, its title line with the step counter trailing, and the rhythm its blocks stack on. Reach for it when a new onboarding step needs a card; reach for `OnboardingPickerCard` or `OnboardingHandoffCard` for the steps that already exist.",
 			},
 		},
 	},

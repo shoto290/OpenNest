@@ -1,6 +1,17 @@
+import type {
+	ToolQuestionEntry,
+	ToolQuestionExit,
+	ToolQuestionFailure,
+	ToolQuestionLink,
+} from "@workspace/ui/components/tool-question"
+
 import { questionMessageIdOf, questionMessageText } from "./question-message"
 
-import type { QuestionAnswers, QuestionRequest } from "../agent/contract"
+import type {
+	AskedQuestion,
+	QuestionAnswers,
+	QuestionRequest,
+} from "../agent/contract"
 import type {
 	TranscriptDraft,
 	TranscriptMessage,
@@ -8,8 +19,33 @@ import type {
 
 export type PostedAnswerHandler = (answers: QuestionAnswers) => Promise<void>
 
+export type PostedAskedQuestion = AskedQuestion & {
+	optionsOnly?: boolean
+	link?: ToolQuestionLink
+	entry?: ToolQuestionEntry
+	exit?: ToolQuestionExit
+	failure?: ToolQuestionFailure
+}
+
+export type PostedRequest = {
+	id: string
+	questions: PostedAskedQuestion[]
+	isPosted: true
+}
+
+export const isPostedRequest = (
+	request: QuestionRequest,
+): request is PostedRequest => "isPosted" in request
+
+export const withoutSecretQuestions = (
+	request: PostedRequest,
+): PostedRequest => ({
+	...request,
+	questions: request.questions.filter(({ entry }) => !entry?.isSecret),
+})
+
 export type PostedQuestion = {
-	request: QuestionRequest
+	request: PostedRequest
 	onAnswers: PostedAnswerHandler
 	conversationId: string
 	afterSeq: number

@@ -73,9 +73,9 @@ beforeEach(() => {
 })
 
 describe("the welcome step", () => {
-	it("opens on the welcome card", () => {
+	it("opens on the welcome step", () => {
 		expect(controller.getState().step).toBe("welcome")
-		expect(controller.getState().card).toBeNull()
+		expect(controller.getState().connection).toBeNull()
 	})
 
 	it("reads the account when the reader starts", async () => {
@@ -96,12 +96,12 @@ describe("the welcome step", () => {
 })
 
 describe("reading the account", () => {
-	it("names the email and the plan on the detected card", async () => {
+	it("names the email and the plan of the detected account", async () => {
 		port.report = authenticated({ email: EMAIL, plan: "Max" })
 
 		await controller.start()
 
-		expect(controller.getState().card).toEqual({
+		expect(controller.getState().connection).toEqual({
 			state: "detected",
 			account: `${EMAIL} · Max`,
 		})
@@ -112,20 +112,19 @@ describe("reading the account", () => {
 
 		await controller.start()
 
-		expect(controller.getState().card).toEqual({
+		expect(controller.getState().connection).toEqual({
 			state: "detected",
 			account: EMAIL,
 		})
 	})
 
-	it("settles without a card when the report carries no email", async () => {
+	it("settles without a connection step when the report carries no email", async () => {
 		port.report = authenticated({ email: null, plan: null })
 
 		await controller.start()
 
 		expect(controller.getState().step).toBe("summoned")
-		expect(controller.getState().card).toBeNull()
-		expect(controller.getState().hasSettled).toBe(true)
+		expect(controller.getState().connection).toBeNull()
 	})
 
 	it("offers the sign-in when nobody is authenticated", async () => {
@@ -133,7 +132,7 @@ describe("reading the account", () => {
 
 		await controller.start()
 
-		expect(controller.getState().card).toEqual({ state: "offer" })
+		expect(controller.getState().connection).toEqual({ state: "offer" })
 	})
 
 	it("fails visibly when the report carries a reason of its own", async () => {
@@ -141,8 +140,8 @@ describe("reading the account", () => {
 
 		await controller.start()
 
-		expect(controller.getState().card).toEqual({
-			state: "failed",
+		expect(controller.getState().connection).toEqual({
+			state: "signInFailed",
 			exitDetail: "no binary",
 		})
 	})
@@ -152,14 +151,14 @@ describe("reading the account", () => {
 
 		await controller.start()
 
-		expect(controller.getState().card).toEqual({
-			state: "failed",
+		expect(controller.getState().connection).toEqual({
+			state: "signInFailed",
 			exitDetail: "the agent binary was not found",
 		})
 	})
 })
 
-describe("the detected card", () => {
+describe("the detected account", () => {
 	beforeEach(async () => {
 		port.report = authenticated({ email: EMAIL, plan: null })
 		await controller.start()
@@ -174,7 +173,7 @@ describe("the detected card", () => {
 	it("offers the sign-in when the reader wants another account", () => {
 		controller.changeAccount()
 
-		expect(controller.getState().card).toEqual({ state: "offer" })
+		expect(controller.getState().connection).toEqual({ state: "offer" })
 	})
 })
 
@@ -190,7 +189,7 @@ describe("signing in", () => {
 		port.announceStarted(SIGN_IN_URL)
 		await Promise.resolve()
 
-		expect(controller.getState().card).toEqual({
+		expect(controller.getState().connection).toEqual({
 			state: "waiting",
 			signInUrl: SIGN_IN_URL,
 		})
@@ -203,7 +202,7 @@ describe("signing in", () => {
 		await signingIn
 	})
 
-	it("frees the waiting card once the browser step is on screen", async () => {
+	it("frees the code step once the browser step is on screen", async () => {
 		const signingIn = controller.signIn()
 		await Promise.resolve()
 		expect(controller.getState().isBusy).toBe(true)
@@ -231,8 +230,8 @@ describe("signing in", () => {
 		port.refuseSignIn({ kind: "failed", detail: "auth login exited with 1" })
 		await signingIn
 
-		expect(controller.getState().card).toEqual({
-			state: "failed",
+		expect(controller.getState().connection).toEqual({
+			state: "signInFailed",
 			exitDetail: "auth login exited with 1",
 		})
 	})
@@ -243,13 +242,13 @@ describe("signing in", () => {
 		port.refuseSignIn({ kind: "timedOut" })
 		await signingIn
 
-		expect(controller.getState().card).toEqual({
-			state: "failed",
+		expect(controller.getState().connection).toEqual({
+			state: "signInFailed",
 			exitDetail: "the sign-in timed out",
 		})
 	})
 
-	it("sends the code the waiting card submits", async () => {
+	it("sends the code the reader submits", async () => {
 		const signingIn = controller.signIn()
 		await Promise.resolve()
 		port.announceStarted(SIGN_IN_URL)
@@ -270,7 +269,7 @@ describe("signing in", () => {
 
 		await controller.submitCode(CODE)
 
-		expect(controller.getState().card).toEqual({
+		expect(controller.getState().connection).toEqual({
 			state: "waiting",
 			signInUrl: SIGN_IN_URL,
 		})
@@ -279,7 +278,7 @@ describe("signing in", () => {
 		await signingIn
 	})
 
-	it("goes back to the offer when the reader takes the key instead", async () => {
+	it("asks for the key when the reader takes it instead", async () => {
 		const signingIn = controller.signIn()
 		await Promise.resolve()
 		port.announceStarted(SIGN_IN_URL)
@@ -289,7 +288,7 @@ describe("signing in", () => {
 		await signingIn
 
 		expect(commands()).toContain("cancelSignIn")
-		expect(controller.getState().card).toEqual({ state: "offer" })
+		expect(controller.getState().connection).toEqual({ state: "apiKey" })
 	})
 
 	it("raises no notice when the cancel lands on no running sign-in", async () => {
@@ -297,7 +296,7 @@ describe("signing in", () => {
 
 		await controller.pasteKeyInstead()
 
-		expect(controller.getState().card).toEqual({ state: "offer" })
+		expect(controller.getState().connection).toEqual({ state: "apiKey" })
 	})
 })
 
@@ -305,6 +304,20 @@ describe("the api key", () => {
 	beforeEach(async () => {
 		port.report = NOT_AUTHENTICATED
 		await controller.start()
+	})
+
+	it("asks for the key when the reader picks it", () => {
+		controller.askApiKey()
+
+		expect(controller.getState().connection).toEqual({ state: "apiKey" })
+	})
+
+	it("counts a new round for every step it shows", () => {
+		const offered = controller.getState().round
+
+		controller.askApiKey()
+
+		expect(controller.getState().round).toBe(offered + 1)
 	})
 
 	it("holds the key and reads the account again", async () => {
@@ -317,7 +330,7 @@ describe("the api key", () => {
 			value: API_KEY,
 		})
 		expect(commands().at(-1)).toBe("check")
-		expect(controller.getState().card).toEqual({
+		expect(controller.getState().connection).toEqual({
 			state: "detected",
 			account: EMAIL,
 		})
@@ -328,8 +341,8 @@ describe("the api key", () => {
 
 		await controller.submitApiKey(API_KEY)
 
-		expect(controller.getState().card).toEqual({
-			state: "failed",
+		expect(controller.getState().connection).toEqual({
+			state: "apiKeyFailed",
 			exitDetail: "read only",
 		})
 	})
@@ -352,15 +365,6 @@ describe("the summons", () => {
 		expect(world.sent).toEqual([onboardingSummonsFor("purpose")])
 	})
 
-	it("keeps the pill on screen once the connection settled", async () => {
-		port.report = authenticated({ email: null, plan: null })
-		await controller.start()
-
-		await controller.pasteKeyInstead()
-
-		expect(controller.getState().hasSettled).toBe(true)
-	})
-
 	it("summons again when the reader retries the failed turn", async () => {
 		port.report = authenticated({ email: null, plan: null })
 		await controller.start()
@@ -372,14 +376,14 @@ describe("the summons", () => {
 })
 
 describe("the end of the first run", () => {
-	it("marks the first run done and leaves no card", async () => {
+	it("marks the first run done and leaves no connection step", async () => {
 		port.report = authenticated({ email: null, plan: null })
 		await controller.start()
 
 		await controller.finish()
 
 		expect(controller.getState().step).toBe("done")
-		expect(controller.getState().card).toBeNull()
+		expect(controller.getState().connection).toBeNull()
 		expect(world.firstRunDone).toBe(1)
 	})
 })

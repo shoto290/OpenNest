@@ -2161,13 +2161,17 @@ describe("ThreadScreen connector left out of a session", () => {
 
 const SIGN_IN_LINK = "https://claude.ai/oauth/authorize?code=true"
 
-const WELCOME_TITLE = "Ready when you are"
+const WELCOME_QUESTION = "Ready to start?"
 
-const CONNECTION_TITLE = "Your Claude account"
+const ACCOUNT_QUESTION = "Use the account already on this machine?"
 
-const SETTLED_PILL = "Claude account connected"
+const CODE_QUESTION = "Paste the code Claude gave you"
 
-const TEST_TITLE = "That's it working. One thing left."
+const KEY_QUESTION = "Paste your Anthropic API key"
+
+const SIGN_IN_FAILED_QUESTION = "Try again, or use a key instead?"
+
+const FIRST_REPLY_QUESTION = "That's it working. Ready for the last one?"
 
 const PICKER_TITLE = "Who should join first?"
 
@@ -2176,6 +2180,8 @@ const PICKER_REQUEST_LABEL = "Or say what you need in your own words"
 const EMPTY_STATE_TITLE = "Start with the agent"
 
 const ONBOARDING_EMAIL = "reader@example.com"
+
+const ONBOARDING_KEY = "sk-ant-kept-out"
 
 const AUTHENTICATED_ANONYMOUSLY = {
 	connection: "ready",
@@ -2205,22 +2211,6 @@ const onboardingOf = async (): Promise<OnboardingFixture> => {
 	return { port, world, controller, reportFailure, solo }
 }
 
-const onboardingScreen = ({ controller, solo }: OnboardingFixture) =>
-	screenOf(
-		solo.thread(),
-		NO_BOT_RECORDS,
-		() => undefined,
-		createMessageLandingController(),
-		controller,
-	)
-
-const renderOnboarding = async (fixture: OnboardingFixture) => {
-	const { rerender } = render(onboardingScreen(fixture))
-	await settle()
-
-	return () => rerender(onboardingScreen(fixture))
-}
-
 const press = async (name: string) => {
 	await act(async () => {
 		fireEvent.click(screen.getByRole("button", { name }))
@@ -2238,6 +2228,69 @@ const type = async (label: string, text: string) => {
 	})
 	await settle()
 }
+
+const isAsking = (question: string) =>
+	screen.queryByRole("form", { name: question }) !== null
+
+const pick = async (label: string) => {
+	await act(async () => {
+		fireEvent.click(
+			screen.getByRole("radio", { name: (name) => name.startsWith(label) }),
+		)
+	})
+	await press("Send answers")
+}
+
+type OnboardingScreen = {
+	refresh: () => Promise<void>
+	choose: (label: string) => Promise<void>
+	press: (name: string) => Promise<void>
+	type: (label: string, text: string) => Promise<void>
+}
+
+const onboardingScreen = ({ controller, solo }: OnboardingFixture) =>
+	screenOf(
+		solo.thread(),
+		NO_BOT_RECORDS,
+		() => undefined,
+		createMessageLandingController(),
+		controller,
+	)
+
+const renderOnboarding = async (
+	fixture: OnboardingFixture,
+): Promise<OnboardingScreen> => {
+	const { rerender } = render(onboardingScreen(fixture))
+	const refresh = async () => {
+		await settle()
+		rerender(onboardingScreen(fixture))
+		await settle()
+		rerender(onboardingScreen(fixture))
+		await settle()
+	}
+	await refresh()
+
+	return {
+		refresh,
+		choose: async (label) => {
+			await pick(label)
+			await refresh()
+		},
+		press: async (name) => {
+			await press(name)
+			await refresh()
+		},
+		type: async (label, text) => {
+			await type(label, text)
+			await refresh()
+		},
+	}
+}
+
+const isBefore = (earlier: Element, later: Element) =>
+	(earlier.compareDocumentPosition(later) &
+		Node.DOCUMENT_POSITION_FOLLOWING) !==
+	0
 
 describe("the first run in a solo thread", () => {
 	let layout: FakeLayout
@@ -2257,102 +2310,140 @@ describe("the first run in a solo thread", () => {
 		layout.restore()
 	})
 
-	it("shows the welcome card instead of the chat empty state", async () => {
+	it("asks the welcome step instead of the chat empty state", async () => {
 		const fixture = await onboardingOf()
 		await renderOnboarding(fixture)
 
-		expect(screen.getByText(WELCOME_TITLE)).toBeTruthy()
+		expect(isAsking(WELCOME_QUESTION)).toBe(true)
 		expect(screen.queryByText(EMPTY_STATE_TITLE)).toBeNull()
+		expect(screen.queryByRole("button", { name: "Dismiss" })).toBeNull()
 	})
 
-	it("names the account the check found", async () => {
+	it("keeps the answered welcome step above the account step", async () => {
 		const fixture = await onboardingOf()
 		fixture.port.report = {
 			...AUTHENTICATED_ANONYMOUSLY,
 			account: { email: ONBOARDING_EMAIL, plan: "Max" },
 		}
-		await renderOnboarding(fixture)
+		const shown = await renderOnboarding(fixture)
 
-		await press("Start")
+		await shown.choose("Start")
 
-		expect(screen.getByText(CONNECTION_TITLE)).toBeTruthy()
-		expect(screen.getByText(`${ONBOARDING_EMAIL} · Max`)).toBeTruthy()
+		const [welcome] = screen.getAllByText(WELCOME_QUESTION)
+		const account = screen.getByRole("form", { name: ACCOUNT_QUESTION })
+		expect(isAsking(WELCOME_QUESTION)).toBe(false)
+		expect(screen.getByText("Start")).toBeTruthy()
+		expect(welcome && isBefore(welcome, account)).toBe(true)
 	})
 
 	it("offers the sign-in when nobody is authenticated", async () => {
 		const fixture = await onboardingOf()
-		await renderOnboarding(fixture)
+		const shown = await renderOnboarding(fixture)
 
-		await press("Start")
+		await shown.choose("Start")
 
 		expect(
-			screen.getByRole("button", { name: "Sign in with Claude" }),
+			screen.getByRole("radio", {
+				name: (name) => name.startsWith("Sign in with Claude"),
+			}),
 		).toBeTruthy()
 	})
 
-	it("waits on the url the sign-in announced", async () => {
+	const waitingOnCode = async () => {
 		const fixture = await onboardingOf()
-		await renderOnboarding(fixture)
-		await press("Start")
-
-		await press("Sign in with Claude")
+		const shown = await renderOnboarding(fixture)
+		await shown.choose("Start")
+		await shown.choose("Sign in with Claude")
 		await act(async () => {
 			fixture.port.announceStarted(SIGN_IN_LINK)
 		})
-		await settle()
+		await shown.refresh()
 
-		expect(screen.getByText("Open this link and sign in")).toBeTruthy()
+		return { ...fixture, shown }
+	}
+
+	it("asks for the code on the url the sign-in announced", async () => {
+		const fixture = await waitingOnCode()
+
+		expect(isAsking(CODE_QUESTION)).toBe(true)
 		expect(fixture.port.calls).toContainEqual({
 			command: "openSignInUrl",
 			value: SIGN_IN_LINK,
 		})
 	})
 
-	it("shows the settled pill and no card once the connection settles", async () => {
-		const fixture = await onboardingOf()
-		fixture.port.report = {
-			...AUTHENTICATED_ANONYMOUSLY,
-			account: { email: ONBOARDING_EMAIL, plan: null },
-		}
-		await renderOnboarding(fixture)
-		await press("Start")
+	it("withdraws the code step the reader leaves for a key", async () => {
+		const { shown } = await waitingOnCode()
 
-		await press("Use this account")
+		await shown.press("Paste a key instead")
 
-		expect(screen.getByText(SETTLED_PILL)).toBeTruthy()
-		expect(screen.queryByText(CONNECTION_TITLE)).toBeNull()
+		expect(screen.queryByText(CODE_QUESTION)).toBeNull()
+		expect(isAsking(KEY_QUESTION)).toBe(true)
 	})
 
-	it("keeps the summons out of the rows and shows the test card under the answer", async () => {
+	it("keeps the key the reader typed out of the thread", async () => {
+		const fixture = await onboardingOf()
+		const shown = await renderOnboarding(fixture)
+		await shown.choose("Start")
+		await shown.choose("Paste an API key")
+
+		await shown.type("Key", ONBOARDING_KEY)
+
+		expect(fixture.port.calls).toContainEqual({
+			command: "holdApiKey",
+			value: ONBOARDING_KEY,
+		})
+		expect(screen.queryByText(ONBOARDING_KEY)).toBeNull()
+		expect(screen.queryByDisplayValue(ONBOARDING_KEY)).toBeNull()
+	})
+
+	it("names the refusal in the step asked after a refused sign-in", async () => {
+		const fixture = await onboardingOf()
+		const shown = await renderOnboarding(fixture)
+		await shown.choose("Start")
+		await shown.choose("Sign in with Claude")
+
+		await act(async () => {
+			fixture.port.refuseSignIn({
+				kind: "failed",
+				detail: "auth login exited with 1",
+			})
+		})
+		await shown.refresh()
+
+		expect(isAsking(SIGN_IN_FAILED_QUESTION)).toBe(true)
+		expect(screen.getByText("Couldn't sign you in")).toBeTruthy()
+		expect(screen.getByText("auth login exited with 1")).toBeTruthy()
+	})
+
+	it("keeps the summons out of the rows and asks the first reply step under the answer", async () => {
 		const fixture = await onboardingOf()
 		fixture.port.report = AUTHENTICATED_ANONYMOUSLY
-		const rerender = await renderOnboarding(fixture)
-		await press("Start")
+		const shown = await renderOnboarding(fixture)
+		await shown.choose("Start")
 
 		await fixture.solo.push(SAID_AND_LANDED)
-		rerender()
-		await settle()
+		await shown.refresh()
 
 		expect(screen.queryByText(onboardingSummonsFor("greeting"))).toBeNull()
 		expect(screen.getByText("the walls hold")).toBeTruthy()
-		expect(screen.getByText(TEST_TITLE)).toBeTruthy()
+		expect(isAsking(FIRST_REPLY_QUESTION)).toBe(true)
 	})
 
 	const answeredPicker = async () => {
 		const fixture = await onboardingOf()
 		fixture.port.report = AUTHENTICATED_ANONYMOUSLY
-		const rerender = await renderOnboarding(fixture)
-		await press("Start")
+		const shown = await renderOnboarding(fixture)
+		await shown.choose("Start")
 		await fixture.solo.push(SAID_AND_LANDED)
-		rerender()
-		await settle()
+		await shown.refresh()
 
-		return { ...fixture, rerender }
+		return { ...fixture, shown }
 	}
 
 	const openedPicker = async () => {
 		const fixture = await answeredPicker()
-		await press("Pick my first companion")
+		await fixture.shown.choose("Pick my first companion")
 
 		return fixture
 	}
@@ -2360,7 +2451,7 @@ describe("the first run in a solo thread", () => {
 	it("shows one option per suggestion when the reader picks a companion", async () => {
 		const fixture = await answeredPicker()
 
-		await press("Pick my first companion")
+		await fixture.shown.choose("Pick my first companion")
 
 		expect(screen.getByText(PICKER_TITLE)).toBeTruthy()
 		expect(screen.getAllByRole("radio")).toHaveLength(
@@ -2368,20 +2459,20 @@ describe("the first run in a solo thread", () => {
 		)
 	})
 
-	it("keeps the test card and reports the reason when the suggestions refuse to load", async () => {
+	it("asks the first reply step again and reports the reason when the suggestions refuse to load", async () => {
 		const fixture = await answeredPicker()
 		fixture.world.refusals.suggest = {
 			kind: "storage",
 			detail: "disk is full",
 		}
 
-		await press("Pick my first companion")
+		await fixture.shown.choose("Pick my first companion")
 
 		expect(fixture.reportFailure).toHaveBeenCalledWith({
 			title: "Couldn't load the suggested companions",
 			description: "disk is full",
 		})
-		expect(screen.getByText(TEST_TITLE)).toBeTruthy()
+		expect(isAsking(FIRST_REPLY_QUESTION)).toBe(true)
 		expect(screen.queryByText(PICKER_TITLE)).toBeNull()
 	})
 
@@ -2389,14 +2480,14 @@ describe("the first run in a solo thread", () => {
 		const fixture = await answeredPicker()
 		fixture.world.suggestions.length = 0
 
-		await press("Pick my first companion")
+		await fixture.shown.choose("Pick my first companion")
 
 		expect(fixture.reportFailure).toHaveBeenCalledWith({
 			title: "Couldn't load the suggested companions",
 			description: "the agent suggested no companion",
 		})
 		expect(screen.queryByText(PICKER_TITLE)).toBeNull()
-		expect(screen.getByText(TEST_TITLE)).toBeTruthy()
+		expect(isAsking(FIRST_REPLY_QUESTION)).toBe(true)
 	})
 
 	it("hands the reader over to the companion it created", async () => {
@@ -2456,7 +2547,6 @@ describe("the first run in a solo thread", () => {
 
 		expect(fixture.world.opened).toEqual([])
 		expect(fixture.world.firstRunDone).toBe(1)
-		expect(screen.queryByText(SETTLED_PILL)).toBeNull()
 	})
 
 	it("opens the created companion from the handoff", async () => {
@@ -2473,8 +2563,7 @@ describe("the first run in a solo thread", () => {
 		const fixture = await openedPicker()
 
 		await type(PICKER_REQUEST_LABEL, "someone who drafts my emails")
-		fixture.rerender()
-		await settle()
+		await fixture.shown.refresh()
 
 		expect(fixture.world.drafted).toEqual([])
 		expect(screen.queryByText(PICKER_TITLE)).toBeNull()
@@ -2490,18 +2579,19 @@ describe("the first run in a solo thread", () => {
 		expect(fixture.world.firstRunDone).toBe(1)
 	})
 
-	it("leaves no onboarding card once the test card is taken", async () => {
+	it("leaves the answered first reply step in the thread once the reader keeps talking", async () => {
 		const fixture = await onboardingOf()
 		fixture.port.report = AUTHENTICATED_ANONYMOUSLY
-		const rerender = await renderOnboarding(fixture)
-		await press("Start")
+		const shown = await renderOnboarding(fixture)
+		await shown.choose("Start")
 		await fixture.solo.push(SAID_AND_LANDED)
-		rerender()
-		await settle()
+		await shown.refresh()
 
-		await press("Keep talking")
+		await shown.choose("Keep talking first")
 
-		expect(screen.queryByText(TEST_TITLE)).toBeNull()
-		expect(screen.queryByText(SETTLED_PILL)).toBeNull()
+		expect(fixture.world.firstRunDone).toBe(1)
+		expect(isAsking(FIRST_REPLY_QUESTION)).toBe(false)
+		expect(screen.getAllByText(FIRST_REPLY_QUESTION).length).toBeGreaterThan(0)
+		expect(screen.getByText("Keep talking first")).toBeTruthy()
 	})
 })

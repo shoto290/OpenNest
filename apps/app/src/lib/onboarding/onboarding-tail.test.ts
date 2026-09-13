@@ -14,7 +14,7 @@ import {
 	onboardingSummonsFor,
 	withoutOnboardingSummons,
 } from "./onboarding-summons"
-import { onboardingTailOf } from "./onboarding-tail"
+import { type OnboardingTail, onboardingTailOf } from "./onboarding-tail"
 import type { Onboarding } from "./use-onboarding"
 
 import { type ChatState, initialChatState } from "../chat/chat-state"
@@ -73,6 +73,9 @@ const tailOf = (
 	chat: ChatState = chatWith(),
 ) => onboardingTailOf(onboardingOf(controller), chat, HOME_BOT)
 
+const askedOf = (tail: OnboardingTail | null) =>
+	tail?.step?.request.questions[0]
+
 const summonsAsked = message({
 	id: "m-summons",
 	turnId: SUMMONS_TURN,
@@ -88,6 +91,17 @@ const answered = message({
 	content: "Hello.",
 })
 
+const failedTurn = chatWith({
+	messages: [summonsAsked],
+	turn: "failed",
+	errors: [
+		{
+			id: "crashed-0",
+			error: { kind: "crashed", code: 1, detail: "the agent stopped" },
+		},
+	],
+})
+
 describe("the onboarding tail", () => {
 	it("stands down once the first run is done", async () => {
 		const controller = controllerOf()
@@ -100,51 +114,61 @@ describe("the onboarding tail", () => {
 		expect(onboardingTailOf(undefined, chatWith(), HOME_BOT)).toBeNull()
 	})
 
-	it("shows the welcome card before any step is taken", () => {
-		const tail = tailOf(controllerOf())
-
-		expect(tail?.hasWelcome).toBe(true)
-		expect(tail?.hasPill).toBe(false)
+	it("asks the welcome step before any step is taken", () => {
+		expect(askedOf(tailOf(controllerOf()))?.question).toBe("Ready to start?")
 	})
 
-	it("shows the pill alone while the summoned turn is pending", async () => {
+	it("asks nothing while the summoned turn is pending", async () => {
 		const controller = await settled()
 		const tail = tailOf(controller, chatWith({ messages: [summonsAsked] }))
 
-		expect(tail?.hasPill).toBe(true)
-		expect(tail?.hasTest).toBe(false)
-		expect(tail?.turnFailure).toBeNull()
+		expect(tail?.step).toBeNull()
 	})
 
-	it("shows the test card once the answer landed", async () => {
+	it("asks the first reply step once the answer landed", async () => {
 		const controller = await settled()
 		const tail = tailOf(
 			controller,
 			chatWith({ messages: [summonsAsked, answered] }),
 		)
 
-		expect(tail?.hasTest).toBe(true)
-		expect(tail?.turnFailure).toBeNull()
+		expect(askedOf(tail)?.question).toBe(
+			"That's it working. Ready for the last one?",
+		)
+		expect(askedOf(tail)?.failure).toBeUndefined()
 	})
 
-	it("shows the failure detail and no test card when the turn failed", async () => {
+	it("names the failure detail when the turn failed", async () => {
 		const controller = await settled()
-		const tail = tailOf(
-			controller,
-			chatWith({
-				messages: [summonsAsked],
-				turn: "failed",
-				errors: [
-					{
-						id: "crashed-0",
-						error: { kind: "crashed", code: 1, detail: "the agent stopped" },
-					},
-				],
-			}),
-		)
 
-		expect(tail?.turnFailure).toBe("the agent stopped")
-		expect(tail?.hasTest).toBe(false)
+		expect(askedOf(tailOf(controller, failedTurn))?.failure).toEqual({
+			title: "Couldn't sign you in",
+			detail: "the agent stopped",
+		})
+	})
+
+	it("summons again when the reader retries the failed turn", async () => {
+		const controller = await settled()
+		const step = tailOf(controller, failedTurn)?.step
+
+		await step?.onAnswers({
+			[step.request.questions[0]?.question ?? ""]: "Try again",
+		})
+
+		expect(world.sent).toHaveLength(2)
+	})
+
+	it("asks the first reply again when the suggestions refuse to load", async () => {
+		const controller = await settled()
+		const chat = chatWith({ messages: [summonsAsked, answered] })
+		const first = tailOf(controller, chat)?.step?.request.id
+		world.refusals.suggest = { kind: "storage", detail: "disk is full" }
+
+		await controller.pickCompanion()
+		const again = tailOf(controller, chat)?.step?.request.id
+
+		expect(again).toBeDefined()
+		expect(again).not.toBe(first)
 	})
 
 	it("stands down in a conversation the onboarding did not start in", async () => {
@@ -161,7 +185,7 @@ describe("the onboarding tail", () => {
 		const tail = tailOf(controller)
 
 		expect(tail?.picks).toHaveLength(world.suggestions.length)
-		expect(tail?.hasTest).toBe(false)
+		expect(tail?.step).toBeNull()
 		expect(tail?.handoff).toBeNull()
 	})
 
@@ -184,7 +208,7 @@ describe("the onboarding tail", () => {
 
 		expect(tail?.handoff?.name).toBe(SUGGESTED_SCOUT.name)
 		expect(tail?.picks).toBeNull()
-		expect(tail?.hasTest).toBe(false)
+		expect(tail?.step).toBeNull()
 	})
 })
 
