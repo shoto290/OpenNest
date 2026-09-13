@@ -15,6 +15,7 @@ use super::session::{Bundle, EventSink, GatedSink, Session, SessionOptions};
 use super::sidecar::{self, Sidecar, SidecarOptions};
 use super::translate::now_ms;
 use crate::bundles;
+use crate::companions::host::CompanionHost;
 use crate::conversations::commands::space_of_the_conversation;
 use crate::db;
 use crate::db::repositories::conversations::Bot as StoredBot;
@@ -686,6 +687,11 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 			scope.bot_id.clone(),
 		)))
 		.hosting(Arc::new(MissionHost::new(
+			app.clone(),
+			scope.conversation_id.clone(),
+			scope.bot_id.clone(),
+		)))
+		.hosting(Arc::new(CompanionHost::new(
 			app.clone(),
 			scope.conversation_id.clone(),
 			scope.bot_id.clone(),

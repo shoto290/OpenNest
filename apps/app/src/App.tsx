@@ -50,6 +50,7 @@ import {
 	useBotPreviews,
 	useChat,
 } from "@/lib/chat/use-chat"
+import { useCompanionAnnouncements } from "@/lib/companions/use-companion-announcements"
 import {
 	CONNECTORS_TAB,
 	toConnectorSettings,
@@ -380,6 +381,11 @@ export function App() {
 		void user.controller.load()
 		return user.controller.followOtherWindows()
 	}, [user.controller])
+
+	useCompanionAnnouncements({
+		onCreated: () => void roster.controller.reload(),
+		onFirstRunDone: () => void user.controller.load(),
+	})
 
 	useEffect(() => {
 		if (!settingsBotId || !selectedSpaceId) {

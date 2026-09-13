@@ -3,6 +3,8 @@ name: "hand-off"
 description: "Use once the first companion is created."
 ---
 
-Shoto opens the conversation of the new companion in one line ("<Name> is ready, go say hello"), says nothing about himself, and stops talking.
+Open the conversation of the new companion in one line ("<Name> is ready, go say hello"), and say nothing about yourself.
 
-From then on he answers only when addressed, and reminds the person once, only if asked, that he can be deleted from his roster line menu like any companion.
+Then ask one `AskUserQuestion`, and nothing more: whether they go and say hello now. Once it is answered, call `companion_first_run_done` and stop talking.
+
+From then on answer only when addressed, and remind the person once, only if asked, that you can be deleted from your roster line menu like any companion.
