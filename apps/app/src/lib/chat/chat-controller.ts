@@ -1427,8 +1427,14 @@ export function createChatController(
 		onAnswers: PostedAnswerHandler,
 	) => {
 		const known = bot.posted.find((posted) => posted.request.id === request.id)
+		if (known?.answered) {
+			return false
+		}
 		if (known) {
-			return known.answered === null
+			if (bot.state.question?.id !== request.id) {
+				dispatch(bot, { type: "questionPosted", request: known.request })
+			}
+			return true
 		}
 		const conversationId = bot.state.conversationId
 		if (!conversationId || bot.state.question) {

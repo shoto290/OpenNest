@@ -1188,10 +1188,51 @@ describe("createChatController", () => {
 			await controller.answer(POSTED.id, POSTED_ANSWER)
 			await vi.runAllTimersAsync()
 
+			const answered = controller.getState()
+
 			expect(
 				controller.postQuestion(BOT, POSTED, () => Promise.resolve()),
 			).toBe(false)
+			expect(controller.getState()).toBe(answered)
+			expect(answered.question).toBeNull()
+		})
+
+		it("re-arms a held question whose live request was dropped", async () => {
+			const { controller, driver } = await bootedHarness()
+			controller.postQuestion(BOT, POSTED, () => Promise.resolve())
+			await vi.runAllTimersAsync()
+			driver.pushEvent({
+				type: "permissionResolved",
+				id: POSTED.id,
+				decision: "allowOnce",
+			})
+			await vi.runAllTimersAsync()
 			expect(controller.getState().question).toBeNull()
+
+			expect(
+				controller.postQuestion(BOT, POSTED, () => Promise.resolve()),
+			).toBe(true)
+			await vi.runAllTimersAsync()
+
+			const { question, messages } = controller.getState()
+			expect(question).toEqual(POSTED)
+			expect(
+				messages.filter(
+					(message) => message.id === questionMessageIdOf(POSTED.id),
+				),
+			).toHaveLength(1)
+		})
+
+		it("leaves the state untouched when the held question is already live", async () => {
+			const { controller } = await sessionlessHarness()
+			controller.postQuestion(BOT, POSTED, () => Promise.resolve())
+			await vi.runAllTimersAsync()
+			const live = controller.getState()
+
+			expect(
+				controller.postQuestion(BOT, POSTED, () => Promise.resolve()),
+			).toBe(true)
+			expect(controller.getState()).toBe(live)
 		})
 
 		it("keeps the question answerable and names the rejection when the handler rejects", async () => {
