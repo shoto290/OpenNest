@@ -434,8 +434,6 @@ const tokenColor = (token: string) => {
 const SIGN_IN_URL =
 	"claude.ai/oauth/authorize?code=true&client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e&response_type=code&scope=user%3Ainference&state=8f3c1a"
 
-const SIGN_IN_CODE = "Xk3nQ8#7f2a1c4e"
-
 const WELCOME_STEP: ToolQuestionItem = {
 	question: "Ready to start?",
 	header: "Setup",
@@ -636,7 +634,7 @@ export const StepPasteTheCode = meta.story({
 
 		await userEvent.type(
 			canvas.getByLabelText("Then paste the code it gives you"),
-			SIGN_IN_CODE,
+			"Xk3nQ8#7f2a1c4e",
 		)
 		await expect(canvas.getByRole("button", { name: "Continue" })).toBeEnabled()
 

@@ -270,9 +270,7 @@ const ToolQuestion = ({
 					) : (
 						<>
 							<Icons.Send data-icon="inline-start" />
-							{item.entry
-								? t("toolQuestion.continue")
-								: t("toolQuestion.submit")}
+							{t(item.entry ? "toolQuestion.continue" : "toolQuestion.submit")}
 						</>
 					)}
 				</Button>
