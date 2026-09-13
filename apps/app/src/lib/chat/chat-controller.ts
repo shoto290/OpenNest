@@ -1398,10 +1398,10 @@ export function createChatController(
 		posted: PostedQuestion,
 		answers: QuestionAnswers,
 	) => {
-		const id = posted.request.id
 		if (posted.isAnswering) {
 			return
 		}
+		const id = posted.request.id
 		changePosted(bot, id, { isAnswering: true })
 		try {
 			await posted.onAnswers(answers)
