@@ -10,6 +10,7 @@ import {
 	BotAvatarEngine,
 	PARTS,
 } from "@workspace/ui/components/bot-avatar-engine"
+import { GAZE_YAW_LIMIT } from "@workspace/ui/components/bot-avatar-gaze"
 
 const earMarkup = (count: number) =>
 	Array.from(
@@ -39,6 +40,13 @@ const rigMarkup = (animal: BotAvatarAnimalDefinition) => `
 
 const TURNED_YAW = 40
 const SETTLE_MS = 2000
+const GAZE_TURN_FRAMES = 90
+const FRAME_MS = 16
+const GAZE_LEFT = { yaw: -GAZE_YAW_LIMIT, pitch: 0 }
+const GAZE_RIGHT = { yaw: GAZE_YAW_LIMIT, pitch: 0 }
+const DRAG_FLOOR = 1
+const RETURN_BAND = 0.5
+const EVEN_DRAW = 0.5
 const INSIDE_TURN_MS = 40
 const HALFWAY_TURN_MS = 400
 const AFTER_TURN_MS = 1500
@@ -81,6 +89,22 @@ const blushReach = (svg: SVGSVGElement) =>
 			?.getAttribute("cx") ?? Number.NaN,
 	)
 
+const mountGazePair = () => {
+	document.body.innerHTML = `${rigMarkup(ANIMALS.rabbit)}${rigMarkup(ANIMALS.rabbit)}`
+	const rigs = Array.from(
+		document.querySelectorAll("svg"),
+	) as unknown as SVGSVGElement[]
+	const engines = rigs.map((rig) => {
+		const engine = new BotAvatarEngine(ANIMALS.rabbit)
+		engine.bind(rig)
+		engine.setState(TURNING_STATE)
+		engine.setGaze(GAZE_LEFT)
+		engine.start()
+		return engine
+	})
+	return { rigs, engines }
+}
+
 const staticFrame = (
 	animal: BotAvatarAnimalDefinition,
 	yaw: number | undefined,
@@ -122,6 +146,32 @@ describe("the ears on a turning head", () => {
 		expect(draggedSpin).toBeLessThan(restingSpin)
 		expect(Math.abs(halfwaySpin - settledSpin)).toBeLessThan(
 			Math.abs(draggedSpin - settledSpin),
+		)
+	})
+
+	it("swings past its settled twist and back when the gaze turns the head", () => {
+		vi.spyOn(Math, "random").mockReturnValue(EVEN_DRAW)
+		const { rigs, engines } = mountGazePair()
+		vi.advanceTimersByTime(SETTLE_MS)
+
+		engines[0].setGaze(GAZE_RIGHT)
+		const swing: number[] = []
+		for (let frame = 0; frame < GAZE_TURN_FRAMES; frame += 1) {
+			vi.advanceTimersByTime(FRAME_MS)
+			swing.push(earSpin(rigs[0], 0) - earSpin(rigs[1], 0))
+		}
+
+		vi.advanceTimersByTime(SETTLE_MS)
+		const settled = earSpin(rigs[0], 0) - earSpin(rigs[1], 0)
+		for (const engine of engines) engine.stop()
+
+		const dragged = Math.min(...swing)
+		const after = swing.slice(swing.indexOf(dragged))
+
+		expect(dragged).toBeLessThan(settled - DRAG_FLOOR)
+		expect(Math.max(...after)).toBeGreaterThan(settled)
+		expect(Math.abs(swing[swing.length - 1] - settled)).toBeLessThan(
+			RETURN_BAND,
 		)
 	})
 

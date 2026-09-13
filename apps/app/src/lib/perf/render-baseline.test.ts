@@ -628,7 +628,7 @@ describe("PRF1 render baseline", () => {
 			    "movingAvatars": 3,
 			    "noOpWrites": 0,
 			    "quietFrames": 0,
-			    "writes": 1007,
+			    "writes": 1078,
 			  },
 			}
 		`)

@@ -72,9 +72,11 @@ import {
 } from "@workspace/ui/components/bot-avatar-gaze"
 import {
 	type BotAvatarEarRest,
+	type BotAvatarShellRest,
 	type BotAvatarSilhouette,
 	botAvatarSilhouette,
 	headShellPoint,
+	headShellRest,
 	headShellWarp,
 	headSurfaceAffine,
 	weldToSilhouette,
@@ -301,6 +303,7 @@ export class BotAvatarEngine {
 	private wireframe = false
 	private surface: BotAvatarSilhouette
 	private earRests: BotAvatarEarRest[]
+	private extraRests: BotAvatarShellRest[]
 	private welds: Vec2[]
 
 	constructor(animal: BotAvatarAnimalDefinition) {
@@ -312,6 +315,22 @@ export class BotAvatarEngine {
 		this.targetRings = EXPRESSIONS[0]
 		this.welds = animal.ears.map((): Vec2 => [0, 0])
 		this.earRests = this.surface.earRests
+		this.extraRests = this.solveExtraRests()
+	}
+
+	private extraDepthRatio(index: number) {
+		return this.animal.extras[index].depthRatio ?? EXTRAS_DEPTH_RATIO
+	}
+
+	private solveExtraRests() {
+		return this.animal.extras.map((_, index) =>
+			headShellRest({
+				surface: this.surface,
+				depthRatio: this.extraDepthRatio(index),
+				perspective: this.perspective,
+				face: this.surface.extraAnchors[index],
+			}),
+		)
 	}
 
 	bind(svg: SVGSVGElement) {
@@ -397,6 +416,7 @@ export class BotAvatarEngine {
 
 	setPerspective(perspective: number) {
 		this.perspective = clamp(perspective, 0, 1)
+		this.extraRests = this.solveExtraRests()
 		this.invalidate()
 	}
 
@@ -757,8 +777,8 @@ export class BotAvatarEngine {
 				affineTransform(
 					headShellWarp({
 						surface: this.surface,
-						depthRatio:
-							this.animal.extras[index].depthRatio ?? EXTRAS_DEPTH_RATIO,
+						depthRatio: this.extraDepthRatio(index),
+						rest: this.extraRests[index],
 						rotation,
 						perspective: this.perspective,
 						face: this.surface.extraAnchors[index],
@@ -771,7 +791,11 @@ export class BotAvatarEngine {
 	private renderEars(lagged: Quat, rotation: Quat, welds: Vec2[], now: number) {
 		const parts = this.parts
 		if (!parts) return
-		const drag = earDrag(this.poseVelocity)
+		const gazeTurn = headGazeAsPose(this.headGazeVelocity)
+		const drag = earDrag({
+			yaw: this.poseVelocity.yaw + gazeTurn.yaw,
+			pitch: this.poseVelocity.pitch + gazeTurn.pitch,
+		})
 		const leak = earGazeLeak(this.displayGaze.yaw)
 		for (let index = 0; index < this.animal.ears.length; index += 1) {
 			const ear = this.animal.ears[index]

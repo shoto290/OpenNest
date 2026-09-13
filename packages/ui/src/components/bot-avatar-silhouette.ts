@@ -247,9 +247,20 @@ const shellTangent = (projection: ShellProjection): ShellTangent => {
 	}
 }
 
-export const headShellWarp = (projection: ShellProjection): AffineWarp => {
+export type BotAvatarShellRest = ShellTangent
+
+type ShellAnchor = Omit<ShellProjection, "rotation">
+
+export const headShellRest = (anchor: ShellAnchor): BotAvatarShellRest =>
+	shellTangent({ ...anchor, rotation: IDENTITY_QUAT })
+
+type ShellWarp = ShellProjection & { rest: BotAvatarShellRest }
+
+export const headShellWarp = ({
+	rest,
+	...projection
+}: ShellWarp): AffineWarp => {
 	const { surface, face } = projection
-	const rest = shellTangent({ ...projection, rotation: IDENTITY_QUAT })
 	const turned = shellTangent(projection)
 	const restPivot: Vec2 = [
 		surface.center[0] + face[0],
