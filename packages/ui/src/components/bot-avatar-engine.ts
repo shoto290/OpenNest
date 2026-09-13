@@ -705,6 +705,14 @@ export class BotAvatarEngine {
 		}
 	}
 
+	private quantizedTrailPose(now: number) {
+		const trailed = laggedPose(this.poseTrail, now)
+		for (const axis of POSE_AXES) {
+			trailed[axis] = quantize(trailed[axis], RADIAN_STEP)
+		}
+		return trailed
+	}
+
 	private viewMoved() {
 		return (
 			this.displayPose.yaw !== this.renderedPose.yaw ||
@@ -1015,11 +1023,7 @@ export class BotAvatarEngine {
 		this.quantizePose()
 		trackPose(this.poseTrail, now, this.displayPose)
 		const rotation = quatFromEuler(this.displayPose)
-		const trailed = laggedPose(this.poseTrail, now)
-		for (const axis of POSE_AXES) {
-			trailed[axis] = quantize(trailed[axis], RADIAN_STEP)
-		}
-		const lagged = quatFromEuler(trailed)
+		const lagged = quatFromEuler(this.quantizedTrailPose(now))
 		const headAffine = headSurfaceAffine({
 			surface: this.surface,
 			rotation,
