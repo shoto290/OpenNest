@@ -1,4 +1,4 @@
-import { expect, fn, spyOn, within } from "storybook/test"
+import { expect, fireEvent, fn, spyOn, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { slotIn } from "@workspace/storybook/story-utils"
@@ -405,7 +405,7 @@ const askedByShoto = (args: ToolQuestionProps) => (
 			<MessageAuthor author={SHOTO} />
 			<MessageBubble>
 				<MessageBubbleContent>
-					<ToolQuestion {...args} />
+					<ToolQuestion {...args} onDeny={undefined} />
 				</MessageBubbleContent>
 			</MessageBubble>
 		</MessageContent>
@@ -420,6 +420,9 @@ const expectAskedByShoto = async (canvasElement: HTMLElement, step: string) => {
 		"Shoto",
 	)
 	await expect(within(bubble).getByText(step)).toBeVisible()
+	await expect(
+		within(bubble).queryByRole("button", { name: /dismiss/i }),
+	).not.toBeInTheDocument()
 }
 
 const tokenColor = (token: string) => {
@@ -624,7 +627,7 @@ export const StepPasteTheCode = meta.story({
 		docs: {
 			description: {
 				story:
-					"The step that waits on the browser: the sign-in link to carry away, then the code to bring back, drawn here holding the code so `Continue` takes a press. The way out to an API key sits beside the primary control as a low emphasis control, because it leaves the step rather than answering it.",
+					"The step that waits on the browser: the sign-in link to carry away, then the code to bring back, drawn here holding the code so `Continue` takes a press. The way out to an API key sits beside the primary control as a low emphasis control, because it leaves the step rather than answering it: pressing it reports once to the host and leaves the question and the typed code where they are.",
 			},
 		},
 	},
@@ -632,16 +635,17 @@ export const StepPasteTheCode = meta.story({
 		pasteKeyInstead.mockClear()
 		await expectAskedByShoto(canvasElement, CODE_STEP.question)
 
-		await userEvent.type(
-			canvas.getByLabelText("Then paste the code it gives you"),
-			"Xk3nQ8#7f2a1c4e",
-		)
+		const code = canvas.getByLabelText("Then paste the code it gives you")
+
+		await userEvent.type(code, "Xk3nQ8#7f2a1c4e")
 		await expect(canvas.getByRole("button", { name: "Continue" })).toBeEnabled()
 
 		await userEvent.click(
 			canvas.getByRole("button", { name: "Paste a key instead" }),
 		)
 		await expect(pasteKeyInstead).toHaveBeenCalledTimes(1)
+		await expect(code).toHaveValue("Xk3nQ8#7f2a1c4e")
+		await expect(canvas.getByText(CODE_STEP.question)).toBeVisible()
 	},
 })
 
@@ -896,5 +900,66 @@ export const Failure = meta.story({
 		).toBe(tokenColor("--destructive"))
 
 		await expect(canvas.getByRole("radio", { name: /Try again/ })).toBeVisible()
+	},
+})
+
+export const FailureAboveEntry = meta.story({
+	args: {
+		questions: [
+			{
+				...KEY_STEP,
+				failure: {
+					title: "That key didn't work",
+					detail: "API Error: 401 API key is invalid.",
+				},
+			},
+		],
+	},
+	render: (args) => (
+		<div className="w-[320px]" data-testid="column">
+			<ToolQuestion {...args} />
+		</div>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The key path coming back refused: the failure block sits above an entry question rather than above options, in a 320px column. Check that the detail wraps on its own surface inside the column and that nothing in the card pushes the column sideways.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const column = canvas.getByTestId("column")
+
+		await expect(
+			canvas.getByText("API Error: 401 API key is invalid."),
+		).toBeVisible()
+		await expect(canvas.getByLabelText("Key")).toBeVisible()
+		await expect(column.scrollWidth).toBeLessThanOrEqual(column.clientWidth)
+	},
+})
+
+export const EntryComposing = meta.story({
+	args: { questions: [KEY_STEP] },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Enter pressed inside an entry field while an input method is still composing. That Enter commits the composition, so the answer stays unsent; the next Enter, once nothing is composing, sends it.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const field = canvas.getByLabelText("Key")
+		await userEvent.type(field, "sk-ant-0f3c1a")
+
+		fireEvent.keyDown(field, { key: "Enter", isComposing: true })
+		await expect(args.onAnswer).not.toHaveBeenCalled()
+
+		fireEvent.keyDown(field, { key: "Enter" })
+		await expect(args.onAnswer).toHaveBeenCalledTimes(1)
+		await expect(args.onAnswer).toHaveBeenCalledWith({
+			[KEY_STEP.question]: "sk-ant-0f3c1a",
+		})
 	},
 })

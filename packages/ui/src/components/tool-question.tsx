@@ -393,7 +393,7 @@ const EntryField = ({
 	const id = useId()
 
 	const readKey = (event: KeyboardEvent<HTMLInputElement>) => {
-		if (event.key !== "Enter") return
+		if (event.key !== "Enter" || event.nativeEvent.isComposing) return
 		event.preventDefault()
 		onSubmit()
 	}
