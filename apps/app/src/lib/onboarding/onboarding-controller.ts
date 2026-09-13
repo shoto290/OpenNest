@@ -129,7 +129,7 @@ export const createOnboardingController = (
 	let state = initialOnboardingState
 	let asked: OnboardingSummons = "greeting"
 	let attempt = 0
-	let running: { isLive: () => boolean } | null = null
+	let running: Attempt | null = null
 	const listeners = new Set<() => void>()
 
 	const publish = () => {
