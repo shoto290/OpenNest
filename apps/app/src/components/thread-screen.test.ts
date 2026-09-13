@@ -2287,9 +2287,10 @@ const renderOnboarding = async (
 
 const TYPED_MESSAGE = "Hello, what can you do?"
 
-const isAnchored = (text: Element) =>
-	text.closest("[data-scroll-anchor]")?.getAttribute("data-scroll-anchor") ===
-	"true"
+const isAnchored = (content: Element) =>
+	content
+		.closest("[data-scroll-anchor]")
+		?.getAttribute("data-scroll-anchor") === "true"
 
 const isBefore = (earlier: Element, later: Element) =>
 	(earlier.compareDocumentPosition(later) &

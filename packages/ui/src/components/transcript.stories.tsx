@@ -306,9 +306,9 @@ const POSTED_ROWS: Entry[] = [
 	},
 ]
 
-const PostedQuestionsDemo = (
-	transcriptProps: Omit<TranscriptProps, "children" | "rows">,
-) => {
+type PostedQuestionsDemoProps = Omit<TranscriptProps, "children" | "rows">
+
+const PostedQuestionsDemo = (transcriptProps: PostedQuestionsDemoProps) => {
 	const [posted, setPosted] = useState(1)
 	const hasNext = posted < POSTED_ROWS.length
 
