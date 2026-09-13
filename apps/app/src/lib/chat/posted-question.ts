@@ -67,21 +67,16 @@ export const answeredRow = ({
 	runtimeSessionId: null,
 })
 
-export const rowsOf = ({
-	asking,
-	answered,
-}: PostedQuestion): TranscriptDraft[] =>
+const rowsOf = ({ asking, answered }: PostedQuestion): TranscriptDraft[] =>
 	answered ? [asking, answered] : [asking]
 
-export type PostedRow = {
-	afterSeq: number
-	row: TranscriptDraft
-}
-
-const rowsByAnchor = (posted: PostedRow[]): Map<number, TranscriptDraft[]> => {
+const rowsByAnchor = (
+	posted: PostedQuestion[],
+): Map<number, TranscriptDraft[]> => {
 	const anchored = new Map<number, TranscriptDraft[]>()
-	for (const { afterSeq, row } of posted) {
-		anchored.set(afterSeq, [...(anchored.get(afterSeq) ?? []), row])
+	for (const question of posted) {
+		const earlier = anchored.get(question.afterSeq) ?? []
+		anchored.set(question.afterSeq, [...earlier, ...rowsOf(question)])
 	}
 	return anchored
 }
@@ -97,7 +92,7 @@ const placedAfter = (
 
 export const withPostedRows = (
 	messages: TranscriptMessage[],
-	posted: PostedRow[],
+	posted: PostedQuestion[],
 ): TranscriptMessage[] => {
 	if (posted.length === 0) {
 		return messages

@@ -21,8 +21,6 @@ import {
 	askingRow,
 	type PostedAnswerHandler,
 	type PostedQuestion,
-	type PostedRow,
-	rowsOf,
 	withPostedRows,
 } from "./posted-question"
 import {
@@ -265,12 +263,8 @@ export function createChatController(
 		)
 	}
 
-	const postedRowsOf = (bot: BotChat, conversationId: string): PostedRow[] =>
-		bot.posted.flatMap((posted) =>
-			posted.conversationId === conversationId
-				? rowsOf(posted).map((row) => ({ afterSeq: posted.afterSeq, row }))
-				: [],
-		)
+	const postedIn = (bot: BotChat, conversationId: string) =>
+		bot.posted.filter((posted) => posted.conversationId === conversationId)
 
 	const syncBot = (bot: BotChat) => {
 		const conversationId = bot.state.conversationId
@@ -282,7 +276,7 @@ export function createChatController(
 			type: "transcriptChanged",
 			messages: withPostedRows(
 				selectMessages(current, conversationId),
-				postedRowsOf(bot, conversationId),
+				postedIn(bot, conversationId),
 			),
 			hasOlder: selectHasMore(current, conversationId),
 			hasNewer: selectHasNewer(current, conversationId),
