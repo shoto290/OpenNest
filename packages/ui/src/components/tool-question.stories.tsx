@@ -755,7 +755,6 @@ export const StepApiKeyFailed = meta.story({
 		const follows = (a: Node, b: Node) =>
 			Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)
 
-		await expect(form).not.toContainElement(sentence)
 		await expect(follows(sentence, form)).toBe(true)
 		await expect(form).toContainElement(failure)
 		await expect(follows(failure, question)).toBe(true)
