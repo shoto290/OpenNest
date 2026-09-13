@@ -1,16 +1,24 @@
 import {
+	type AffineWarp,
 	applySurfaceAffine,
 	clamp,
 	conicAffine,
+	faceToSurface,
+	IDENTITY_QUAT,
 	inPlaneSpin,
 	ORIGIN,
+	project,
 	projectConic,
 	type Quat,
+	rotateVec3,
 	type SurfaceAffine,
 	type Vec2,
 	type Vec3,
 } from "@workspace/ui/components/bot-avatar-3d"
-import type { BotAvatarAnimalDefinition } from "@workspace/ui/components/bot-avatar-animals"
+import type {
+	BotAvatarAnimalDefinition,
+	BotAvatarShape,
+} from "@workspace/ui/components/bot-avatar-animals"
 
 const CURVE_SAMPLES = 16
 const NUMBER_PATTERN = /-?\d*\.?\d+(?:e[-+]?\d+)?/gi
@@ -115,6 +123,15 @@ export type BotAvatarSilhouette = {
 	outline: Vec2[]
 	attachments: Vec2[]
 	earRests: BotAvatarEarRest[]
+	extraAnchors: Vec2[]
+}
+
+const shapeAnchor = (shape: BotAvatarShape, center: Vec2): Vec2 => {
+	const middle =
+		shape.kind === "path"
+			? outlineBounds(flattenPath(shape.d)).center
+			: [shape.cx, shape.cy]
+	return [middle[0] - center[0], middle[1] - center[1]]
 }
 
 const solve = (animal: BotAvatarAnimalDefinition): BotAvatarSilhouette => {
@@ -130,6 +147,7 @@ const solve = (animal: BotAvatarAnimalDefinition): BotAvatarSilhouette => {
 		radii: [extent[0], extent[1], animal.headDepth],
 		outline,
 		attachments,
+		extraAnchors: animal.extras.map((shape) => shapeAnchor(shape, center)),
 		earRests: animal.ears.map((ear, index) => {
 			const attach = attachments[index]
 			return {
@@ -176,6 +194,80 @@ export const headSurfaceAffine = ({
 		}),
 		spin: inPlaneSpin(rotation),
 	})
+
+type ShellProjection = {
+	surface: BotAvatarSilhouette
+	depthRatio: number
+	rotation: Quat
+	perspective: number
+	face: Vec2
+}
+
+export const headShellPoint = ({
+	surface,
+	depthRatio,
+	rotation,
+	perspective,
+	face,
+}: ShellProjection): Vec2 => {
+	const [cx, cy] = surface.center
+	const { point } = faceToSurface({
+		radii: [surface.radii[0], surface.radii[1], surface.radii[2] * depthRatio],
+		face,
+	})
+	const flat = project({ point: rotateVec3(rotation, point), perspective })
+	return [cx + flat[0], cy + flat[1]]
+}
+
+const TANGENT_STEP = 1
+
+type ShellTangent = { spin: number; sx: number; sy: number; at: Vec2 }
+
+const shellTangent = (projection: ShellProjection): ShellTangent => {
+	const { face } = projection
+	const at = headShellPoint(projection)
+	const alongX = headShellPoint({
+		...projection,
+		face: [face[0] + TANGENT_STEP, face[1]],
+	})
+	const alongY = headShellPoint({
+		...projection,
+		face: [face[0], face[1] + TANGENT_STEP],
+	})
+	const dx: Vec2 = [alongX[0] - at[0], alongX[1] - at[1]]
+	const dy: Vec2 = [alongY[0] - at[0], alongY[1] - at[1]]
+	const spin = Math.atan2(-dy[0], dy[1])
+	const cos = Math.cos(spin)
+	const sin = Math.sin(spin)
+	return {
+		spin,
+		sx: (dx[0] * cos + dx[1] * sin) / TANGENT_STEP,
+		sy: (dy[1] * cos - dy[0] * sin) / TANGENT_STEP,
+		at,
+	}
+}
+
+export const headShellWarp = (projection: ShellProjection): AffineWarp => {
+	const { surface, face } = projection
+	const rest = shellTangent({ ...projection, rotation: IDENTITY_QUAT })
+	const turned = shellTangent(projection)
+	const restPivot: Vec2 = [
+		surface.center[0] + face[0],
+		surface.center[1] + face[1],
+	]
+	return {
+		affine: {
+			spin: turned.spin - rest.spin,
+			sx: turned.sx / (rest.sx || 1),
+			sy: turned.sy / (rest.sy || 1),
+		},
+		restPivot,
+		pivot: [
+			restPivot[0] + turned.at[0] - rest.at[0],
+			restPivot[1] + turned.at[1] - rest.at[1],
+		],
+	}
+}
 
 type EarWeld = {
 	surface: BotAvatarSilhouette

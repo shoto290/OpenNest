@@ -462,7 +462,11 @@ export const applySurfaceAffine = (
 	return [x * cos - y * sin, x * sin + y * cos]
 }
 
-type AffineWarp = { affine: SurfaceAffine; restPivot: Vec2; pivot: Vec2 }
+export type AffineWarp = {
+	affine: SurfaceAffine
+	restPivot: Vec2
+	pivot: Vec2
+}
 
 export const affineTransform = ({ affine, restPivot, pivot }: AffineWarp) =>
 	`translate(${round2(pivot[0])} ${round2(pivot[1])}) rotate(${round2(toDegrees(affine.spin))}) scale(${round2(affine.sx)} ${round2(affine.sy)}) translate(${round2(-restPivot[0])} ${round2(-restPivot[1])})`

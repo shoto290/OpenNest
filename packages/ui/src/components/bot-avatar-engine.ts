@@ -42,6 +42,14 @@ import {
 	STATE_POSES,
 } from "@workspace/ui/components/bot-avatar-data"
 import {
+	type BotAvatarPoseTrail,
+	earDrag,
+	earGazeLeak,
+	earTwist,
+	laggedPose,
+	trackPose,
+} from "@workspace/ui/components/bot-avatar-ears"
+import {
 	type BotAvatarGaze,
 	type BotAvatarGazeCadence,
 	blinkDelay,
@@ -66,6 +74,8 @@ import {
 	type BotAvatarEarRest,
 	type BotAvatarSilhouette,
 	botAvatarSilhouette,
+	headShellPoint,
+	headShellWarp,
 	headSurfaceAffine,
 	weldToSilhouette,
 } from "@workspace/ui/components/bot-avatar-silhouette"
@@ -87,13 +97,12 @@ const DEGREE_STEP = toDegrees(RADIAN_STEP)
 const SCALE_STEP = UNIT_STEP / AVATAR_REACH_UNITS
 const POSE_SPRING_FREQUENCY = 9
 const POSE_SPRING_DAMPING = 0.9
-const EAR_WIGGLE_VELOCITY_LIMIT = 3
-const EAR_WIGGLE_DEGREES = 1.8
-const EAR_WIGGLE_GAZE_DRIFT = 0.08
 const EAR_SWAY_DEGREES = 1.6
 const EAR_SWAY_RATE = 0.0008
 const EAR_SWAY_STAGGER = 2.3
 const EAR_PLATE_SQUASH_FLOOR = 0.5
+const EXTRAS_DEPTH_RATIO = 0.85
+const BLUSH_DEPTH_RATIO = 0.55
 const BLUSH_OUTWARD_OFFSET = 9
 const BLUSH_BELOW_EYE_OFFSET = 9
 const BLUSH_FACE_FLOOR = 6
@@ -112,6 +121,7 @@ export const PARTS = {
 	blush: "blush",
 	noise: "noise",
 	wire: "wire",
+	extra: (index: number) => `extra-${index}`,
 	ear: (index: number, layer: BotAvatarEarLayer) => `ear-${layer}-${index}`,
 	earSplit: (index: number) => `ear-split-${index}`,
 } as const
@@ -221,6 +231,13 @@ const poseInRadians = (state: BotAvatarState): EulerAngles => {
 
 type EarPhysics = { rot: number; vRot: number; sy: number; vSy: number }
 
+type BlushDot = {
+	index: number
+	rotation: Quat
+	middleX: number
+	lowest: number
+}
+
 type EarNodes = {
 	back: SVGGElement
 	front: SVGGElement
@@ -231,6 +248,7 @@ type Parts = {
 	rig: SVGGElement
 	head: SVGGElement
 	headClip: SVGPathElement | null
+	extras: (SVGGElement | null)[]
 	eyes: [SVGPathElement, SVGPathElement]
 	ears: EarNodes[]
 	blush: SVGGElement
@@ -276,6 +294,7 @@ export class BotAvatarEngine {
 	private ambient: EulerAngles = { ...NEUTRAL_POSE }
 	private ambientAt = 0
 	private displayPose: EulerAngles = { ...NEUTRAL_POSE }
+	private poseTrail: BotAvatarPoseTrail = []
 	private renderedPose: EulerAngles = { yaw: 9, pitch: 9, roll: 9 }
 	private written = new WeakMap<Element, Map<string, string>>()
 	private perspective = 0.55
@@ -311,6 +330,9 @@ export class BotAvatarEngine {
 			rig,
 			head,
 			headClip: part<SVGPathElement>(PARTS.headClip),
+			extras: this.animal.extras.map((_, index) =>
+				part<SVGGElement>(PARTS.extra(index)),
+			),
 			eyes: [eye0, eye1],
 			ears: this.animal.ears
 				.map((_, i) => ({
@@ -437,6 +459,7 @@ export class BotAvatarEngine {
 			roll: this.restPose("roll"),
 		}
 		this.poseVelocity = { ...NEUTRAL_POSE }
+		this.poseTrail = []
 		this.eyesDirty = true
 		this.render(0)
 	}
@@ -722,17 +745,34 @@ export class BotAvatarEngine {
 		this.write(parts.headClip, "transform", transform)
 	}
 
-	private renderEars(rotation: Quat, welds: Vec2[], now: number) {
+	private renderExtras(rotation: Quat) {
 		const parts = this.parts
 		if (!parts) return
-		const wiggle =
-			clamp(
-				this.velocity,
-				-EAR_WIGGLE_VELOCITY_LIMIT,
-				EAR_WIGGLE_VELOCITY_LIMIT,
-			) *
-				EAR_WIGGLE_DEGREES +
-			this.headGaze.yaw * EAR_WIGGLE_GAZE_DRIFT
+		for (let index = 0; index < parts.extras.length; index += 1) {
+			const el = parts.extras[index]
+			if (!el) continue
+			this.write(
+				el,
+				"transform",
+				affineTransform(
+					headShellWarp({
+						surface: this.surface,
+						depthRatio:
+							this.animal.extras[index].depthRatio ?? EXTRAS_DEPTH_RATIO,
+						rotation,
+						perspective: this.perspective,
+						face: this.surface.extraAnchors[index],
+					}),
+				),
+			)
+		}
+	}
+
+	private renderEars(lagged: Quat, rotation: Quat, welds: Vec2[], now: number) {
+		const parts = this.parts
+		if (!parts) return
+		const drag = earDrag(this.poseVelocity)
+		const leak = earGazeLeak(this.displayGaze.yaw)
 		for (let index = 0; index < this.animal.ears.length; index += 1) {
 			const ear = this.animal.ears[index]
 			const el = parts.ears[index]
@@ -744,10 +784,15 @@ export class BotAvatarEngine {
 				EAR_SWAY_DEGREES
 			const twist = quatFromAxisAngle(
 				AXIS_Z,
-				toRadians(quantize(ear.side * phys.rot + wiggle + sway, DEGREE_STEP)),
+				toRadians(
+					quantize(
+						ear.side * phys.rot + earTwist({ drag, leak, sway }),
+						DEGREE_STEP,
+					),
+				),
 			)
-			const hinged = quatMultiply(rotation, twist)
-			const anchor = rotateVec3(rotation, rest.anchor)
+			const hinged = quatMultiply(lagged, twist)
+			const anchor = rotateVec3(lagged, rest.anchor)
 			const squash = quantize(
 				Math.max(EAR_PLATE_SQUASH_FLOOR, phys.sy),
 				SCALE_STEP,
@@ -819,14 +864,15 @@ export class BotAvatarEngine {
 			const middleY = (middle[1] - CENTER) * faceScale + offsetY
 			const points: Vec2[] = []
 			const visible: boolean[] = []
+			let lowest = Number.NEGATIVE_INFINITY
 			for (const vertex of ring) {
-				const longitude =
-					((vertex[0] - CENTER) * faceScale) / rx + gazeLongitude
-				const latitude =
-					(middleY +
-						((vertex[1] - CENTER) * faceScale + offsetY - middleY) * blink) /
-						ry +
-					gazeLatitude
+				const faceX = (vertex[0] - CENTER) * faceScale
+				const faceY =
+					middleY +
+					((vertex[1] - CENTER) * faceScale + offsetY - middleY) * blink
+				lowest = Math.max(lowest, faceY)
+				const longitude = faceX / rx + gazeLongitude
+				const latitude = faceY / ry + gazeLatitude
 				const cosLatitude = Math.cos(latitude)
 				const point: Vec3 = [
 					rx * cosLatitude * Math.sin(longitude),
@@ -848,7 +894,32 @@ export class BotAvatarEngine {
 				)
 			}
 			this.writeEye(index, points, visible)
+			this.writeBlushDot({
+				index,
+				rotation,
+				middleX: (middle[0] - CENTER) * faceScale,
+				lowest,
+			})
 		})
+	}
+
+	private writeBlushDot({ index, rotation, middleX, lowest }: BlushDot) {
+		const dot = this.parts?.blushDots[index]
+		if (!dot) return
+		const away = Math.sign(middleX) || (index === 0 ? -1 : 1)
+		const floor = this.animal.faceY + BLUSH_FACE_FLOOR - this.surface.center[1]
+		const [x, y] = headShellPoint({
+			surface: this.surface,
+			depthRatio: BLUSH_DEPTH_RATIO,
+			rotation,
+			perspective: this.perspective,
+			face: [
+				middleX + away * BLUSH_OUTWARD_OFFSET,
+				Math.max(lowest + BLUSH_BELOW_EYE_OFFSET, floor),
+			],
+		})
+		this.write(dot, "cx", String(round2(x)))
+		this.write(dot, "cy", String(round2(y)))
 	}
 
 	private writeEye(index: number, points: Vec2[], visible: boolean[]) {
@@ -873,29 +944,6 @@ export class BotAvatarEngine {
 			d += "Z"
 		}
 		this.write(el, "d", d)
-		const dot = parts.blushDots[index]
-		if (!dot) return
-		let bottom = Number.NEGATIVE_INFINITY
-		let sum = 0
-		for (const at of runs[0]) {
-			bottom = Math.max(bottom, cy + points[at][1])
-			sum += cx + points[at][0]
-		}
-		const middleX = sum / runs[0].length
-		const away = Math.sign(middleX - cx) || (index === 0 ? -1 : 1)
-		this.write(dot, "cx", String(round2(middleX + away * BLUSH_OUTWARD_OFFSET)))
-		this.write(
-			dot,
-			"cy",
-			String(
-				round2(
-					Math.max(
-						bottom + BLUSH_BELOW_EYE_OFFSET,
-						this.animal.faceY + BLUSH_FACE_FLOOR,
-					),
-				),
-			),
-		)
 	}
 
 	private renderWire(rotation: Quat, welds: Vec2[]) {
@@ -945,7 +993,9 @@ export class BotAvatarEngine {
 			Math.abs(this.velocity) < 0.001 &&
 			this.blinkStart === null
 		this.quantizePose()
+		trackPose(this.poseTrail, now, this.displayPose)
 		const rotation = quatFromEuler(this.displayPose)
+		const lagged = quatFromEuler(laggedPose(this.poseTrail, now))
 		const headAffine = headSurfaceAffine({
 			surface: this.surface,
 			rotation,
@@ -968,6 +1018,7 @@ export class BotAvatarEngine {
 			this.renderedGaze.yaw = this.displayGaze.yaw
 			this.renderedGaze.pitch = this.displayGaze.pitch
 			this.renderHead(headAffine)
+			this.renderExtras(rotation)
 			this.renderEyes(rotation, now)
 			this.renderWire(rotation, welds)
 			if (settled) this.eyesDirty = false
@@ -986,6 +1037,6 @@ export class BotAvatarEngine {
 			"transform",
 			`translate(${round2(120 + rigDx)} ${round2(132 + rigDy)}) rotate(${round2(tilt)}) scale(${round2(1 - stretch * 0.5)} ${round2(1 + stretch)}) translate(-120 -132)`,
 		)
-		this.renderEars(rotation, welds, now)
+		this.renderEars(lagged, rotation, welds, now)
 	}
 }

@@ -50,6 +50,11 @@ const BLOT_SEEDS = [
 	"bot-4",
 ]
 const STRESS_COUNT = 60
+const TURN_ANIMALS: BotAvatarAnimal[] = ["rabbit", "cat", "owl"]
+const TURN_STATE: BotAvatarState = "working"
+const CHIP_SIZE = 40
+const DEPTH_ANIMALS: BotAvatarAnimal[] = ["owl", "skippy"]
+const DEPTH_SWEEP = [-40, 0, 40]
 const GLANCE_STATES = Object.keys(GAZE_CADENCE) as BotAvatarState[]
 const GLANCE_SIZES = [240, 40]
 const GAZE_EXTREMES = [
@@ -105,6 +110,21 @@ function LiveGazeBench() {
 		</div>
 	)
 }
+
+const transformIn = (avatar: SVGSVGElement, part: string) =>
+	avatar.querySelector(`[data-part="${part}"]`)?.getAttribute("transform") ?? ""
+
+const headTransform = (avatar: SVGSVGElement) => transformIn(avatar, PARTS.head)
+
+const extraTransform = (avatar: SVGSVGElement) =>
+	transformIn(avatar, PARTS.extra(0))
+
+const extraReach = (avatar: SVGSVGElement) =>
+	Number(
+		extraTransform(avatar).match(/translate\((-?\d*\.?\d+)/)?.[1] ?? Number.NaN,
+	)
+
+const IDLE_EXTRA_WARP = /rotate\(0\) scale\(1 1\)/
 
 const eyeCentre = (avatar: SVGSVGElement) => {
 	const d =
@@ -682,5 +702,91 @@ export const GazeFollow = meta.story({
 		await expect(followedLean).toBeLessThan(pinnedLean)
 		await expect(Math.abs(dartedLean - pinnedLean)).toBeLessThan(eyeTravel)
 		await expect(Math.abs(followedLean - pinnedLean)).toBeLessThan(eyeTravel)
+	},
+})
+
+export const HeadTurn = meta.story({
+	name: "Head Turn",
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Three animals at hero size, working, turning on their own gaze. Everything on the head moves at the depth it sits at: the eyes ride the surface, the extras a little behind them, the blush closer to the middle of the skull, so a turn slides them by different amounts instead of scaling one flat drawing. The ears arrive last. They aim at the head as it stood 70 ms earlier, drag against the turn, overshoot once and settle after the head has stopped, and the ear nearest the viewer travels further than the one going away. Reach for this after retuning the lag, the drag or a depth ratio, and open it in Storybook for the movement: the test browser forces reduced motion, which freezes each avatar on one static frame.",
+			},
+		},
+	},
+	render: (args) => (
+		<div className="flex items-end gap-6">
+			{TURN_ANIMALS.map((animal) => (
+				<LabeledCell key={animal} label={animal}>
+					<BotAvatar
+						{...args}
+						animal={animal}
+						size={SPLIT_SIZE}
+						state={TURN_STATE}
+					/>
+				</LabeledCell>
+			))}
+		</div>
+	),
+})
+
+export const ChipRow = meta.story({
+	name: "Chip Row",
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Every animal in a row at 40px, the smallest slot the product draws, each one live. Amplitudes are authored in viewBox units and degrees and quantised to a fraction of a rendered pixel, so a chip holds still instead of shivering while the head breathes and the ears sway. Reach for this whenever an amplitude changes: watch a full minute and check that no avatar jitters, and that the ears still read as ears at this size.",
+			},
+		},
+	},
+	render: (args) => (
+		<div className="flex items-center gap-2">
+			{BOT_AVATAR_ANIMALS.map((animal) => (
+				<BotAvatar {...args} animal={animal} key={animal} size={CHIP_SIZE} />
+			))}
+		</div>
+	),
+})
+
+export const DepthLayers = meta.story({
+	name: "Depth Layers",
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The two animals that carry extras, frozen across a yaw sweep. The extras group sits at 0.85 of the head z radius and is projected through the ellipsoid the eyes are mapped on, so the owl face disc and the Skippy goggles swing across the head and foreshorten with it rather than riding the outline transform, which barely narrows. A shape may carry its own ratio; none of the nine animals does, so every extra here is drawn at the group default. Reach for this when adding a shape to an animal: check that it stays welded to the face through the sweep and returns to exactly the authored drawing at 0°.",
+			},
+		},
+	},
+	render: () => (
+		<div className="flex flex-col gap-4">
+			{DEPTH_ANIMALS.map((animal) => (
+				<div className="flex items-end gap-4" key={animal}>
+					{DEPTH_SWEEP.map((yaw) => (
+						<LabeledCell key={yaw} label={`${animal} · ${yaw}°`}>
+							<BotAvatar
+								animal={animal}
+								animated={false}
+								pitch={0}
+								roll={0}
+								size={SPLIT_SIZE}
+								yaw={yaw}
+							/>
+						</LabeledCell>
+					))}
+				</div>
+			))}
+		</div>
+	),
+	play: async ({ canvasElement }) => {
+		const avatars = Array.from(canvasElement.querySelectorAll("svg"))
+		const facing = avatars[1]
+		const turned = avatars[2]
+
+		await expect(extraTransform(facing)).toMatch(IDLE_EXTRA_WARP)
+		await expect(extraTransform(turned)).not.toBe(headTransform(turned))
+		await expect(extraReach(turned)).toBeGreaterThan(extraReach(facing))
 	},
 })

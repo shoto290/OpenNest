@@ -1,4 +1,4 @@
-export type BotAvatarShape =
+type BotAvatarShapeGeometry =
 	| {
 			kind: "path"
 			role: "outline" | "accent" | "line"
@@ -20,6 +20,8 @@ export type BotAvatarShape =
 			rx: number
 			ry: number
 	  }
+
+export type BotAvatarShape = BotAvatarShapeGeometry & { depthRatio?: number }
 
 export type BotAvatarVolume = {
 	center: [number, number]

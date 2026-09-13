@@ -349,10 +349,12 @@ function BotAvatar({
 								{...ROLE_PROPS.outline}
 								strokeWidth={round2(weight)}
 							/>
-							{definition.extras.map((shape) => (
-								<Shape key={shapeKey(shape)} shape={shape} weight={weight} />
-							))}
 						</g>
+						{definition.extras.map((shape, index) => (
+							<g data-part={PARTS.extra(index)} key={shapeKey(shape)}>
+								<Shape shape={shape} weight={weight} />
+							</g>
+						))}
 						<EarLayer
 							animal={animal}
 							ears={definition.ears}
