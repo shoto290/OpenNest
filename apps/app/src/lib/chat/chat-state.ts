@@ -82,6 +82,8 @@ export type ChatAction =
 	| { type: "stopRejected"; error: TransportError }
 	| { type: "errorDismissed"; id: string }
 	| { type: "binaryVersion"; version: string | null }
+	| { type: "questionPosted"; request: QuestionRequest }
+	| { type: "questionWithdrawn"; id: string }
 	| { type: "causesChanged"; causes: ReportedRunsByTurnId }
 
 export const initialChatState: ChatState = {
@@ -309,6 +311,10 @@ function applyQuestionRequested(
 	return takesRequest(state, state.question, request.id)
 		? { ...state, question: request }
 		: state
+}
+
+function applyQuestionWithdrawn(state: ChatState, id: string): ChatState {
+	return state.question?.id === id ? { ...state, question: null } : state
 }
 
 function clearRequest(state: ChatState, id: string): ChatState {
@@ -549,5 +555,9 @@ function reducedChat(state: ChatState, action: ChatAction): ChatState {
 			return applyErrorDismissed(state, action.id)
 		case "binaryVersion":
 			return { ...state, binaryVersion: action.version }
+		case "questionPosted":
+			return { ...state, question: action.request }
+		case "questionWithdrawn":
+			return applyQuestionWithdrawn(state, action.id)
 	}
 }
