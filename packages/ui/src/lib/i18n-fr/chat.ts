@@ -157,7 +157,13 @@ const chat = {
 		preview: "Aperçu",
 		submit: "Envoyer les réponses",
 		next: "Question suivante",
+		continue: "Continuer",
 		dismiss: "Ignorer",
+		copy: "Copier",
+		copied: "Copié",
+		copyAnnounced: "Lien copié dans le presse-papiers",
+		copyFailed:
+			"Copie impossible. Sélectionnez le lien et copiez-le vous-même.",
 	},
 	code: {
 		snippet: "Extrait de code",

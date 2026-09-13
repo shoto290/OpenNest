@@ -152,7 +152,12 @@ const chat = {
 		preview: "Preview",
 		submit: "Send answers",
 		next: "Next question",
+		continue: "Continue",
 		dismiss: "Dismiss",
+		copy: "Copy",
+		copied: "Copied",
+		copyAnnounced: "Link copied to clipboard",
+		copyFailed: "Couldn't copy. Select the link and copy it yourself.",
 	},
 	code: {
 		snippet: "Code snippet",
