@@ -238,6 +238,33 @@ describe("signing in", () => {
 		})
 	})
 
+	it("ends the running sign-in and starts a new one when the reader asks again", async () => {
+		const first = controller.signIn()
+		await flushed()
+
+		const second = controller.signIn()
+		await flushed()
+		port.announceStarted(SIGN_IN_URL)
+		await flushed()
+
+		expect(commands()).toEqual([
+			"check",
+			"signIn",
+			"cancelSignIn",
+			"signIn",
+			"openSignInUrl",
+		])
+		expect(controller.getState().connection).toEqual({
+			state: "waiting",
+			signInUrl: SIGN_IN_URL,
+		})
+
+		port.completeSignIn()
+		await Promise.all([first, second])
+		expect(controller.getState().step).toBe("summoned")
+		expect(world.sent).toHaveLength(1)
+	})
+
 	it("says in words what a rejection with no detail carries", async () => {
 		const signingIn = controller.signIn()
 		await Promise.resolve()
@@ -340,19 +367,6 @@ describe("the api key", () => {
 		)
 		expect(world.sent).toHaveLength(1)
 		expect(controller.getState().connection).toBeNull()
-	})
-
-	it("leaves a running sign-in alone when the reader asks to sign in again", async () => {
-		controller.askApiKey()
-		const signingIn = controller.signIn()
-		await flushed()
-
-		await controller.signIn()
-
-		expect(commands().filter((command) => command === "signIn")).toHaveLength(1)
-
-		port.completeSignIn()
-		await signingIn
 	})
 
 	it("holds the key and reads the account again", async () => {

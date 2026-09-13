@@ -293,6 +293,41 @@ describe("the key step", () => {
 	})
 })
 
+describe("a refused sign-in whose run is still alive", () => {
+	const NEW_SIGN_IN_URL =
+		"https://claude.ai/oauth/authorize?code=true&state=again"
+
+	beforeEach(async () => {
+		port.report = NOT_AUTHENTICATED
+		await controller.start()
+		await signingIn()
+		port.refusals.openSignInUrl = { kind: "refusedUrl" }
+		port.announceStarted(SIGN_IN_URL)
+		await flush()
+		delete port.refusals.openSignInUrl
+	})
+
+	it("reaches the code step of a new run on Try again", async () => {
+		expect(askedOf(stepOf()).failure?.title).toBe("Couldn't sign you in")
+
+		void answer(stepOf(), "Try again")
+		await flush()
+		port.announceStarted(NEW_SIGN_IN_URL)
+		await flush()
+
+		expect(commands()).toContain("cancelSignIn")
+		expect(askedOf(stepOf()).link?.url).toBe(NEW_SIGN_IN_URL)
+		expect(controller.getState().connection).toEqual({
+			state: "waiting",
+			signInUrl: NEW_SIGN_IN_URL,
+		})
+
+		port.completeSignIn()
+		await flush()
+		expect(world.sent).toHaveLength(1)
+	})
+})
+
 describe("the refused sign-in", () => {
 	beforeEach(async () => {
 		port.report = NOT_AUTHENTICATED

@@ -296,11 +296,26 @@ export const createOnboardingController = (
 		port.openSignInUrl(signInUrl).catch(live.fail)
 	}
 
+	const ignoringNotRunning = async (call: () => Promise<void>) => {
+		try {
+			await call()
+		} catch (reason) {
+			if (!isNotRunning(reason)) {
+				showFailed(reason)
+			}
+		}
+	}
+
+	const endSignIn = async () => {
+		attempt += 1
+		await ignoringNotRunning(() => port.cancelSignIn())
+	}
+
 	const isSigningIn = () => running?.isLive() ?? false
 
 	const signIn = async () => {
 		if (isSigningIn()) {
-			return
+			await endSignIn()
 		}
 		const live = openAttempt()
 		running = live
@@ -323,21 +338,6 @@ export const createOnboardingController = (
 				set({ isBusy: false })
 			}
 		}
-	}
-
-	const ignoringNotRunning = async (call: () => Promise<void>) => {
-		try {
-			await call()
-		} catch (reason) {
-			if (!isNotRunning(reason)) {
-				showFailed(reason)
-			}
-		}
-	}
-
-	const endSignIn = async () => {
-		attempt += 1
-		await ignoringNotRunning(() => port.cancelSignIn())
 	}
 
 	return {
