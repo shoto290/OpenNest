@@ -100,12 +100,11 @@ type SceneTimelineState = {
 	runId: string | null
 }
 
-const timelineAt = (
+const startOf = (
 	answers: SceneAnswers,
-	stillAt: number | null,
 	runId: string | null,
 ): SceneTimelineState => ({
-	frame: frameAt(stillAt ?? 0, answers),
+	frame: frameAt(0, answers),
 	runId,
 })
 
@@ -126,10 +125,10 @@ export const useSceneTimeline = ({
 	const onIdleRef = useRef(onIdle)
 	const stillAt = stillElapsed({ answers, beat, prefersReducedMotion })
 	const [timeline, setTimeline] = useState<SceneTimelineState>(() =>
-		timelineAt(answers, stillAt, runId),
+		startOf(answers, runId),
 	)
 
-	if (timeline.runId !== runId) setTimeline(timelineAt(answers, stillAt, runId))
+	if (timeline.runId !== runId) setTimeline(startOf(answers, runId))
 
 	onIdleRef.current = onIdle
 
@@ -147,12 +146,7 @@ export const useSceneTimeline = ({
 	useEffect(() => () => window.clearTimeout(idleRef.current), [])
 
 	useEffect(() => {
-		if (runId === null) return
-
-		if (stillAt !== null) {
-			setTimeline(timelineAt(answers, stillAt, runId))
-			return
-		}
+		if (runId === null || stillAt !== null) return
 
 		const missionAt = missionAtOf(answers)
 		let elapsed = 0
@@ -195,7 +189,11 @@ export const useSceneTimeline = ({
 		}
 	}, [answers, runId, stillAt])
 
-	return { frame: timeline.frame, engage, cancelIdle }
+	return {
+		frame: stillAt === null ? timeline.frame : frameAt(stillAt, answers),
+		engage,
+		cancelIdle,
+	}
 }
 
 export type { SceneAnswers, SceneFrame }
