@@ -2232,15 +2232,6 @@ const type = async (label: string, text: string) => {
 const isAsking = (question: string) =>
 	screen.queryByRole("form", { name: question }) !== null
 
-const pick = async (label: string) => {
-	await act(async () => {
-		fireEvent.click(
-			screen.getByRole("radio", { name: (name) => name.startsWith(label) }),
-		)
-	})
-	await press("Send answers")
-}
-
 type OnboardingScreen = {
 	refresh: () => Promise<void>
 	choose: (label: string) => Promise<void>
@@ -2273,7 +2264,14 @@ const renderOnboarding = async (
 	return {
 		refresh,
 		choose: async (label) => {
-			await pick(label)
+			await act(async () => {
+				fireEvent.click(
+					screen.getByRole("radio", {
+						name: (name) => name.startsWith(label),
+					}),
+				)
+			})
+			await press("Send answers")
 			await refresh()
 		},
 		press: async (name) => {
