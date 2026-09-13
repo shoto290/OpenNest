@@ -1,7 +1,6 @@
 "use client"
 
 import {
-	type ChangeEvent,
 	type FormEvent,
 	type KeyboardEvent,
 	type ReactNode,
@@ -338,7 +337,7 @@ const LinkField = ({ link }: LinkFieldProps) => {
 	}
 
 	return (
-		<div className={QUESTION_GROUP_CLASS} data-slot="tool-question-link">
+		<div className={QUESTION_GROUP_CLASS}>
 			<label className={FIELD_LABEL_CLASS} htmlFor={id}>
 				{link.label}
 			</label>
@@ -392,7 +391,7 @@ const EntryField = ({
 	}
 
 	return (
-		<div className={QUESTION_GROUP_CLASS} data-slot="tool-question-entry">
+		<div className={QUESTION_GROUP_CLASS}>
 			<label className={FIELD_LABEL_CLASS} htmlFor={id}>
 				{entry.label}
 			</label>
@@ -404,9 +403,7 @@ const EntryField = ({
 					"border-border",
 				)}
 				id={id}
-				onChange={(event: ChangeEvent<HTMLInputElement>) =>
-					onValueChange(event.target.value)
-				}
+				onChange={(event) => onValueChange(event.target.value)}
 				onKeyDown={readKey}
 				placeholder={entry.placeholder}
 				spellCheck={false}
