@@ -3,6 +3,7 @@ pub mod avatars;
 pub mod agent;
 pub mod bundles;
 pub mod commands;
+pub mod companions;
 pub mod conversations;
 pub mod db;
 pub mod environment;

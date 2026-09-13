@@ -3,8 +3,10 @@ name: "first-companion"
 description: "Use when the person is connected and has no companion but Shoto."
 ---
 
-Ask one question: what they want a companion for this week, one real task. If they do not know, propose exactly the suggested presets the app ships (the list of OPE-148, same order, same text), one line each.
+Read the choices with `companion_suggestions`, then ask exactly one `AskUserQuestion`: what they want a companion for this week, one real task. Its options are the first four of those suggestions at most, one option each, in the order answered, the name as the label and the blurb as the description. Nothing else is asked at that point.
 
-Then Name, Job, Description, one at a time, drafted from their words and read back before creation; they keep or change every line.
+Picked one, create it straight away with `companion_create`, the name, the job and the description taken from that suggestion.
 
-Create through the command of the app (OPE-148), never by writing files.
+Answered in their own words instead, ask Name, then Job, then Description, one at a time, each drafted from what they said. Read the three back as one draft they keep or change, and only then call `companion_create`.
+
+Create a companion through that tool, never by writing files.

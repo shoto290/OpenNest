@@ -18,7 +18,7 @@ describe("kiroshiServer", () => {
 		expect(DELEGATE_TOOL).toBe(`mcp__${KIROSHI_SERVER}__delegate`)
 	})
 
-	it("carries the delegate tool and every routine and mission tool of the session", () => {
+	it("carries the delegate tool and every routine, mission and companion tool of the session", () => {
 		expect(kiroshiTools(scope).map((held) => held.name)).toEqual([
 			"delegate",
 			"routine_list",
@@ -33,6 +33,9 @@ describe("kiroshiServer", () => {
 			"mission_close",
 			"mission_watch",
 			"mission_list",
+			"companion_suggestions",
+			"companion_create",
+			"companion_first_run_done",
 		])
 	})
 })
