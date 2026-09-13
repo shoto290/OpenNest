@@ -51,6 +51,7 @@ export type PostedQuestion = {
 	afterSeq: number
 	asking: TranscriptDraft
 	answered: TranscriptDraft | null
+	isAnswering: boolean
 }
 
 type AskingInput = {

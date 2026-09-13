@@ -4,7 +4,7 @@ import { type ChatController, createChatController } from "./chat-controller"
 import { isSessionReady, isTurnBusy } from "./chat-state"
 import type { ChatDriver } from "./driver"
 import { createFakeChatDriver, type FakeChatDriver } from "./fake-driver"
-import type { PostedRequest } from "./posted-question"
+import type { PostedAnswerHandler, PostedRequest } from "./posted-question"
 import { questionMessageIdOf } from "./question-message"
 import {
 	ASKED_FOR,
@@ -1194,25 +1194,92 @@ describe("createChatController", () => {
 			expect(controller.getState().question).toBeNull()
 		})
 
-		it("reports a handler that rejects the way a refused write is reported", async () => {
+		it("keeps the question answerable and names the rejection when the handler rejects", async () => {
 			const { controller } = await sessionlessHarness()
-			controller.postQuestion(BOT, POSTED, () =>
-				Promise.reject({
+			const onAnswers = vi
+				.fn<PostedAnswerHandler>()
+				.mockRejectedValueOnce({
 					kind: "storage",
 					failure: { kind: "poisonedConnection" },
-				}),
-			)
+				})
+				.mockResolvedValueOnce(undefined)
+			controller.postQuestion(BOT, POSTED, onAnswers)
 			await vi.runAllTimersAsync()
 
 			await controller.answer(POSTED.id, POSTED_ANSWER)
 			await vi.runAllTimersAsync()
 
-			const state = controller.getState()
-			expect(state.question).toBeNull()
-			expect(state.errors.at(-1)?.error).toEqual({
-				kind: "writeFailed",
-				detail: "the transcript store refused it (storage, poisonedConnection)",
+			const refused = controller.getState()
+			expect(refused.question?.id).toBe(POSTED.id)
+			expect(answeredIn(controller)).toBeUndefined()
+			expect(refused.errors.map(({ error }) => error)).toEqual([
+				{ kind: "unknownFailure", detail: "storage, poisonedConnection" },
+			])
+
+			await controller.answer(POSTED.id, POSTED_ANSWER)
+			await vi.runAllTimersAsync()
+
+			expect(controller.getState().question).toBeNull()
+			expect(answeredIn(controller)?.content).toBe("Subscription")
+		})
+
+		it("withdraws the question only once the handler has resolved", async () => {
+			const { controller } = await sessionlessHarness()
+			let resolveAnswers = () => {}
+			controller.postQuestion(
+				BOT,
+				POSTED,
+				() =>
+					new Promise<void>((resolve) => {
+						resolveAnswers = resolve
+					}),
+			)
+			await vi.runAllTimersAsync()
+
+			const answering = controller.answer(POSTED.id, POSTED_ANSWER)
+			await vi.runAllTimersAsync()
+
+			expect(controller.getState().question?.id).toBe(POSTED.id)
+			expect(answeredIn(controller)).toBeUndefined()
+
+			resolveAnswers()
+			await answering
+			await vi.runAllTimersAsync()
+
+			expect(controller.getState().question).toBeNull()
+			expect(answeredIn(controller)?.content).toBe("Subscription")
+		})
+
+		it("keeps the question live when the session resets", async () => {
+			const { controller } = await bootedHarness()
+			controller.postQuestion(BOT, POSTED, () => Promise.resolve())
+			await vi.runAllTimersAsync()
+
+			await controller.start()
+			await vi.runAllTimersAsync()
+
+			expect(controller.getState().question).toEqual(POSTED)
+			expect(askingIn(controller)).toBeDefined()
+		})
+
+		it("keeps the question live when a turn ends", async () => {
+			const { controller, driver } = await bootedHarness()
+			vi.spyOn(driver, "submitPrompt").mockResolvedValue()
+			await controller.send("hello")
+			driver.pushEvent({ type: "turnChanged", state: "running" })
+			await vi.runAllTimersAsync()
+			controller.postQuestion(BOT, POSTED, () => Promise.resolve())
+			await vi.runAllTimersAsync()
+
+			driver.pushEvent({
+				type: "turnEnded",
+				ended: { sessionId: "s-1", outcome: "completed" },
 			})
+			await vi.runAllTimersAsync()
+
+			const state = controller.getState()
+			expect(state.turn).toBe("idle")
+			expect(state.question).toEqual(POSTED)
 		})
 	})
 

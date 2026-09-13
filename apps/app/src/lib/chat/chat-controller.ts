@@ -11,6 +11,7 @@ import {
 	isSameRuntimeScope,
 	isSessionReady,
 	isTurnBusy,
+	toAnswerError,
 	toReadError,
 	toStoreError,
 	toTransportError,
@@ -1216,7 +1217,7 @@ export function createChatController(
 			return
 		}
 		const asked = bot.state.question
-		if (asked && !isRunOutsideOpenThread(bot)) {
+		if (asked && !isAnswering(bot, asked.id) && !isRunOutsideOpenThread(bot)) {
 			await answer(bot, asked.id, answersFromText(asked, trimmed))
 			return
 		}
@@ -1355,34 +1356,66 @@ export function createChatController(
 			? bot.posted.find((posted) => posted.request.id === id)
 			: undefined
 
+	const isAnswering = (bot: BotChat, id: string) =>
+		bot.posted.some((posted) => posted.request.id === id && posted.isAnswering)
+
+	const changePosted = (
+		bot: BotChat,
+		id: string,
+		change: Partial<PostedQuestion>,
+	) => {
+		bot.posted = bot.posted.map((known) =>
+			known.request.id === id ? { ...known, ...change } : known,
+		)
+	}
+
+	const answeredRowOf = (posted: PostedQuestion, answers: QuestionAnswers) => {
+		const content = answeredText(
+			withoutSecretQuestions(posted.request),
+			answers,
+		)
+		return content.length === 0
+			? null
+			: answeredRow({
+					id: newId(),
+					asking: posted.asking,
+					content,
+					createdAt: now(),
+				})
+	}
+
+	const releaseRefusedAnswer = (bot: BotChat, id: string) => {
+		if (bot.state.question?.id === id) {
+			changePosted(bot, id, { isAnswering: false })
+			return
+		}
+		bot.posted = bot.posted.filter((known) => known.request.id !== id)
+		syncBot(bot)
+	}
+
 	const answerPosted = async (
 		bot: BotChat,
 		posted: PostedQuestion,
 		answers: QuestionAnswers,
 	) => {
-		const content = answeredText(
-			withoutSecretQuestions(posted.request),
-			answers,
-		)
-		const answered =
-			content.length === 0
-				? null
-				: answeredRow({
-						id: newId(),
-						asking: posted.asking,
-						content,
-						createdAt: now(),
-					})
-		bot.posted = bot.posted.map((known) =>
-			known === posted ? { ...known, answered } : known,
-		)
-		dispatch(bot, { type: "questionWithdrawn", id: posted.request.id })
-		syncBot(bot)
+		const id = posted.request.id
+		if (posted.isAnswering) {
+			return
+		}
+		changePosted(bot, id, { isAnswering: true })
 		try {
 			await posted.onAnswers(answers)
 		} catch (reason) {
-			reportStore(bot, reason)
+			releaseRefusedAnswer(bot, id)
+			announce(bot, { type: "failed", error: toAnswerError(reason) })
+			return
 		}
+		changePosted(bot, id, {
+			isAnswering: false,
+			answered: answeredRowOf(posted, answers),
+		})
+		dispatch(bot, { type: "questionWithdrawn", id })
+		syncBot(bot)
 	}
 
 	const storedSeqOf = (conversationId: string) =>
@@ -1415,6 +1448,7 @@ export function createChatController(
 					createdAt: now(),
 				}),
 				answered: null,
+				isAnswering: false,
 			},
 		]
 		dispatch(bot, { type: "questionPosted", request })
@@ -1423,13 +1457,13 @@ export function createChatController(
 	}
 
 	const withdrawQuestion = (bot: BotChat, id: string) => {
-		const kept = bot.posted.filter(
-			(posted) => posted.request.id !== id || posted.answered !== null,
-		)
-		if (kept.length === bot.posted.length) {
+		const known = bot.posted.find((posted) => posted.request.id === id)
+		if (!known || known.answered !== null) {
 			return
 		}
-		bot.posted = kept
+		if (!known.isAnswering) {
+			bot.posted = bot.posted.filter((posted) => posted !== known)
+		}
 		dispatch(bot, { type: "questionWithdrawn", id })
 		syncBot(bot)
 	}
