@@ -17,6 +17,13 @@ import {
 } from "./chat-state"
 import type { ChatDriver } from "./driver"
 import {
+	type PostedAnswerHandler,
+	type PostedQuestion,
+	postedAnswerRow,
+	postedQuestionRow,
+	withPostedRows,
+} from "./posted-question"
+import {
 	answeredText,
 	answersFromText,
 	questionMessageIdOf,
@@ -121,6 +128,12 @@ export type ChatController = {
 	dismissError: (id: string) => void
 	respond: (id: string, decision: PermissionDecision) => Promise<void>
 	answer: (id: string, answers: QuestionAnswers) => Promise<void>
+	postQuestion: (
+		botId: string,
+		request: QuestionRequest,
+		onAnswers: PostedAnswerHandler,
+	) => boolean
+	withdrawQuestion: (botId: string, id: string) => void
 	retry: (id: string) => Promise<void>
 	shutdown: () => Promise<void>
 }
@@ -147,6 +160,7 @@ type BotChat = {
 	state: ChatState
 	run: LiveRun
 	activeTurn: ActiveTurn | null
+	posted: PostedQuestion[]
 	heldReply: ChatMessage | null
 	openMessages: Map<string, number>
 	settledMessages: Set<string>
@@ -200,6 +214,7 @@ export function createChatController(
 			state: initialChatState,
 			run: openedRun(false),
 			activeTurn: null,
+			posted: [],
 			heldReply: null,
 			openMessages: new Map(),
 			settledMessages: new Set(),
@@ -248,6 +263,11 @@ export function createChatController(
 		)
 	}
 
+	const postedRowsOf = (bot: BotChat, conversationId: string) =>
+		bot.posted.flatMap((posted) =>
+			posted.conversationId === conversationId ? posted.rows : [],
+		)
+
 	const syncBot = (bot: BotChat) => {
 		const conversationId = bot.state.conversationId
 		if (!conversationId) {
@@ -256,7 +276,10 @@ export function createChatController(
 		const current = transcript.getState()
 		dispatch(bot, {
 			type: "transcriptChanged",
-			messages: selectMessages(current, conversationId),
+			messages: withPostedRows(
+				selectMessages(current, conversationId),
+				postedRowsOf(bot, conversationId),
+			),
 			hasOlder: selectHasMore(current, conversationId),
 			hasNewer: selectHasNewer(current, conversationId),
 		})
@@ -1327,7 +1350,97 @@ export function createChatController(
 		)
 	}
 
+	const postedAskedIn = (bot: BotChat, id: string) =>
+		bot.state.question?.id === id
+			? bot.posted.find((posted) => posted.request.id === id)
+			: undefined
+
+	const replacePosted = (bot: BotChat, posted: PostedQuestion) => {
+		bot.posted = bot.posted.map((known) =>
+			known.request.id === posted.request.id ? posted : known,
+		)
+	}
+
+	const answerPosted = async (
+		bot: BotChat,
+		posted: PostedQuestion,
+		answers: QuestionAnswers,
+	) => {
+		const content = answeredText(posted.request, answers)
+		const question = posted.rows[0]
+		if (content.length === 0 || !question) {
+			return
+		}
+		replacePosted(bot, {
+			...posted,
+			rows: [
+				question,
+				postedAnswerRow({
+					id: newId(),
+					question,
+					content,
+					createdAt: now(),
+				}),
+			],
+		})
+		dispatch(bot, { type: "questionWithdrawn", id: posted.request.id })
+		syncBot(bot)
+		try {
+			await posted.onAnswers(answers)
+		} catch (reason) {
+			reportStore(bot, reason)
+		}
+	}
+
+	const postQuestion = (
+		bot: BotChat,
+		request: QuestionRequest,
+		onAnswers: PostedAnswerHandler,
+	) => {
+		if (bot.posted.some((posted) => posted.request.id === request.id)) {
+			return true
+		}
+		const conversationId = bot.state.conversationId
+		if (!conversationId || bot.state.question) {
+			return false
+		}
+		bot.posted = [
+			...bot.posted,
+			{
+				request,
+				onAnswers,
+				conversationId,
+				rows: [
+					postedQuestionRow({
+						request,
+						conversationId,
+						authorBotId: bot.id,
+						createdAt: now(),
+					}),
+				],
+			},
+		]
+		dispatch(bot, { type: "questionPosted", request })
+		syncBot(bot)
+		return true
+	}
+
+	const withdrawQuestion = (bot: BotChat, id: string) => {
+		const kept = bot.posted.filter((posted) => posted.request.id !== id)
+		if (kept.length === bot.posted.length) {
+			return
+		}
+		bot.posted = kept
+		dispatch(bot, { type: "questionWithdrawn", id })
+		syncBot(bot)
+	}
+
 	const answer = async (bot: BotChat, id: string, answers: QuestionAnswers) => {
+		const posted = postedAskedIn(bot, id)
+		if (posted) {
+			await answerPosted(bot, posted, answers)
+			return
+		}
 		const runtime = bot.state.runtime
 		const request = bot.state.question
 		if (!runtime || request?.id !== id || isRunOutsideOpenThread(bot)) {
@@ -1426,6 +1539,16 @@ export function createChatController(
 			onSelected((bot) => respond(bot, id, decision), undefined),
 		answer: (id, answers) =>
 			onSelected((bot) => answer(bot, id, answers), undefined),
+		postQuestion: (botId, request, onAnswers) => {
+			const bot = bots.get(botId)
+			return bot ? postQuestion(bot, request, onAnswers) : false
+		},
+		withdrawQuestion: (botId, id) => {
+			const bot = bots.get(botId)
+			if (bot) {
+				withdrawQuestion(bot, id)
+			}
+		},
 		retry: (id) =>
 			onSelected((bot) => admit(bot, () => retryPrompt(bot, id)), undefined),
 		shutdown: () => onSelected(shutdown, undefined),

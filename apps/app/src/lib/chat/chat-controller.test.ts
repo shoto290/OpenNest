@@ -18,6 +18,7 @@ import type {
 	AgentCommand,
 	AgentEvent,
 	ChatMessage,
+	CheckReport,
 	QuestionRequest,
 	RuntimeScope,
 	ScopedEvent,
@@ -145,6 +146,27 @@ const ASKED: QuestionRequest = {
 			options: [{ label: "React", description: null, preview: null }],
 		},
 	],
+}
+
+const POSTED: QuestionRequest = {
+	id: "posted-1",
+	questions: [
+		{
+			header: "Sign in",
+			question: "How do you want to sign in?",
+			multiSelect: false,
+			options: [{ label: "Subscription", description: null, preview: null }],
+		},
+	],
+}
+
+const POSTED_ANSWER = { "How do you want to sign in?": "Subscription" }
+
+const NOTHING_TO_RUN: CheckReport = {
+	connection: "unavailable",
+	binaryVersion: null,
+	authenticated: false,
+	error: null,
 }
 
 const EVOLUTION: AgentEvent = {
@@ -918,6 +940,170 @@ describe("createChatController", () => {
 			questionMessageIdOf(asked?.id ?? ""),
 		)
 		expect(spoken(await reload(store))).toEqual(spoken(state.messages))
+	})
+
+	describe("a question posted without a session", () => {
+		const answerQuestion = vi.fn(() => Promise.resolve())
+
+		const sessionlessHarness = async (store?: TranscriptStore) =>
+			bootedHarness({
+				store,
+				driver: (fake) => ({
+					...fake,
+					check: () => Promise.resolve(NOTHING_TO_RUN),
+					answerQuestion,
+				}),
+			})
+
+		const askingIn = (controller: ChatController) =>
+			controller
+				.getState()
+				.messages.find(
+					(message) => message.id === questionMessageIdOf(POSTED.id),
+				)
+
+		const answeredIn = (controller: ChatController) =>
+			controller
+				.getState()
+				.messages.find(
+					(message) =>
+						message.repliedToMessageId === questionMessageIdOf(POSTED.id),
+				)
+
+		beforeEach(() => {
+			answerQuestion.mockClear()
+		})
+
+		it("renders the asking the way the agent's own question renders", async () => {
+			const { controller } = await sessionlessHarness()
+
+			expect(
+				controller.postQuestion(BOT, POSTED, () => Promise.resolve()),
+			).toBe(true)
+			await vi.runAllTimersAsync()
+
+			const state = controller.getState()
+			expect(state.runtime).toBeNull()
+			expect(state.sessionOpen).toBe(false)
+			expect(state.question?.id).toBe(POSTED.id)
+			const asking = askingIn(controller)
+			expect(asking?.role).toBe("assistant")
+			expect(asking?.content).toContain("How do you want to sign in?")
+			expect(asking?.content).toContain("Subscription")
+		})
+
+		it("runs the handler when the reader picks an option", async () => {
+			const { controller } = await sessionlessHarness()
+			const onAnswers = vi.fn(() => Promise.resolve())
+			controller.postQuestion(BOT, POSTED, onAnswers)
+			await vi.runAllTimersAsync()
+
+			await controller.answer(POSTED.id, POSTED_ANSWER)
+			await vi.runAllTimersAsync()
+
+			expect(onAnswers).toHaveBeenCalledWith(POSTED_ANSWER)
+			expect(answerQuestion).not.toHaveBeenCalled()
+			expect(controller.getState().question).toBeNull()
+			const answered = answeredIn(controller)
+			expect(answered?.role).toBe("user")
+			expect(answered?.content).toBe("Subscription")
+			expect(controller.getState().errors).toEqual([])
+		})
+
+		it("takes what the reader typed in the composer as the answer", async () => {
+			const { controller } = await sessionlessHarness()
+			const onAnswers = vi.fn(() => Promise.resolve())
+			controller.postQuestion(BOT, POSTED, onAnswers)
+			await vi.runAllTimersAsync()
+
+			await controller.send("with an API key")
+			await vi.runAllTimersAsync()
+
+			expect(onAnswers).toHaveBeenCalledWith({
+				"How do you want to sign in?": "with an API key",
+			})
+			expect(answerQuestion).not.toHaveBeenCalled()
+			expect(controller.getState().question).toBeNull()
+			expect(answeredIn(controller)?.content).toBe("with an API key")
+		})
+
+		it("leaves nothing of the asking or its answer in the store", async () => {
+			const store = createFakeTranscriptStore()
+			const { controller, detach } = await sessionlessHarness(store)
+			controller.postQuestion(BOT, POSTED, () => Promise.resolve())
+			await vi.runAllTimersAsync()
+			await controller.answer(POSTED.id, POSTED_ANSWER)
+			await vi.runAllTimersAsync()
+			detach()
+
+			expect(await reload(store)).toEqual([])
+		})
+
+		it("keeps a single asking when the same question is posted twice", async () => {
+			const { controller } = await sessionlessHarness()
+			controller.postQuestion(BOT, POSTED, () => Promise.resolve())
+			await vi.runAllTimersAsync()
+
+			expect(
+				controller.postQuestion(BOT, POSTED, () => Promise.resolve()),
+			).toBe(true)
+			await vi.runAllTimersAsync()
+
+			const asked = controller
+				.getState()
+				.messages.filter(
+					(message) => message.id === questionMessageIdOf(POSTED.id),
+				)
+			expect(asked).toHaveLength(1)
+		})
+
+		it("refuses a question while another one is pending", async () => {
+			const { controller } = await sessionlessHarness()
+			controller.postQuestion(BOT, POSTED, () => Promise.resolve())
+			await vi.runAllTimersAsync()
+
+			const refused = controller.postQuestion(
+				BOT,
+				{ ...POSTED, id: "posted-2" },
+				() => Promise.resolve(),
+			)
+
+			expect(refused).toBe(false)
+			expect(controller.getState().question?.id).toBe(POSTED.id)
+		})
+
+		it("takes the asking back when the question is withdrawn", async () => {
+			const { controller } = await sessionlessHarness()
+			controller.postQuestion(BOT, POSTED, () => Promise.resolve())
+			await vi.runAllTimersAsync()
+
+			controller.withdrawQuestion(BOT, POSTED.id)
+			await vi.runAllTimersAsync()
+
+			expect(controller.getState().question).toBeNull()
+			expect(askingIn(controller)).toBeUndefined()
+		})
+
+		it("reports a handler that rejects the way a refused write is reported", async () => {
+			const { controller } = await sessionlessHarness()
+			controller.postQuestion(BOT, POSTED, () =>
+				Promise.reject({
+					kind: "storage",
+					failure: { kind: "poisonedConnection" },
+				}),
+			)
+			await vi.runAllTimersAsync()
+
+			await controller.answer(POSTED.id, POSTED_ANSWER)
+			await vi.runAllTimersAsync()
+
+			const state = controller.getState()
+			expect(state.question).toBeNull()
+			expect(state.errors.at(-1)?.error).toEqual({
+				kind: "writeFailed",
+				detail: "the transcript store refused it (storage, poisonedConnection)",
+			})
+		})
 	})
 
 	const spaceElsewhere = async (store: TranscriptStore) => {
