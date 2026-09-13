@@ -655,11 +655,15 @@ const chat = {
 			},
 		},
 		apiKeyFailed: {
-			header: "API key",
-			question: "That key was refused, so nothing was saved.",
-			title: "Couldn't use that key",
-			retry: "Try another key",
-			signIn: "Sign in instead",
+			retryDescription: "Paste a different Anthropic API key.",
+		},
+		connection: {
+			keyFailed: {
+				title: "Couldn't use that key",
+				sentence: "That key was refused, so nothing was saved.",
+				anotherKey: "Try another key",
+				signIn: "Sign in instead",
+			},
 		},
 		firstReply: {
 			header: "Last step",

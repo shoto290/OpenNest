@@ -675,11 +675,15 @@ const chat = {
 			},
 		},
 		apiKeyFailed: {
-			header: "Clé API",
-			question: "Cette clé a été refusée, donc rien n'a été enregistré.",
-			title: "Impossible d'utiliser cette clé",
-			retry: "Essayer une autre clé",
-			signIn: "Se connecter à la place",
+			retryDescription: "Collez une autre clé API Anthropic.",
+		},
+		connection: {
+			keyFailed: {
+				title: "Impossible d'utiliser cette clé",
+				sentence: "Cette clé a été refusée, donc rien n'a été enregistré.",
+				anotherKey: "Essayer une autre clé",
+				signIn: "Se connecter à la place",
+			},
 		},
 		firstReply: {
 			header: "Dernière étape",

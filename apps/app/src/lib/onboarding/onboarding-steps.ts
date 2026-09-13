@@ -243,20 +243,20 @@ const apiKeyFailedStep = (
 ): OnboardingStepQuestion =>
 	choiceStep({
 		id,
-		header: i18n.t("chat:onboarding.apiKeyFailed.header"),
-		question: i18n.t("chat:onboarding.apiKeyFailed.question"),
+		header: i18n.t("chat:onboarding.apiKey.header"),
+		question: i18n.t("chat:onboarding.connection.keyFailed.sentence"),
 		failure: {
-			title: i18n.t("chat:onboarding.apiKeyFailed.title"),
+			title: i18n.t("chat:onboarding.connection.keyFailed.title"),
 			detail: exitDetail,
 		},
 		choices: [
 			{
-				label: i18n.t("chat:onboarding.apiKeyFailed.retry"),
-				description: i18n.t("chat:onboarding.access.apiKey.description"),
+				label: i18n.t("chat:onboarding.connection.keyFailed.anotherKey"),
+				description: i18n.t("chat:onboarding.apiKeyFailed.retryDescription"),
 				choose: controller.askApiKey,
 			},
 			signInChoice(
-				i18n.t("chat:onboarding.apiKeyFailed.signIn"),
+				i18n.t("chat:onboarding.connection.keyFailed.signIn"),
 				controller.signIn,
 			),
 		],
