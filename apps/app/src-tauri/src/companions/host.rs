@@ -19,7 +19,6 @@ const NO_DATABASE: &str = "the store this session writes to is not open";
 pub struct CompanionHost<R: Runtime> {
 	app: AppHandle<R>,
 	conversation_id: String,
-	bot_id: String,
 }
 
 impl<R: Runtime> Clone for CompanionHost<R> {
@@ -27,14 +26,13 @@ impl<R: Runtime> Clone for CompanionHost<R> {
 		Self {
 			app: self.app.clone(),
 			conversation_id: self.conversation_id.clone(),
-			bot_id: self.bot_id.clone(),
 		}
 	}
 }
 
 impl<R: Runtime> CompanionHost<R> {
-	pub fn new(app: AppHandle<R>, conversation_id: String, bot_id: String) -> Self {
-		Self { app, conversation_id, bot_id }
+	pub fn new(app: AppHandle<R>, conversation_id: String) -> Self {
+		Self { app, conversation_id }
 	}
 
 	pub async fn answer(&self, request: Value) -> HostAnswer {
@@ -214,7 +212,7 @@ mod tests {
 	}
 
 	fn serving(app: &App<MockRuntime>, conversation_id: &str) -> CompanionHost<MockRuntime> {
-		CompanionHost::new(app.handle().clone(), conversation_id.to_owned(), "b1".to_owned())
+		CompanionHost::new(app.handle().clone(), conversation_id.to_owned())
 	}
 
 	fn asking(operation: &str) -> Value {
