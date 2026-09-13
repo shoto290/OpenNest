@@ -6,37 +6,36 @@ import type {
 	TranscriptMessage,
 } from "../conversations/transcript-contract"
 
-export type PostedAnswerHandler = (
-	answers: QuestionAnswers,
-) => Promise<void> | void
+export type PostedAnswerHandler = (answers: QuestionAnswers) => Promise<void>
 
 export type PostedQuestion = {
 	request: QuestionRequest
 	onAnswers: PostedAnswerHandler
 	conversationId: string
-	rows: TranscriptDraft[]
+	asking: TranscriptDraft
+	answered: TranscriptDraft | null
 }
 
-type PostedRowInput = {
+type AskingInput = {
 	request: QuestionRequest
 	conversationId: string
 	authorBotId: string
 	createdAt: number
 }
 
-type PostedAnswerInput = {
+type AnsweredInput = {
 	id: string
-	question: TranscriptDraft
+	asking: TranscriptDraft
 	content: string
 	createdAt: number
 }
 
-export const postedQuestionRow = ({
+export const askingRow = ({
 	request,
 	conversationId,
 	authorBotId,
 	createdAt,
-}: PostedRowInput): TranscriptDraft => ({
+}: AskingInput): TranscriptDraft => ({
 	id: questionMessageIdOf(request.id),
 	conversationId,
 	turnId: questionMessageIdOf(request.id),
@@ -49,23 +48,29 @@ export const postedQuestionRow = ({
 	runtimeSessionId: null,
 })
 
-export const postedAnswerRow = ({
+export const answeredRow = ({
 	id,
-	question,
+	asking,
 	content,
 	createdAt,
-}: PostedAnswerInput): TranscriptDraft => ({
+}: AnsweredInput): TranscriptDraft => ({
 	id,
-	conversationId: question.conversationId,
-	turnId: question.turnId,
+	conversationId: asking.conversationId,
+	turnId: asking.turnId,
 	role: "user",
 	content,
 	completion: "complete",
 	createdAt,
 	authorBotId: null,
-	repliedToMessageId: question.id,
+	repliedToMessageId: asking.id,
 	runtimeSessionId: null,
 })
+
+export const rowsOf = ({
+	asking,
+	answered,
+}: PostedQuestion): TranscriptDraft[] =>
+	answered ? [asking, answered] : [asking]
 
 export const withPostedRows = (
 	messages: TranscriptMessage[],

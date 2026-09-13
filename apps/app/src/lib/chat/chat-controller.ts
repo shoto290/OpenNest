@@ -17,10 +17,11 @@ import {
 } from "./chat-state"
 import type { ChatDriver } from "./driver"
 import {
+	answeredRow,
+	askingRow,
 	type PostedAnswerHandler,
 	type PostedQuestion,
-	postedAnswerRow,
-	postedQuestionRow,
+	rowsOf,
 	withPostedRows,
 } from "./posted-question"
 import {
@@ -265,7 +266,7 @@ export function createChatController(
 
 	const postedRowsOf = (bot: BotChat, conversationId: string) =>
 		bot.posted.flatMap((posted) =>
-			posted.conversationId === conversationId ? posted.rows : [],
+			posted.conversationId === conversationId ? rowsOf(posted) : [],
 		)
 
 	const syncBot = (bot: BotChat) => {
@@ -1350,16 +1351,10 @@ export function createChatController(
 		)
 	}
 
-	const postedAskedIn = (bot: BotChat, id: string) =>
+	const pendingPostOf = (bot: BotChat, id: string) =>
 		bot.state.question?.id === id
 			? bot.posted.find((posted) => posted.request.id === id)
 			: undefined
-
-	const replacePosted = (bot: BotChat, posted: PostedQuestion) => {
-		bot.posted = bot.posted.map((known) =>
-			known.request.id === posted.request.id ? posted : known,
-		)
-	}
 
 	const answerPosted = async (
 		bot: BotChat,
@@ -1367,22 +1362,18 @@ export function createChatController(
 		answers: QuestionAnswers,
 	) => {
 		const content = answeredText(posted.request, answers)
-		const question = posted.rows[0]
-		if (content.length === 0 || !question) {
+		if (content.length === 0) {
 			return
 		}
-		replacePosted(bot, {
-			...posted,
-			rows: [
-				question,
-				postedAnswerRow({
-					id: newId(),
-					question,
-					content,
-					createdAt: now(),
-				}),
-			],
+		const answered = answeredRow({
+			id: newId(),
+			asking: posted.asking,
+			content,
+			createdAt: now(),
 		})
+		bot.posted = bot.posted.map((known) =>
+			known === posted ? { ...known, answered } : known,
+		)
 		dispatch(bot, { type: "questionWithdrawn", id: posted.request.id })
 		syncBot(bot)
 		try {
@@ -1410,14 +1401,13 @@ export function createChatController(
 				request,
 				onAnswers,
 				conversationId,
-				rows: [
-					postedQuestionRow({
-						request,
-						conversationId,
-						authorBotId: bot.id,
-						createdAt: now(),
-					}),
-				],
+				asking: askingRow({
+					request,
+					conversationId,
+					authorBotId: bot.id,
+					createdAt: now(),
+				}),
+				answered: null,
 			},
 		]
 		dispatch(bot, { type: "questionPosted", request })
@@ -1436,7 +1426,7 @@ export function createChatController(
 	}
 
 	const answer = async (bot: BotChat, id: string, answers: QuestionAnswers) => {
-		const posted = postedAskedIn(bot, id)
+		const posted = pendingPostOf(bot, id)
 		if (posted) {
 			await answerPosted(bot, posted, answers)
 			return
