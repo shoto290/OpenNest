@@ -46,9 +46,9 @@ const ROW_ENTER =
 
 // The transcript rests its column against the composer; the scene holds every
 // row it has played, so it anchors the column to the top of the thread area
-// instead and reclaims one spacing step of padding to keep the fold at 1440x900
-// showing the request row and the three that follow it.
-const TRANSCRIPT_INSET = "justify-start pt-4"
+// instead. The fold at 1440x900 leaves 297px of thread area, four pixels more
+// than the four held rows need: the next step up of the scale spends them.
+const TRANSCRIPT_INSET = "justify-start pt-1.5"
 
 const NO_PINS: PinnedMessage[] = []
 

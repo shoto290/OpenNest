@@ -293,7 +293,6 @@ const WORK: SceneSpace = {
 		mission: sceneMission({
 			bot: SABLE,
 			objective: SCENE_COPY.loops.work.missionObjective,
-			externalId: SCENE_COPY.loops.work.missionTicket,
 		}),
 	},
 }

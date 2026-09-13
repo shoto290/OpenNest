@@ -189,7 +189,6 @@ export const SCENE_COPY = {
 				"The empty state's drawn: a sentence and a button, not a blank panel.",
 			missionObjective:
 				"Take that empty state through the five screens that still don't have one.",
-			missionTicket: "APP-215",
 		},
 	},
 	exchanges: {
