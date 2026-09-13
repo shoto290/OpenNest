@@ -630,6 +630,12 @@ const chat = {
 				retry: "Try again",
 				pasteKey: "Paste a key instead",
 			},
+			keyFailed: {
+				title: "Couldn't use that key",
+				sentence: "That key was refused, so nothing was saved.",
+				anotherKey: "Try another key",
+				signIn: "Sign in instead",
+			},
 			settled: "Claude account connected",
 		},
 		test: {

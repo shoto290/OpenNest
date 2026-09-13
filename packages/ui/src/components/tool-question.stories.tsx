@@ -19,6 +19,7 @@ import {
 	type ToolQuestionItem,
 	type ToolQuestionProps,
 } from "@workspace/ui/components/tool-question"
+import { chat } from "@workspace/ui/lib/i18n-en/chat"
 
 const FRAMEWORK_QUESTION: ToolQuestionItem = {
 	question: "Which framework should the dashboard use?",
@@ -546,6 +547,28 @@ const SIGN_IN_FAILED_STEP: ToolQuestionItem = {
 	],
 }
 
+const KEY_FAILED = chat.onboarding.connection.keyFailed
+
+const KEY_REFUSED_DETAIL = "API Error: 401 API key is invalid."
+
+const KEY_FAILED_STEP: ToolQuestionItem = {
+	question: "Try another key, or sign in?",
+	header: "API key",
+	optionsOnly: true,
+	failure: { title: KEY_FAILED.title, detail: KEY_REFUSED_DETAIL },
+	options: [
+		{
+			label: KEY_FAILED.anotherKey,
+			description: "Paste a different Anthropic API key.",
+		},
+		{
+			label: KEY_FAILED.signIn,
+			description:
+				"Opens your browser once. Works with your Pro or Max subscription.",
+		},
+	],
+}
+
 const FIRST_REPLY_STEP: ToolQuestionItem = {
 	question: "That's it working. Ready for the last one?",
 	header: "Last step",
@@ -708,6 +731,81 @@ export const StepSignInFailed = meta.story({
 	},
 	play: async ({ canvasElement }) => {
 		await expectAskedByShoto(canvasElement, SIGN_IN_FAILED_STEP.question)
+	},
+})
+
+export const StepApiKeyFailed = meta.story({
+	args: { questions: [KEY_FAILED_STEP] },
+	render: (args) => (
+		<div className="w-[320px]" data-testid="column">
+			<Message from="assistant">
+				<MessageAvatar>
+					<BotIdentityAvatar
+						animal={SHOTO.animal}
+						blot={SHOTO.blot}
+						name={SHOTO.name}
+						seed={SHOTO.id}
+						size={28}
+					/>
+				</MessageAvatar>
+				<MessageContent>
+					<MessageAuthor author={SHOTO} />
+					<MessageBubble variant="soft">
+						<MessageBubbleContent>{KEY_FAILED.sentence}</MessageBubbleContent>
+					</MessageBubble>
+					<MessageBubble>
+						<MessageBubbleContent>
+							<ToolQuestion {...args} onDeny={undefined} />
+						</MessageBubbleContent>
+					</MessageBubble>
+				</MessageContent>
+			</Message>
+		</div>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The API key that came back refused, in a 320px column. The sentence that says what went wrong is the companion's own line above the card; inside it, the failure block with the raw agent line sits above the question, and the two ways forward are options below it. No key field and no link: the refused key is not asked for again in place.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const column = canvas.getByTestId("column")
+		const form = canvas.getByRole("form")
+		const sentence = canvas.getByText(KEY_FAILED.sentence)
+		const failure = slotIn(canvasElement, "tool-question-failure")
+		const question = canvas.getByText(KEY_FAILED_STEP.question)
+		const detail = canvas.getByText(KEY_REFUSED_DETAIL)
+		const radios = canvas.getAllByRole("radio")
+		const follows = (a: Node, b: Node) =>
+			Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)
+
+		await expect(follows(sentence, form)).toBe(true)
+		await expect(form).toContainElement(failure)
+		await expect(follows(failure, question)).toBe(true)
+		await expect(detail).toBeVisible()
+		await expect(form).toHaveAccessibleDescription(KEY_FAILED.title)
+
+		await expect(radios).toHaveLength(2)
+		await expect(radios[0]).toHaveAccessibleName(
+			expect.stringContaining(KEY_FAILED.anotherKey),
+		)
+		await expect(radios[1]).toHaveAccessibleName(
+			expect.stringContaining(KEY_FAILED.signIn),
+		)
+		await expect(follows(question, radios[0] as Node)).toBe(true)
+
+		await expect(canvas.queryByRole("textbox")).not.toBeInTheDocument()
+		await expect(canvas.queryByRole("link")).not.toBeInTheDocument()
+
+		const bounds = column.getBoundingClientRect()
+		for (const element of [detail, ...radios]) {
+			const rect = element.getBoundingClientRect()
+			await expect(rect.left).toBeGreaterThanOrEqual(bounds.left)
+			await expect(rect.right).toBeLessThanOrEqual(bounds.right)
+		}
+		await expect(column.scrollWidth).toBeLessThanOrEqual(column.clientWidth)
 	},
 })
 
@@ -929,18 +1027,8 @@ export const Failure = meta.story({
 	},
 })
 
-export const FailureAboveEntry = meta.story({
-	args: {
-		questions: [
-			{
-				...KEY_STEP,
-				failure: {
-					title: "That key didn't work",
-					detail: "API Error: 401 API key is invalid.",
-				},
-			},
-		],
-	},
+export const EntryNarrow = meta.story({
+	args: { questions: [KEY_STEP] },
 	render: (args) => (
 		<div className="w-[320px]" data-testid="column">
 			<ToolQuestion {...args} />
@@ -950,16 +1038,13 @@ export const FailureAboveEntry = meta.story({
 		docs: {
 			description: {
 				story:
-					"The key path coming back refused: the failure block sits above an entry question rather than above options, in a 320px column. Check that the detail and the key field stay inside the column and that nothing in the card pushes it sideways.",
+					"The paste-a-key question in a 320px column. Check that the key field stays inside the column and that nothing in the card pushes it sideways. Pick `StepApiKeyFailed` for the same path coming back refused.",
 			},
 		},
 	},
 	play: async ({ canvas }) => {
 		const column = canvas.getByTestId("column")
 
-		await expect(
-			canvas.getByText("API Error: 401 API key is invalid."),
-		).toBeVisible()
 		await expect(canvas.getByLabelText("Key")).toBeVisible()
 		await expect(column.scrollWidth).toBeLessThanOrEqual(column.clientWidth)
 	},

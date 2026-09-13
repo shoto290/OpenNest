@@ -652,6 +652,12 @@ const chat = {
 				retry: "Réessayer",
 				pasteKey: "Coller une clé à la place",
 			},
+			keyFailed: {
+				title: "Impossible d'utiliser cette clé",
+				sentence: "Cette clé a été refusée, donc rien n'a été enregistré.",
+				anotherKey: "Essayer une autre clé",
+				signIn: "Se connecter à la place",
+			},
 			settled: "Compte Claude connecté",
 		},
 		test: {
