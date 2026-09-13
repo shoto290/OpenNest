@@ -384,6 +384,11 @@ type EntryFieldProps = {
 	onSubmit: () => void
 }
 
+const LEGACY_COMPOSITION_KEY_CODE = 229
+
+const isComposing = (event: globalThis.KeyboardEvent) =>
+	event.isComposing || event.keyCode === LEGACY_COMPOSITION_KEY_CODE
+
 const EntryField = ({
 	entry,
 	value,
@@ -393,7 +398,7 @@ const EntryField = ({
 	const id = useId()
 
 	const readKey = (event: KeyboardEvent<HTMLInputElement>) => {
-		if (event.key !== "Enter" || event.nativeEvent.isComposing) return
+		if (event.key !== "Enter" || isComposing(event.nativeEvent)) return
 		event.preventDefault()
 		onSubmit()
 	}
