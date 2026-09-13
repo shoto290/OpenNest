@@ -1,6 +1,7 @@
 "use client"
 
 import {
+	type ChangeEvent,
 	type FormEvent,
 	type KeyboardEvent,
 	type ReactNode,
@@ -11,6 +12,10 @@ import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
 import { SettingsField } from "@workspace/ui/components/settings-field"
+import {
+	FIELD_CONTROL_CLASS,
+	FIELD_LABEL_CLASS,
+} from "@workspace/ui/components/settings-styles"
 import { Button } from "@workspace/ui/components/ui/button"
 import { Checkbox } from "@workspace/ui/components/ui/checkbox"
 import {
@@ -19,6 +24,7 @@ import {
 } from "@workspace/ui/components/ui/radio-group"
 import { Tabs, TabsList, TabsTrigger } from "@workspace/ui/components/ui/tabs"
 import { useAutoFocus } from "@workspace/ui/hooks/use-auto-focus"
+import { useCopyText } from "@workspace/ui/hooks/use-copy-text"
 import { cn } from "@workspace/ui/lib/utils"
 
 const QUESTION_TAB_LIST_CLASS =
@@ -30,10 +36,38 @@ const QUESTION_TAB_CLASS =
 const QUESTION_FORM_CLASS =
 	"grid w-full gap-3 rounded-2xl text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4 focus-visible:ring-offset-background"
 
+const QUESTION_GROUP_CLASS = "flex flex-col gap-1.5"
+
+const QUESTION_MONO_LINE_CLASS = "truncate font-mono text-compact leading-5"
+
+const QUESTION_LINK_ROW_CLASS =
+	"flex items-center gap-2 rounded-lg border border-border bg-background py-1 pe-1 ps-3 has-[input:focus-visible]:border-ring has-[input:focus-visible]:ring-3 has-[input:focus-visible]:ring-ring/30"
+
 export type ToolQuestionOption = {
 	label: string
 	description: string
 	preview?: ReactNode
+}
+
+export type ToolQuestionLink = {
+	label: string
+	url: string
+}
+
+export type ToolQuestionEntry = {
+	label: string
+	placeholder?: string
+	isSecret?: boolean
+}
+
+export type ToolQuestionFailure = {
+	title: string
+	detail?: string
+}
+
+export type ToolQuestionExit = {
+	label: string
+	onSelect: () => void
 }
 
 export type ToolQuestionItem = {
@@ -41,6 +75,11 @@ export type ToolQuestionItem = {
 	header: string
 	multiSelect?: boolean
 	options: ToolQuestionOption[]
+	optionsOnly?: boolean
+	link?: ToolQuestionLink
+	entry?: ToolQuestionEntry
+	exit?: ToolQuestionExit
+	failure?: ToolQuestionFailure
 }
 
 export type ToolQuestionAnswers = Record<string, string>
@@ -147,6 +186,9 @@ const ToolQuestion = ({
 		sendOrAdvance()
 	}
 
+	const writeTypedAnswer = (text: string) =>
+		writeDraft(item.question, { selected: [], text })
+
 	return (
 		<form
 			aria-labelledby={askedId}
@@ -173,31 +215,46 @@ const ToolQuestion = ({
 				</TabsList>
 			</Tabs>
 
-			<div className="grid gap-2">
+			<div className={cn("grid", item.entry ? "gap-3" : "gap-2")}>
+				{item.failure ? <FailureBlock failure={item.failure} /> : null}
+
 				<p className="font-medium text-foreground" id={askedId}>
 					{item.question}
 				</p>
 
-				{item.multiSelect ? (
-					<div className="grid gap-2">{rows}</div>
-				) : (
-					<RadioGroup
-						className="gap-2"
-						onValueChange={(label: string) => pickOption(item, label)}
-						value={draft.selected[0] ?? ""}
-					>
-						{rows}
-					</RadioGroup>
-				)}
+				{item.link ? <LinkField link={item.link} /> : null}
 
-				<SettingsField
-					label={t("toolQuestion.freeText")}
-					onValueChange={(text) =>
-						writeDraft(item.question, { selected: [], text })
-					}
-					placeholder={t("toolQuestion.freeTextPlaceholder")}
-					value={draft.text}
-				/>
+				{item.entry ? (
+					<EntryField
+						entry={item.entry}
+						onSubmit={sendOrAdvance}
+						onValueChange={writeTypedAnswer}
+						value={draft.text}
+					/>
+				) : (
+					<>
+						{item.multiSelect ? (
+							<div className="grid gap-2">{rows}</div>
+						) : (
+							<RadioGroup
+								className="gap-2"
+								onValueChange={(label: string) => pickOption(item, label)}
+								value={draft.selected[0] ?? ""}
+							>
+								{rows}
+							</RadioGroup>
+						)}
+
+						{item.optionsOnly ? null : (
+							<SettingsField
+								label={t("toolQuestion.freeText")}
+								onValueChange={writeTypedAnswer}
+								placeholder={t("toolQuestion.freeTextPlaceholder")}
+								value={draft.text}
+							/>
+						)}
+					</>
+				)}
 			</div>
 
 			<div className="flex flex-wrap items-center gap-2">
@@ -214,12 +271,149 @@ const ToolQuestion = ({
 						</>
 					)}
 				</Button>
-				<Button onClick={onDeny} size="sm" type="button" variant="outline">
-					<Icons.Close data-icon="inline-start" />
-					{t("toolQuestion.dismiss")}
-				</Button>
+				{item.exit ? (
+					<Button
+						className="text-muted-foreground leading-5"
+						onClick={item.exit.onSelect}
+						size="sm"
+						type="button"
+						variant="ghost"
+					>
+						{item.exit.label}
+					</Button>
+				) : null}
+				{onDeny ? (
+					<Button onClick={onDeny} size="sm" type="button" variant="outline">
+						<Icons.Close data-icon="inline-start" />
+						{t("toolQuestion.dismiss")}
+					</Button>
+				) : null}
 			</div>
 		</form>
+	)
+}
+
+type FailureBlockProps = {
+	failure: ToolQuestionFailure
+}
+
+const FailureBlock = ({ failure }: FailureBlockProps) => (
+	<div className={QUESTION_GROUP_CLASS} data-slot="tool-question-failure">
+		<div className="flex gap-2">
+			<span
+				aria-hidden="true"
+				className="mt-1.75 size-1.5 shrink-0 rounded-full bg-destructive"
+				data-slot="tool-question-failure-dot"
+			/>
+			<p className="min-w-0 wrap-break-word font-medium text-foreground text-sm leading-5">
+				{failure.title}
+			</p>
+		</div>
+		{failure.detail ? (
+			<p className="wrap-break-word rounded-md bg-background px-2 py-1 text-start font-mono text-muted-foreground text-xs leading-4.5">
+				{failure.detail}
+			</p>
+		) : null}
+	</div>
+)
+
+type LinkFieldProps = {
+	link: ToolQuestionLink
+}
+
+const LinkField = ({ link }: LinkFieldProps) => {
+	const { t } = useTranslation("chat")
+	const { copied, copy } = useCopyText(link.url)
+	const [hasFailedToCopy, setHasFailedToCopy] = useState(false)
+	const id = useId()
+
+	const hasCopied = copied && !hasFailedToCopy
+	const CopyGlyph = hasCopied ? Icons.Check : Icons.Copy
+	const failed = hasFailedToCopy ? t("toolQuestion.copyFailed") : null
+	const announced = hasCopied ? t("toolQuestion.copyAnnounced") : null
+
+	const copyLink = () => {
+		setHasFailedToCopy(false)
+		copy().catch(() => setHasFailedToCopy(true))
+	}
+
+	return (
+		<div className={QUESTION_GROUP_CLASS} data-slot="tool-question-link">
+			<label className={FIELD_LABEL_CLASS} htmlFor={id}>
+				{link.label}
+			</label>
+			<div className={QUESTION_LINK_ROW_CLASS}>
+				<input
+					className={cn(
+						QUESTION_MONO_LINE_CLASS,
+						"min-w-0 flex-1 bg-transparent text-foreground outline-none",
+					)}
+					id={id}
+					readOnly
+					value={link.url}
+				/>
+				<Button
+					className="h-7 shrink-0 px-2.5 leading-5"
+					onClick={copyLink}
+					size="sm"
+					type="button"
+					variant="ghost"
+				>
+					<CopyGlyph className="size-3.5 text-muted-foreground" />
+					{hasCopied ? t("toolQuestion.copied") : t("toolQuestion.copy")}
+				</Button>
+			</div>
+			<span aria-live="polite" className="sr-only">
+				{failed ?? announced}
+			</span>
+		</div>
+	)
+}
+
+type EntryFieldProps = {
+	entry: ToolQuestionEntry
+	value: string
+	onValueChange: (value: string) => void
+	onSubmit: () => void
+}
+
+const EntryField = ({
+	entry,
+	value,
+	onValueChange,
+	onSubmit,
+}: EntryFieldProps) => {
+	const id = useId()
+
+	const readKey = (event: KeyboardEvent<HTMLInputElement>) => {
+		if (event.key !== "Enter") return
+		event.preventDefault()
+		onSubmit()
+	}
+
+	return (
+		<div className={QUESTION_GROUP_CLASS} data-slot="tool-question-entry">
+			<label className={FIELD_LABEL_CLASS} htmlFor={id}>
+				{entry.label}
+			</label>
+			<input
+				autoComplete="off"
+				className={cn(
+					FIELD_CONTROL_CLASS,
+					QUESTION_MONO_LINE_CLASS,
+					"border-border",
+				)}
+				id={id}
+				onChange={(event: ChangeEvent<HTMLInputElement>) =>
+					onValueChange(event.target.value)
+				}
+				onKeyDown={readKey}
+				placeholder={entry.placeholder}
+				spellCheck={false}
+				type={entry.isSecret ? "password" : "text"}
+				value={value}
+			/>
+		</div>
 	)
 }
 
