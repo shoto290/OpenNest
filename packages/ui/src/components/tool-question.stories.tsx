@@ -924,7 +924,7 @@ export const FailureAboveEntry = meta.story({
 		docs: {
 			description: {
 				story:
-					"The key path coming back refused: the failure block sits above an entry question rather than above options, in a 320px column. Check that the detail wraps on its own surface inside the column and that nothing in the card pushes the column sideways.",
+					"The key path coming back refused: the failure block sits above an entry question rather than above options, in a 320px column. Check that the detail and the key field stay inside the column and that nothing in the card pushes it sideways.",
 			},
 		},
 	},
