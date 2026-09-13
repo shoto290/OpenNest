@@ -46,6 +46,7 @@ const GAZE_LEFT = { yaw: -GAZE_YAW_LIMIT, pitch: 0 }
 const GAZE_RIGHT = { yaw: GAZE_YAW_LIMIT, pitch: 0 }
 const DRAG_FLOOR = 1
 const RETURN_BAND = 0.5
+const EAR_ARRIVAL = 500
 const EVEN_DRAW = 0.5
 const INSIDE_TURN_MS = 40
 const HALFWAY_TURN_MS = 400
@@ -167,12 +168,15 @@ describe("the ears on a turning head", () => {
 
 		const dragged = Math.min(...swing)
 		const after = swing.slice(swing.indexOf(dragged))
+		const lastOutside = swing.reduce(
+			(latest, twist, frame) =>
+				Math.abs(twist - settled) > RETURN_BAND ? frame : latest,
+			-1,
+		)
 
 		expect(dragged).toBeLessThan(settled - DRAG_FLOOR)
 		expect(Math.max(...after)).toBeGreaterThan(settled)
-		expect(Math.abs(swing[swing.length - 1] - settled)).toBeLessThan(
-			RETURN_BAND,
-		)
+		expect((lastOutside + 1) * FRAME_MS).toBeLessThanOrEqual(EAR_ARRIVAL)
 	})
 
 	it("displaces the near ear and the far ear by different amounts", () => {

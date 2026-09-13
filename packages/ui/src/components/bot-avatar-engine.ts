@@ -318,15 +318,11 @@ export class BotAvatarEngine {
 		this.extraRests = this.solveExtraRests()
 	}
 
-	private extraDepthRatio(index: number) {
-		return this.animal.extras[index].depthRatio ?? EXTRAS_DEPTH_RATIO
-	}
-
 	private solveExtraRests() {
 		return this.animal.extras.map((_, index) =>
 			headShellRest({
 				surface: this.surface,
-				depthRatio: this.extraDepthRatio(index),
+				depthRatio: EXTRAS_DEPTH_RATIO,
 				perspective: this.perspective,
 				face: this.surface.extraAnchors[index],
 			}),
@@ -777,7 +773,7 @@ export class BotAvatarEngine {
 				affineTransform(
 					headShellWarp({
 						surface: this.surface,
-						depthRatio: this.extraDepthRatio(index),
+						depthRatio: EXTRAS_DEPTH_RATIO,
 						rest: this.extraRests[index],
 						rotation,
 						perspective: this.perspective,
@@ -1019,7 +1015,11 @@ export class BotAvatarEngine {
 		this.quantizePose()
 		trackPose(this.poseTrail, now, this.displayPose)
 		const rotation = quatFromEuler(this.displayPose)
-		const lagged = quatFromEuler(laggedPose(this.poseTrail, now))
+		const trailed = laggedPose(this.poseTrail, now)
+		for (const axis of POSE_AXES) {
+			trailed[axis] = quantize(trailed[axis], RADIAN_STEP)
+		}
+		const lagged = quatFromEuler(trailed)
 		const headAffine = headSurfaceAffine({
 			surface: this.surface,
 			rotation,

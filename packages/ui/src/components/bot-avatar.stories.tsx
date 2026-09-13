@@ -756,7 +756,7 @@ export const DepthLayers = meta.story({
 		docs: {
 			description: {
 				story:
-					"The two animals that carry extras, frozen across a yaw sweep. The extras group sits at 0.85 of the head z radius and is projected through the ellipsoid the eyes are mapped on, so the owl face disc and the Skippy goggles swing across the head and foreshorten with it rather than riding the outline transform, which barely narrows. A shape may carry its own ratio; none of the nine animals does, so every extra here is drawn at the group default. Reach for this when adding a shape to an animal: check that it stays welded to the face through the sweep and returns to exactly the authored drawing at 0°.",
+					"The two animals that carry extras, frozen across a yaw sweep. The extras group sits at 0.85 of the head z radius and is projected through the ellipsoid the eyes are mapped on, so the owl face disc and the Skippy goggles swing across the head and foreshorten with it rather than riding the outline transform, which barely narrows. Every extra is drawn at that one group ratio, so an animal never has to tune a shape by hand. Reach for this when adding a shape to an animal: check that it stays welded to the face through the sweep and returns to exactly the authored drawing at 0°.",
 			},
 		},
 	},
