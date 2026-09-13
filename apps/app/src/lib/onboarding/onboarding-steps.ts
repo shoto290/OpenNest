@@ -100,14 +100,14 @@ const entryStep = ({
 
 const signInChoice = (
 	label: string,
-	choose: () => Promise<void>,
+	choose: StepChoice["choose"],
 ): StepChoice => ({
 	label,
 	description: i18n.t("chat:onboarding.access.signIn.description"),
 	choose,
 })
 
-const apiKeyChoice = (choose: () => Promise<void> | void): StepChoice => ({
+const apiKeyChoice = (choose: StepChoice["choose"]): StepChoice => ({
 	label: i18n.t("chat:onboarding.access.apiKey.label"),
 	description: i18n.t("chat:onboarding.access.apiKey.description"),
 	choose,
