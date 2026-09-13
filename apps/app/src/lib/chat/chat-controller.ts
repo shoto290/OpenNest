@@ -21,6 +21,8 @@ import {
 	askingRow,
 	type PostedAnswerHandler,
 	type PostedQuestion,
+	type PostedRequest,
+	withoutSecretQuestions,
 	withPostedRows,
 } from "./posted-question"
 import {
@@ -130,7 +132,7 @@ export type ChatController = {
 	answer: (id: string, answers: QuestionAnswers) => Promise<void>
 	postQuestion: (
 		botId: string,
-		request: QuestionRequest,
+		request: PostedRequest,
 		onAnswers: PostedAnswerHandler,
 	) => boolean
 	withdrawQuestion: (botId: string, id: string) => void
@@ -1358,7 +1360,10 @@ export function createChatController(
 		posted: PostedQuestion,
 		answers: QuestionAnswers,
 	) => {
-		const content = answeredText(posted.request, answers)
+		const content = answeredText(
+			withoutSecretQuestions(posted.request),
+			answers,
+		)
 		const answered =
 			content.length === 0
 				? null
@@ -1385,7 +1390,7 @@ export function createChatController(
 
 	const postQuestion = (
 		bot: BotChat,
-		request: QuestionRequest,
+		request: PostedRequest,
 		onAnswers: PostedAnswerHandler,
 	) => {
 		const known = bot.posted.find((posted) => posted.request.id === request.id)
@@ -1418,7 +1423,9 @@ export function createChatController(
 	}
 
 	const withdrawQuestion = (bot: BotChat, id: string) => {
-		const kept = bot.posted.filter((posted) => posted.request.id !== id)
+		const kept = bot.posted.filter(
+			(posted) => posted.request.id !== id || posted.answered !== null,
+		)
 		if (kept.length === bot.posted.length) {
 			return
 		}

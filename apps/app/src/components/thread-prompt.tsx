@@ -10,11 +10,11 @@ import {
 import { AssistantTurn } from "@workspace/ui/components/turn"
 import { useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
-import type {
-	AskedQuestion,
-	PermissionRequest,
-	QuestionRequest,
-} from "@/lib/agent/contract"
+import type { PermissionRequest, QuestionRequest } from "@/lib/agent/contract"
+import {
+	isPostedRequest,
+	type PostedAskedQuestion,
+} from "@/lib/chat/posted-question"
 import type { PromptResponder } from "@/lib/chat/use-prompt-responder"
 
 type ApprovalPromptProps = {
@@ -56,15 +56,22 @@ export const ApprovalPrompt = ({ request, responder }: ApprovalPromptProps) => {
 	)
 }
 
-const toQuestionItem = (asked: AskedQuestion): ToolQuestionItem => ({
-	question: asked.question,
-	header: asked.header,
-	multiSelect: asked.multiSelect,
-	options: asked.options.map((option) => ({
+const toQuestionItem = ({
+	question,
+	header,
+	multiSelect,
+	options,
+	...pieces
+}: PostedAskedQuestion): ToolQuestionItem => ({
+	question,
+	header,
+	multiSelect,
+	options: options.map((option) => ({
 		label: option.label,
 		description: option.description ?? "",
 		preview: option.preview ?? undefined,
 	})),
+	...pieces,
 })
 
 type QuestionPromptProps = {
@@ -77,9 +84,13 @@ export const QuestionPrompt = ({ request, responder }: QuestionPromptProps) => (
 		onAnswer={(answers) => {
 			void responder.answer(request.id, answers)
 		}}
-		onDeny={() => {
-			void responder.respond(request.id, "deny")
-		}}
+		onDeny={
+			isPostedRequest(request)
+				? undefined
+				: () => {
+						void responder.respond(request.id, "deny")
+					}
+		}
 		questions={request.questions.map(toQuestionItem)}
 	/>
 )

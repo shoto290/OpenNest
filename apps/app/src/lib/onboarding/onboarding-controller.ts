@@ -20,11 +20,13 @@ import type {
 	SuggestedBot,
 } from "../conversations/store-contract"
 
-export type ConnectionCard =
+export type ConnectionStep =
 	| { state: "detected"; account: string }
 	| { state: "offer" }
 	| { state: "waiting"; signInUrl: string }
-	| { state: "failed"; exitDetail: string }
+	| { state: "apiKey" }
+	| { state: "signInFailed"; exitDetail: string }
+	| { state: "apiKeyFailed"; exitDetail: string }
 
 export type OnboardingStep =
 	| "welcome"
@@ -44,8 +46,8 @@ export type OnboardingHandoff = {
 
 export type OnboardingState = {
 	step: OnboardingStep
-	card: ConnectionCard | null
-	hasSettled: boolean
+	connection: ConnectionStep | null
+	round: number
 	summons: string | null
 	isBusy: boolean
 	homeBotId: string | null
@@ -70,6 +72,7 @@ export type OnboardingController = {
 	tellMore: () => Promise<void>
 	acceptAccount: () => Promise<void>
 	changeAccount: () => void
+	askApiKey: () => void
 	signIn: () => Promise<void>
 	submitCode: (code: string) => Promise<void>
 	submitApiKey: (apiKey: string) => Promise<void>
@@ -84,8 +87,8 @@ export type OnboardingController = {
 
 const initialOnboardingState: OnboardingState = {
 	step: "welcome",
-	card: null,
-	hasSettled: false,
+	connection: null,
+	round: 0,
 	summons: null,
 	isBusy: false,
 	homeBotId: null,
@@ -126,6 +129,7 @@ export const createOnboardingController = (
 	let state = initialOnboardingState
 	let asked: OnboardingSummons = "greeting"
 	let attempt = 0
+	let running: Attempt | null = null
 	const listeners = new Set<() => void>()
 
 	const publish = () => {
@@ -139,17 +143,30 @@ export const createOnboardingController = (
 		publish()
 	}
 
-	const showCard = (card: ConnectionCard) => {
-		set({ step: "connection", card, summons: null, isBusy: false })
+	const showConnection = (connection: ConnectionStep) => {
+		set({
+			step: "connection",
+			connection,
+			round: state.round + 1,
+			summons: null,
+			isBusy: false,
+		})
 	}
 
 	const showFailed = (reason: unknown) => {
-		showCard({ state: "failed", exitDetail: exitDetailOf(reason) })
+		showConnection({ state: "signInFailed", exitDetail: exitDetailOf(reason) })
 	}
+
+	const askApiKey = () => showConnection({ state: "apiKey" })
 
 	const settle = async () => {
 		const summons = onboardingSummonsFor(asked)
-		set({ step: "summoned", card: null, hasSettled: true, summons })
+		set({
+			step: "summoned",
+			connection: null,
+			round: state.round + 1,
+			summons,
+		})
 		await world.send(summons)
 	}
 
@@ -159,7 +176,7 @@ export const createOnboardingController = (
 			return
 		}
 		if (!report.authenticated) {
-			showCard({ state: "offer" })
+			showConnection({ state: "offer" })
 			return
 		}
 		const email = report.account?.email
@@ -167,7 +184,7 @@ export const createOnboardingController = (
 			await settle()
 			return
 		}
-		showCard({
+		showConnection({
 			state: "detected",
 			account: accountLineOf(email, report.account?.plan),
 		})
@@ -191,7 +208,7 @@ export const createOnboardingController = (
 	}
 
 	const finishRun = () => {
-		set({ step: "done", card: null })
+		set({ step: "done", connection: null })
 		return world.markFirstRunDone()
 	}
 
@@ -206,9 +223,10 @@ export const createOnboardingController = (
 			if (read.length === 0) {
 				throw NO_SUGGESTION
 			}
-			set({ step: "picking", card: null, suggestions: read })
+			set({ step: "picking", connection: null, suggestions: read })
 		} catch (reason) {
 			report(i18n.t("chat:onboarding.picker.failure.suggestions"), reason)
+			set({ round: state.round + 1 })
 		} finally {
 			set({ isBusy: false })
 		}
@@ -274,12 +292,18 @@ export const createOnboardingController = (
 		if (!live.isLive()) {
 			return
 		}
-		showCard({ state: "waiting", signInUrl })
+		showConnection({ state: "waiting", signInUrl })
 		port.openSignInUrl(signInUrl).catch(live.fail)
 	}
 
+	const isSigningIn = () => running?.isLive() ?? false
+
 	const signIn = async () => {
+		if (isSigningIn()) {
+			await endSignIn()
+		}
 		const live = openAttempt()
+		running = live
 		set({ isBusy: true })
 		let stopListening: (() => void) | undefined
 		try {
@@ -292,6 +316,9 @@ export const createOnboardingController = (
 			live.fail(reason)
 		} finally {
 			stopListening?.()
+			if (running === live) {
+				running = null
+			}
 			if (live.isLive()) {
 				set({ isBusy: false })
 			}
@@ -306,6 +333,11 @@ export const createOnboardingController = (
 				showFailed(reason)
 			}
 		}
+	}
+
+	const endSignIn = async () => {
+		attempt += 1
+		await ignoringNotRunning(() => port.cancelSignIn())
 	}
 
 	return {
@@ -324,7 +356,9 @@ export const createOnboardingController = (
 
 		acceptAccount: settle,
 
-		changeAccount: () => showCard({ state: "offer" }),
+		changeAccount: () => showConnection({ state: "offer" }),
+
+		askApiKey,
 
 		signIn,
 
@@ -336,19 +370,24 @@ export const createOnboardingController = (
 
 		submitApiKey: async (apiKey) => {
 			set({ isBusy: true })
+			if (isSigningIn()) {
+				await endSignIn()
+			}
 			try {
 				await port.holdApiKey(apiKey)
 			} catch (reason) {
-				showFailed(reason)
+				showConnection({
+					state: "apiKeyFailed",
+					exitDetail: exitDetailOf(reason),
+				})
 				return
 			}
 			await readAccount()
 		},
 
 		pasteKeyInstead: async () => {
-			attempt += 1
-			showCard({ state: "offer" })
-			await ignoringNotRunning(() => port.cancelSignIn())
+			askApiKey()
+			await endSignIn()
 		},
 
 		summonAgain: settle,

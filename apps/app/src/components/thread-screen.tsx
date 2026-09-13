@@ -26,15 +26,11 @@ import type { MissionBot } from "@workspace/ui/components/mission"
 import { MissionEventRow } from "@workspace/ui/components/mission-event-row"
 import { MissionHeader } from "@workspace/ui/components/mission-header"
 import { MissionTurn } from "@workspace/ui/components/mission-turn"
-import { OnboardingConnectionCard } from "@workspace/ui/components/onboarding-connection-card"
 import { OnboardingHandoffCard } from "@workspace/ui/components/onboarding-handoff-card"
 import {
 	type OnboardingCompanion,
 	OnboardingPickerCard,
 } from "@workspace/ui/components/onboarding-picker-card"
-import { OnboardingSettledPill } from "@workspace/ui/components/onboarding-settled-pill"
-import { OnboardingTestCard } from "@workspace/ui/components/onboarding-test-card"
-import { OnboardingWelcomeCard } from "@workspace/ui/components/onboarding-welcome-card"
 import {
 	PINNED_AVATAR_SIZE,
 	type PinnedMessage,
@@ -155,16 +151,14 @@ import {
 import { toMissionCard } from "@/lib/missions/missions-model"
 import { useMissionSendFailure } from "@/lib/missions/use-mission-failure-notices"
 import { useMissions } from "@/lib/missions/use-missions"
-import type {
-	ConnectionCard,
-	OnboardingController,
-} from "@/lib/onboarding/onboarding-controller"
+import type { OnboardingController } from "@/lib/onboarding/onboarding-controller"
 import { withoutOnboardingSummons } from "@/lib/onboarding/onboarding-summons"
 import {
 	type OnboardingTail,
 	onboardingTailOf,
 } from "@/lib/onboarding/onboarding-tail"
 import type { Onboarding } from "@/lib/onboarding/use-onboarding"
+import { usePostedOnboardingStep } from "@/lib/onboarding/use-posted-onboarding-step"
 import type { ReportedRun } from "@/lib/routines/routine-contract"
 import type { MessageLandingController } from "@/lib/search/message-landing-controller"
 
@@ -749,70 +743,6 @@ const withMissionEvents = ({
 		},
 	])
 
-type ThreadConnectionCardProps = {
-	card: ConnectionCard
-	controller: OnboardingController
-	isBusy: boolean
-}
-
-const ThreadConnectionCard = ({
-	card,
-	controller,
-	isBusy,
-}: ThreadConnectionCardProps) => {
-	const [apiKey, setApiKey] = useState("")
-	const [code, setCode] = useState("")
-
-	if (card.state === "detected") {
-		return (
-			<OnboardingConnectionCard
-				account={card.account}
-				disabled={isBusy}
-				onUseAccount={() => void controller.acceptAccount()}
-				onUseAnotherAccount={controller.changeAccount}
-				state="detected"
-			/>
-		)
-	}
-
-	if (card.state === "offer") {
-		return (
-			<OnboardingConnectionCard
-				apiKey={apiKey}
-				disabled={isBusy}
-				onApiKeyChange={setApiKey}
-				onApiKeySubmit={(submitted) => void controller.submitApiKey(submitted)}
-				onSignIn={() => void controller.signIn()}
-				state="offer"
-			/>
-		)
-	}
-
-	if (card.state === "waiting") {
-		return (
-			<OnboardingConnectionCard
-				code={code}
-				disabled={isBusy}
-				onCodeChange={setCode}
-				onCodeSubmit={(submitted) => void controller.submitCode(submitted)}
-				onPasteKey={() => void controller.pasteKeyInstead()}
-				signInUrl={card.signInUrl}
-				state="waiting"
-			/>
-		)
-	}
-
-	return (
-		<OnboardingConnectionCard
-			disabled={isBusy}
-			exitDetail={card.exitDetail}
-			onPasteKey={() => void controller.pasteKeyInstead()}
-			onRetry={() => void controller.signIn()}
-			state="failed"
-		/>
-	)
-}
-
 type ThreadPickerCardProps = {
 	controller: OnboardingController
 	picks: OnboardingCompanion[]
@@ -848,55 +778,27 @@ type ThreadOnboardingProps = {
 }
 
 const ThreadOnboarding = ({ tail }: ThreadOnboardingProps) => {
-	const { controller, isBusy } = tail
+	const { controller, isBusy, picks, handoff } = tail
+	if (!picks && !handoff) {
+		return null
+	}
 
 	return (
 		<MessageBubbleGroup spacing="default">
-			{tail.hasWelcome ? (
-				<OnboardingWelcomeCard
-					disabled={isBusy}
-					onStart={() => void controller.start()}
-					onTellMore={() => void controller.tellMore()}
-				/>
-			) : null}
-			{tail.hasPill ? <OnboardingSettledPill /> : null}
-			{tail.card ? (
-				<ThreadConnectionCard
-					card={tail.card}
-					controller={controller}
-					isBusy={isBusy}
-				/>
-			) : null}
-			{tail.turnFailure ? (
-				<OnboardingConnectionCard
-					disabled={isBusy}
-					exitDetail={tail.turnFailure}
-					onPasteKey={() => void controller.pasteKeyInstead()}
-					onRetry={() => void controller.summonAgain()}
-					state="failed"
-				/>
-			) : null}
-			{tail.hasTest ? (
-				<OnboardingTestCard
-					disabled={isBusy}
-					onKeepTalking={() => void controller.finish()}
-					onPickCompanion={() => void controller.pickCompanion()}
-				/>
-			) : null}
-			{tail.picks ? (
+			{picks ? (
 				<ThreadPickerCard
 					controller={controller}
 					isBusy={isBusy}
-					picks={tail.picks}
+					picks={picks}
 				/>
 			) : null}
-			{tail.handoff ? (
+			{handoff ? (
 				<OnboardingHandoffCard
-					animal={tail.handoff.animal}
-					blot={tail.handoff.blot ?? undefined}
-					description={tail.handoff.description}
+					animal={handoff.animal}
+					blot={handoff.blot ?? undefined}
+					description={handoff.description}
 					disabled={isBusy}
-					name={tail.handoff.name}
+					name={handoff.name}
 					onOpen={() => void controller.openCompanion()}
 					onStay={() => void controller.finish()}
 				/>
@@ -923,6 +825,12 @@ const BotThreadTail = ({
 	const stop: BotStopProps = canStopTurn(thread.state.turn)
 		? { stoppable: true, onStop }
 		: {}
+	usePostedOnboardingStep({
+		controller: thread.controller,
+		botId: thread.bot.id,
+		pendingId: thread.state.question?.id ?? null,
+		step: onboarding?.step ?? null,
+	})
 
 	return (
 		<>

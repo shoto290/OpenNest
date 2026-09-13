@@ -4,6 +4,7 @@ import { type ChatController, createChatController } from "./chat-controller"
 import { isSessionReady, isTurnBusy } from "./chat-state"
 import type { ChatDriver } from "./driver"
 import { createFakeChatDriver, type FakeChatDriver } from "./fake-driver"
+import type { PostedRequest } from "./posted-question"
 import { questionMessageIdOf } from "./question-message"
 import {
 	ASKED_FOR,
@@ -148,8 +149,9 @@ const ASKED: QuestionRequest = {
 	],
 }
 
-const POSTED: QuestionRequest = {
+const POSTED: PostedRequest = {
 	id: "posted-1",
+	isPosted: true,
 	questions: [
 		{
 			header: "Sign in",
@@ -161,6 +163,22 @@ const POSTED: QuestionRequest = {
 }
 
 const POSTED_ANSWER = { "How do you want to sign in?": "Subscription" }
+
+const MASKED_KEY = "sk-ant-kept-out"
+
+const MASKED: PostedRequest = {
+	id: "posted-masked",
+	isPosted: true,
+	questions: [
+		{
+			header: "API key",
+			question: "Paste your key",
+			multiSelect: false,
+			options: [],
+			entry: { label: "Key", isSecret: true },
+		},
+	],
+}
 
 const NOTHING_TO_RUN: CheckReport = {
 	connection: "unavailable",
@@ -1092,6 +1110,20 @@ describe("createChatController", () => {
 			expect(askingIn(controller)).toBeUndefined()
 		})
 
+		it("keeps an answered question and its answer when it is withdrawn", async () => {
+			const { controller } = await sessionlessHarness()
+			controller.postQuestion(BOT, POSTED, () => Promise.resolve())
+			await vi.runAllTimersAsync()
+			await controller.answer(POSTED.id, POSTED_ANSWER)
+			await vi.runAllTimersAsync()
+
+			controller.withdrawQuestion(BOT, POSTED.id)
+			await vi.runAllTimersAsync()
+
+			expect(askingIn(controller)).toBeDefined()
+			expect(answeredIn(controller)?.content).toBe("Subscription")
+		})
+
 		it("holds the asking and its answer above what is stored afterwards", async () => {
 			const { controller, store } = await bootedHarness()
 			controller.postQuestion(BOT, POSTED, () => Promise.resolve())
@@ -1130,6 +1162,23 @@ describe("createChatController", () => {
 			expect(onAnswers).toHaveBeenCalledWith({})
 			expect(controller.getState().question).toBeNull()
 			expect(answeredIn(controller)).toBeUndefined()
+		})
+
+		it("keeps what the reader typed into a masked entry out of the transcript", async () => {
+			const { controller } = await sessionlessHarness()
+			const onAnswers = vi.fn(() => Promise.resolve())
+			controller.postQuestion(BOT, MASKED, onAnswers)
+			await vi.runAllTimersAsync()
+
+			await controller.answer(MASKED.id, { "Paste your key": MASKED_KEY })
+			await vi.runAllTimersAsync()
+
+			const { messages, question } = controller.getState()
+			expect(onAnswers).toHaveBeenCalledWith({ "Paste your key": MASKED_KEY })
+			expect(question).toBeNull()
+			expect(
+				messages.some((message) => message.content.includes(MASKED_KEY)),
+			).toBe(false)
 		})
 
 		it("refuses a question that was already answered", async () => {

@@ -92,7 +92,9 @@ export const createFakeOnboardingPort = (): FakeOnboardingPort => {
 		onSignInStarted: async (onStarted) => {
 			announce = onStarted
 			return () => {
-				announce = null
+				if (announce === onStarted) {
+					announce = null
+				}
 			}
 		},
 

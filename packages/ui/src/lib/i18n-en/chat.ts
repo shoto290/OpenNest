@@ -592,57 +592,90 @@ const chat = {
 		},
 	},
 	onboarding: {
-		steps_one: "{{count}} step",
-		steps_other: "{{count}} steps",
 		step: "{{step}} of {{total}}",
 		welcome: {
-			title: "Ready when you are",
-			start: "Start",
-			more: "Tell me more first",
+			header: "Setup",
+			question: "Ready to start?",
+			start: {
+				label: "Start",
+				description: "Three steps, about a minute.",
+			},
+			more: {
+				label: "Tell me more first",
+				description: "What Kiroshi is, before you connect anything.",
+			},
+		},
+		account: {
+			header: "Your Claude account",
+			question: "Use the account already on this machine?",
+			use: {
+				label: "Use this account",
+				description:
+					"Signed in with your Claude subscription, under your own login.",
+			},
+			another: {
+				label: "Use another account",
+				description: "Sign in again with a different one.",
+			},
+		},
+		access: {
+			header: "Your Claude account",
+			question: "How do you want to connect?",
+			signIn: {
+				label: "Sign in with Claude",
+				description:
+					"Opens your browser once. Works with your Pro or Max subscription.",
+			},
+			apiKey: {
+				label: "Paste an API key",
+				description: "Pay per use, with nothing to sign in to.",
+			},
+		},
+		code: {
+			header: "Sign in",
+			question: "Paste the code Claude gave you",
+			link: "Open this link and sign in",
+			entry: "Then paste the code it gives you",
+			exit: "Paste a key instead",
+		},
+		apiKey: {
+			header: "API key",
+			question: "Paste your Anthropic API key",
+			entry: "Key",
+			placeholder: "sk-ant-…",
+			exit: "Sign in instead",
+		},
+		signInFailed: {
+			header: "Sign in",
+			question: "Try again, or use a key instead?",
+			title: "Couldn't sign you in",
+			retry: {
+				label: "Try again",
+				description: "Opens your browser once more.",
+			},
 		},
 		connection: {
-			title: "Your Claude account",
-			detected: {
-				subtitle: "Found on this machine, under your own login",
-				use: "Use this account",
-				another: "Use another account",
-			},
-			offer: {
-				signIn: "Sign in with Claude",
-				note: "Opens your browser once, then comes back here.",
-				keyLabel: "Or paste an API key and pay per use",
-				keyPlaceholder: "sk-ant-…",
-			},
-			waiting: {
-				linkStep: "Open this link and sign in",
-				linkLabel: "Sign-in link",
-				copy: "Copy",
-				copyLink: "Copy the sign-in link",
-				copied: "Copied",
-				copiedLink: "Sign-in link copied",
-				copyFailed: "Couldn't copy. Select the link and copy it yourself.",
-				codeLabel: "Then paste the code it gives you",
-				codePlaceholder: "code#state",
-				continue: "Continue",
-			},
-			failed: {
-				title: "Couldn't sign you in",
-				retry: "Try again",
-				pasteKey: "Paste a key instead",
-			},
 			keyFailed: {
 				title: "Couldn't use that key",
 				sentence: "That key was refused, so nothing was saved.",
 				anotherKey: "Try another key",
+				anotherKeyDescription: "Paste a different Anthropic API key.",
 				signIn: "Sign in instead",
 			},
-			settled: "Claude account connected",
 		},
-		test: {
-			title: "That's it working. One thing left.",
-			pick: "Pick my first companion",
-			keepTalking: "Keep talking",
+		firstReply: {
+			header: "Last step",
+			question: "That's it working. Ready for the last one?",
+			pick: {
+				label: "Pick my first companion",
+				description: "One more question, then you're set up.",
+			},
+			keepTalking: {
+				label: "Keep talking first",
+				description: "Ask me a few more things. I'll wait.",
+			},
 		},
+
 		picker: {
 			title: "Who should join first?",
 			option: "{{name}}, {{role}}",

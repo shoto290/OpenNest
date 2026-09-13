@@ -7,7 +7,7 @@ import { ChatEmptyState } from "@workspace/ui/components/chat-empty-state"
 import { ConnectionStatus } from "@workspace/ui/components/connection-status"
 import { MessageBubbleGroup } from "@workspace/ui/components/message-bubble"
 import { Notice } from "@workspace/ui/components/notice"
-import { OnboardingWelcomeCard } from "@workspace/ui/components/onboarding-welcome-card"
+import { OnboardingHandoffCard } from "@workspace/ui/components/onboarding-handoff-card"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
 import type { RosterBot } from "@workspace/ui/components/roster"
 import {
@@ -257,7 +257,13 @@ export const OnboardingCards = meta.story({
 	args: {
 		children: (
 			<MessageBubbleGroup spacing="default">
-				<OnboardingWelcomeCard onStart={fn()} onTellMore={fn()} />
+				<OnboardingHandoffCard
+					description="Looks things up and reports back short"
+					name="Scout"
+					onOpen={fn()}
+					onStay={fn()}
+					seed="scout"
+				/>
 			</MessageBubbleGroup>
 		),
 	},

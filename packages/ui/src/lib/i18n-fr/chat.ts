@@ -612,59 +612,90 @@ const chat = {
 		},
 	},
 	onboarding: {
-		steps_one: "{{count}} étape",
-		steps_many: "{{count}} étapes",
-		steps_other: "{{count}} étapes",
 		step: "{{step}} sur {{total}}",
 		welcome: {
-			title: "Prêt quand vous l'êtes",
-			start: "Commencer",
-			more: "Dites-m'en plus d'abord",
+			header: "Configuration",
+			question: "Prêt à commencer ?",
+			start: {
+				label: "Commencer",
+				description: "Trois étapes, environ une minute.",
+			},
+			more: {
+				label: "Dites-m'en plus d'abord",
+				description: "Ce qu'est Kiroshi, avant de connecter quoi que ce soit.",
+			},
+		},
+		account: {
+			header: "Votre compte Claude",
+			question: "Utiliser le compte déjà présent sur cette machine ?",
+			use: {
+				label: "Utiliser ce compte",
+				description:
+					"Connecté avec votre abonnement Claude, sous votre propre session.",
+			},
+			another: {
+				label: "Utiliser un autre compte",
+				description: "Reconnectez-vous avec un autre compte.",
+			},
+		},
+		access: {
+			header: "Votre compte Claude",
+			question: "Comment voulez-vous vous connecter ?",
+			signIn: {
+				label: "Se connecter avec Claude",
+				description:
+					"Ouvre votre navigateur une fois. Fonctionne avec votre abonnement Pro ou Max.",
+			},
+			apiKey: {
+				label: "Coller une clé API",
+				description: "Paiement à l'usage, sans connexion.",
+			},
+		},
+		code: {
+			header: "Connexion",
+			question: "Collez le code que Claude vous a donné",
+			link: "Ouvrez ce lien et connectez-vous",
+			entry: "Puis collez le code qu'il vous donne",
+			exit: "Coller une clé à la place",
+		},
+		apiKey: {
+			header: "Clé API",
+			question: "Collez votre clé API Anthropic",
+			entry: "Clé",
+			placeholder: "sk-ant-…",
+			exit: "Se connecter à la place",
+		},
+		signInFailed: {
+			header: "Connexion",
+			question: "Réessayer, ou utiliser une clé à la place ?",
+			title: "Impossible de vous connecter",
+			retry: {
+				label: "Réessayer",
+				description: "Ouvre votre navigateur une nouvelle fois.",
+			},
 		},
 		connection: {
-			title: "Votre compte Claude",
-			detected: {
-				subtitle: "Trouvé sur cette machine, sous votre propre session",
-				use: "Utiliser ce compte",
-				another: "Utiliser un autre compte",
-			},
-			offer: {
-				signIn: "Se connecter avec Claude",
-				note: "Ouvre votre navigateur une fois, puis revient ici.",
-				keyLabel: "Ou collez une clé API et payez à l'usage",
-				keyPlaceholder: "sk-ant-…",
-			},
-			waiting: {
-				linkStep: "Ouvrez ce lien et connectez-vous",
-				linkLabel: "Lien de connexion",
-				copy: "Copier",
-				copyLink: "Copier le lien de connexion",
-				copied: "Copié",
-				copiedLink: "Lien de connexion copié",
-				copyFailed:
-					"Copie impossible. Sélectionnez le lien et copiez-le vous-même.",
-				codeLabel: "Puis collez le code qu'il vous donne",
-				codePlaceholder: "code#state",
-				continue: "Continuer",
-			},
-			failed: {
-				title: "Impossible de vous connecter",
-				retry: "Réessayer",
-				pasteKey: "Coller une clé à la place",
-			},
 			keyFailed: {
 				title: "Impossible d'utiliser cette clé",
 				sentence: "Cette clé a été refusée, donc rien n'a été enregistré.",
 				anotherKey: "Essayer une autre clé",
+				anotherKeyDescription: "Collez une autre clé API Anthropic.",
 				signIn: "Se connecter à la place",
 			},
-			settled: "Compte Claude connecté",
 		},
-		test: {
-			title: "Tout fonctionne. Plus qu'une chose.",
-			pick: "Choisir mon premier compagnon",
-			keepTalking: "Continuer à discuter",
+		firstReply: {
+			header: "Dernière étape",
+			question: "Tout fonctionne. Prêt pour la dernière ?",
+			pick: {
+				label: "Choisir mon premier compagnon",
+				description: "Encore une question, et vous êtes prêt.",
+			},
+			keepTalking: {
+				label: "Continuer à discuter d'abord",
+				description: "Posez-moi encore quelques questions. J'attends.",
+			},
 		},
+
 		picker: {
 			title: "Qui doit arriver en premier ?",
 			option: "{{name}}, {{role}}",

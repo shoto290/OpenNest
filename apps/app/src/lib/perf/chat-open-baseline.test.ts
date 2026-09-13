@@ -19,6 +19,7 @@ import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { type FakeLayout, fakeLayout } from "@/lib/perf/fake-layout"
+import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
 
 const harness = vi.hoisted(
 	(): { store: TranscriptStore | null; driver: FakeChatDriver | null } => ({
@@ -207,11 +208,16 @@ type MountedApp = {
 
 type MountOptions = { delayMs?: number; pageBotIndex?: number }
 
+const seedFirstRunDone = () => {
+	writeMirror({ ...readMirror(), firstRunDone: true })
+}
+
 const mountApp = async ({
 	delayMs = 0,
 	pageBotIndex,
 }: MountOptions = {}): Promise<MountedApp> => {
 	layout = fakeLayout()
+	seedFirstRunDone()
 	const store = createFakeTranscriptStore()
 	const bots = await seedBots(store)
 	for (const [index, bot] of bots.entries()) {

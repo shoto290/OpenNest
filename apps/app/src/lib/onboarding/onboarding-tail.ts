@@ -1,11 +1,14 @@
 import type { OnboardingCompanion } from "@workspace/ui/components/onboarding-picker-card"
 
 import type {
-	ConnectionCard,
 	OnboardingController,
 	OnboardingHandoff,
 	OnboardingState,
 } from "./onboarding-controller"
+import {
+	type OnboardingStepQuestion,
+	onboardingStepOf,
+} from "./onboarding-steps"
 import { type SummonOutcome, summonOutcomeOf } from "./onboarding-summons"
 import type { Onboarding } from "./use-onboarding"
 
@@ -14,11 +17,7 @@ import type { SuggestedBot } from "../conversations/store-contract"
 
 export type OnboardingTail = {
 	controller: OnboardingController
-	hasWelcome: boolean
-	card: ConnectionCard | null
-	turnFailure: string | null
-	hasPill: boolean
-	hasTest: boolean
+	step: OnboardingStepQuestion | null
 	isBusy: boolean
 	picks: OnboardingCompanion[] | null
 	handoff: OnboardingHandoff | null
@@ -58,15 +57,10 @@ export const onboardingTailOf = (
 	if (!runsIn(state, botId)) {
 		return null
 	}
-	const outcome = outcomeOf(state, chat)
 
 	return {
 		controller,
-		hasWelcome: state.step === "welcome",
-		card: state.card,
-		turnFailure: outcome.kind === "failed" ? outcome.detail : null,
-		hasPill: state.hasSettled,
-		hasTest: outcome.kind === "answered",
+		step: onboardingStepOf(state, outcomeOf(state, chat), controller),
 		isBusy: state.isBusy,
 		picks: state.step === "picking" ? state.suggestions.map(pickOf) : null,
 		handoff: state.step === "handoff" ? state.handoff : null,
