@@ -1,3 +1,4 @@
+import { isPostedRequest } from "./posted-question"
 import { withActivity } from "./working-kind"
 
 import type {
@@ -177,6 +178,11 @@ export const toStoreError = (reason: unknown): TransportError => ({
 	detail: `the transcript store refused it (${refusalOf(reason)})`,
 })
 
+export const toAnswerError = (reason: unknown): TransportError => ({
+	kind: "unknownFailure",
+	detail: refusalOf(reason),
+})
+
 export const toReadError = (reason: unknown): TransportError => ({
 	kind: "readFailed",
 	detail: detailOf(reason),
@@ -313,6 +319,9 @@ function applyQuestionRequested(
 		: state
 }
 
+const postedQuestionOf = (question: QuestionRequest | null) =>
+	question && isPostedRequest(question) ? question : null
+
 function applyQuestionWithdrawn(state: ChatState, id: string): ChatState {
 	return state.question?.id === id ? { ...state, question: null } : state
 }
@@ -359,7 +368,7 @@ function applyTurnEnded(state: ChatState, ended: TurnEnded): ChatState {
 		...next,
 		sessionId: ended.sessionId ?? state.sessionId,
 		permission: null,
-		question: null,
+		question: postedQuestionOf(state.question),
 	}
 }
 
@@ -421,7 +430,7 @@ function applySessionReset(
 		sessionOpen: false,
 		sessionId,
 		permission: null,
-		question: null,
+		question: postedQuestionOf(state.question),
 		activities: [],
 	}
 }
