@@ -1065,14 +1065,16 @@ describe("createChatController", () => {
 			expect(await reload(store)).toEqual([])
 		})
 
-		it("keeps a single asking when the same question is posted twice", async () => {
+		it("keeps a single asking and an unchanged state when the same question is posted twice", async () => {
 			const { controller } = await sessionlessHarness()
 			controller.postQuestion(BOT, POSTED, () => Promise.resolve())
 			await vi.runAllTimersAsync()
+			const live = controller.getState()
 
 			expect(
 				controller.postQuestion(BOT, POSTED, () => Promise.resolve()),
 			).toBe(true)
+			expect(controller.getState()).toBe(live)
 			await vi.runAllTimersAsync()
 
 			const asked = controller
@@ -1221,18 +1223,6 @@ describe("createChatController", () => {
 					(message) => message.id === questionMessageIdOf(POSTED.id),
 				),
 			).toHaveLength(1)
-		})
-
-		it("leaves the state untouched when the held question is already live", async () => {
-			const { controller } = await sessionlessHarness()
-			controller.postQuestion(BOT, POSTED, () => Promise.resolve())
-			await vi.runAllTimersAsync()
-			const live = controller.getState()
-
-			expect(
-				controller.postQuestion(BOT, POSTED, () => Promise.resolve()),
-			).toBe(true)
-			expect(controller.getState()).toBe(live)
 		})
 
 		it("keeps the question answerable and names the rejection when the handler rejects", async () => {
