@@ -173,11 +173,11 @@ export const SCENE_COPY = {
 	loops: {
 		personal: {
 			request:
-				"<@tomo> <@ash> four nights in Lisbon in May, under 900 € for the two of us. Take it between you.",
+				"<@tomo> <@ash> four nights in Lisbon in May, under 900 € for two. Take it between you.",
 			firstAnswer:
 				"Flights are 180 € return if we book before Friday, and they've only moved once this month.",
 			secondAnswer:
-				"Alfama and Graça are both walking distance from everything you asked for, and Graça's the quiet one.",
+				"Alfama and Graça are both walking distance from everything, and Graça's the quiet one.",
 			missionObjective: "Find a flat in Graça for four nights, under 600 €.",
 		},
 		work: {
@@ -186,10 +186,9 @@ export const SCENE_COPY = {
 			firstAnswer:
 				"It's on staging behind the flag, and the two fields you flagged save on blur now.",
 			secondAnswer:
-				"The empty state's drawn, so a new account gets a sentence and a button instead of a blank panel.",
+				"The empty state's drawn: a sentence and a button, not a blank panel.",
 			missionObjective:
 				"Take that empty state through the five screens that still don't have one.",
-			missionTicket: "APP-215",
 		},
 	},
 	exchanges: {
