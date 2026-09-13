@@ -9,8 +9,6 @@ import {
 import {
 	createFakeOnboardingWorld,
 	type FakeOnboardingWorld,
-	SUGGESTED_SCOUT,
-	SUGGESTED_WRITER,
 } from "./fake-onboarding-world"
 import {
 	createOnboardingController,
@@ -19,6 +17,7 @@ import {
 import { onboardingSummonsFor } from "./onboarding-summons"
 
 import type { CheckReport, TransportError } from "../agent/contract"
+import type { CompanionCreated } from "../companions/companions-transport"
 
 const SIGN_IN_URL = "https://claude.ai/oauth/authorize?code=true"
 
@@ -27,6 +26,8 @@ const EMAIL = "reader@example.com"
 const API_KEY = "sk-ant-secret"
 
 const CODE = "code#state"
+
+const CREATED_SCOUT: CompanionCreated = { id: "bot-scout", name: "Scout" }
 
 const authenticated = (account?: {
 	email: string | null
@@ -443,189 +444,35 @@ describe("the first companion", () => {
 		await controller.start()
 	})
 
-	it("shows one option per suggestion when the reader picks", async () => {
+	it("summons Shoto to find the first companion when the reader picks", async () => {
 		await controller.pickCompanion()
 
-		expect(controller.getState().step).toBe("picking")
-		expect(controller.getState().suggestions).toEqual([
-			SUGGESTED_WRITER,
-			SUGGESTED_SCOUT,
-		])
+		expect(world.sent.at(-1)).toBe(onboardingSummonsFor("firstCompanion"))
+		expect(controller.getState().step).toBe("done")
 	})
 
-	it("reports the reason and stays on the test step when the suggestions refuse to load", async () => {
-		world.refusals.suggest = { kind: "storage", detail: "disk is full" }
-
+	it("leaves the first run for Shoto to close when the reader picks", async () => {
 		await controller.pickCompanion()
 
-		expect(reportFailure).toHaveBeenCalledWith({
-			title: "Couldn't load the suggested companions",
-			description: "disk is full",
-		})
-		expect(controller.getState().step).toBe("summoned")
 		expect(world.firstRunDone).toBe(0)
-	})
-
-	it("reports the reason and stays on the test step when nothing is suggested", async () => {
-		world.suggestions.length = 0
-
-		await controller.pickCompanion()
-
-		expect(reportFailure).toHaveBeenCalledWith({
-			title: "Couldn't load the suggested companions",
-			description: "the agent suggested no companion",
-		})
-		expect(controller.getState().step).toBe("summoned")
-	})
-
-	it("opens the picker on a second press once a suggestion lands", async () => {
-		world.suggestions.length = 0
-		await controller.pickCompanion()
-		world.suggestions.push(SUGGESTED_WRITER)
-
-		await controller.pickCompanion()
-
-		expect(controller.getState().step).toBe("picking")
-		expect(controller.getState().suggestions).toEqual([SUGGESTED_WRITER])
-	})
-
-	it("creates the companion from the name, the job and the description", async () => {
-		await controller.pickCompanion()
-
-		await controller.addCompanion(SUGGESTED_SCOUT.id)
-
-		expect(world.drafted).toEqual([
-			{
-				name: SUGGESTED_SCOUT.name,
-				job: SUGGESTED_SCOUT.job,
-				description: SUGGESTED_SCOUT.description,
-			},
-		])
-	})
-
-	it("hands off to the created companion", async () => {
-		await controller.pickCompanion()
-
-		await controller.addCompanion(SUGGESTED_SCOUT.id)
-
-		expect(controller.getState().step).toBe("handoff")
-		expect(controller.getState().handoff).toEqual({
-			botId: "bot-scout",
-			name: SUGGESTED_SCOUT.name,
-			description: SUGGESTED_SCOUT.blurb,
-			animal: "owl",
-			blot: "cyan",
-		})
 	})
 
 	it("starts the created companion first turn in its own conversation", async () => {
-		await controller.pickCompanion()
-
-		await controller.addCompanion(SUGGESTED_SCOUT.id)
+		await controller.greetCompanion(CREATED_SCOUT)
 
 		expect(world.greetings).toEqual([
-			{ botId: "bot-scout", text: onboardingSummonsFor("arrival") },
+			{ botId: CREATED_SCOUT.id, text: onboardingSummonsFor("arrival") },
 		])
-		expect(world.sent).toHaveLength(1)
 	})
 
-	it("keeps the picker reachable and reports the reason when the creation is refused", async () => {
-		await controller.pickCompanion()
-		world.refusals.create = { kind: "namelessBot", detail: "no name" }
-
-		await controller.addCompanion(SUGGESTED_SCOUT.id)
-
-		expect(reportFailure).toHaveBeenCalledWith({
-			title: `Couldn't add ${SUGGESTED_SCOUT.name}`,
-			description: "no name",
-		})
-		expect(controller.getState().step).toBe("picking")
-		expect(controller.getState().suggestions).toHaveLength(2)
-		expect(world.firstRunDone).toBe(0)
-	})
-
-	it("hands off anyway and reports the reason when the first turn fails to start", async () => {
-		await controller.pickCompanion()
+	it("names the created companion when its first turn fails to start", async () => {
 		world.refusals.greet = { kind: "crashed", detail: "the agent stopped" }
 
-		await controller.addCompanion(SUGGESTED_SCOUT.id)
+		await controller.greetCompanion(CREATED_SCOUT)
 
 		expect(reportFailure).toHaveBeenCalledWith({
-			title: `${SUGGESTED_SCOUT.name} couldn't say hello`,
+			title: `${CREATED_SCOUT.name} couldn't say hello`,
 			description: "the agent stopped",
 		})
-		expect(controller.getState().step).toBe("handoff")
-		expect(controller.getState().handoff?.name).toBe(SUGGESTED_SCOUT.name)
-	})
-
-	it("writes one companion per press of add", async () => {
-		await controller.pickCompanion()
-
-		await Promise.all([
-			controller.addCompanion(SUGGESTED_SCOUT.id),
-			controller.addCompanion(SUGGESTED_SCOUT.id),
-		])
-
-		expect(world.drafted).toHaveLength(1)
-	})
-
-	it("holds the picker busy while the creation is in flight", async () => {
-		await controller.pickCompanion()
-		let created: (() => void) | undefined
-		world.create = async (draft) => {
-			await new Promise<void>((resolve) => {
-				created = resolve
-			})
-			world.drafted.push(draft)
-			throw { kind: "cancelled" }
-		}
-
-		const adding = controller.addCompanion(SUGGESTED_SCOUT.id)
-		expect(controller.getState().isBusy).toBe(true)
-
-		created?.()
-		await adding
-		expect(controller.getState().isBusy).toBe(false)
-	})
-
-	it("selects the created companion and ends the first run when the reader opens it", async () => {
-		await controller.pickCompanion()
-		await controller.addCompanion(SUGGESTED_SCOUT.id)
-
-		await controller.openCompanion()
-
-		expect(world.opened).toEqual(["bot-scout"])
-		expect(controller.getState().step).toBe("done")
-		expect(world.firstRunDone).toBe(1)
-	})
-
-	it("ends the first run and moves nobody when the reader stays", async () => {
-		await controller.pickCompanion()
-		await controller.addCompanion(SUGGESTED_SCOUT.id)
-
-		await controller.finish()
-
-		expect(world.opened).toEqual([])
-		expect(world.firstRunDone).toBe(1)
-	})
-
-	it("sends the typed words to the companion the onboarding runs in", async () => {
-		await controller.pickCompanion()
-
-		await controller.askInOwnWords("someone who drafts my emails")
-
-		expect(world.sent.at(-1)).toBe("someone who drafts my emails")
-		expect(world.drafted).toEqual([])
-		expect(controller.getState().step).toBe("done")
-		expect(world.firstRunDone).toBe(1)
-	})
-
-	it("ends the first run when the reader skips the picker", async () => {
-		await controller.pickCompanion()
-
-		await controller.finish()
-
-		expect(controller.getState().step).toBe("done")
-		expect(world.firstRunDone).toBe(1)
 	})
 })

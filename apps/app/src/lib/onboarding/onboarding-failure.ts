@@ -15,7 +15,6 @@ const SENTENCE_OF: Record<string, string> = {
 	startupTimeout: "the agent did not start in time",
 	crashed: "the agent stopped",
 	unknownSpace: "the roster is in no space",
-	noSuggestion: "the agent suggested no companion",
 }
 
 const fieldIn = (reason: unknown, field: string): string | null => {

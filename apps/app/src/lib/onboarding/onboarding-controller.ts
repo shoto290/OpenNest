@@ -12,13 +12,7 @@ import {
 } from "./onboarding-summons"
 
 import type { CheckReport } from "../agent/contract"
-import type {
-	AvatarAnimal,
-	AvatarBlot,
-	Bot,
-	BotDraft,
-	SuggestedBot,
-} from "../conversations/store-contract"
+import type { CompanionCreated } from "../companions/companions-transport"
 
 export type ConnectionStep =
 	| { state: "detected"; account: string }
@@ -28,21 +22,7 @@ export type ConnectionStep =
 	| { state: "signInFailed"; exitDetail: string }
 	| { state: "apiKeyFailed"; exitDetail: string }
 
-export type OnboardingStep =
-	| "welcome"
-	| "connection"
-	| "summoned"
-	| "picking"
-	| "handoff"
-	| "done"
-
-export type OnboardingHandoff = {
-	botId: string
-	name: string
-	description: string
-	animal: AvatarAnimal
-	blot: AvatarBlot | null
-}
+export type OnboardingStep = "welcome" | "connection" | "summoned" | "done"
 
 export type OnboardingState = {
 	step: OnboardingStep
@@ -51,17 +31,12 @@ export type OnboardingState = {
 	summons: string | null
 	isBusy: boolean
 	homeBotId: string | null
-	suggestions: SuggestedBot[]
-	handoff: OnboardingHandoff | null
 }
 
 export type OnboardingWorld = {
 	homeBotId: () => string | null
 	send: (text: string) => Promise<void>
-	suggest: () => Promise<SuggestedBot[]>
-	create: (draft: BotDraft) => Promise<Bot>
 	greet: (botId: string, text: string) => Promise<void>
-	open: (botId: string) => void
 	markFirstRunDone: () => Promise<void>
 }
 
@@ -79,9 +54,7 @@ export type OnboardingController = {
 	pasteKeyInstead: () => Promise<void>
 	summonAgain: () => Promise<void>
 	pickCompanion: () => Promise<void>
-	addCompanion: (pickId: string) => Promise<void>
-	askInOwnWords: (request: string) => Promise<void>
-	openCompanion: () => Promise<void>
+	greetCompanion: (created: CompanionCreated) => Promise<void>
 	finish: () => Promise<void>
 }
 
@@ -92,25 +65,7 @@ const initialOnboardingState: OnboardingState = {
 	summons: null,
 	isBusy: false,
 	homeBotId: null,
-	suggestions: [],
-	handoff: null,
 }
-
-const NO_SUGGESTION = { kind: "noSuggestion" } as const
-
-const draftOf = ({ name, job, description }: SuggestedBot): BotDraft => ({
-	name,
-	job,
-	description,
-})
-
-const handoffOf = (created: Bot, description: string): OnboardingHandoff => ({
-	botId: created.id,
-	name: created.name,
-	description,
-	animal: created.avatarAnimal,
-	blot: created.avatarBlot,
-})
 
 const ACCOUNT_PLAN_SEPARATOR = " · "
 
@@ -216,59 +171,20 @@ export const createOnboardingController = (
 		reportFailure({ title, description: exitDetailOf(reason) })
 	}
 
-	const readSuggestions = async () => {
-		set({ isBusy: true })
-		try {
-			const read = await world.suggest()
-			if (read.length === 0) {
-				throw NO_SUGGESTION
-			}
-			set({ step: "picking", connection: null, suggestions: read })
-		} catch (reason) {
-			report(i18n.t("chat:onboarding.picker.failure.suggestions"), reason)
-			set({ round: state.round + 1 })
-		} finally {
-			set({ isBusy: false })
-		}
+	const pickCompanion = () => {
+		set({ step: "done" })
+		return world.send(onboardingSummonsFor("firstCompanion"))
 	}
 
-	const greet = async (created: Bot) => {
+	const greetCompanion = async (created: CompanionCreated) => {
 		try {
 			await world.greet(created.id, onboardingSummonsFor("arrival"))
 		} catch (reason) {
 			report(
-				i18n.t("chat:onboarding.handoff.failure", { name: created.name }),
+				i18n.t("chat:onboarding.arrival.failure", { name: created.name }),
 				reason,
 			)
 		}
-	}
-
-	const addCompanion = async (pickId: string) => {
-		const pick = state.suggestions.find(({ id }) => id === pickId)
-		if (!pick || state.isBusy) {
-			return
-		}
-		set({ isBusy: true })
-		try {
-			const created = await world.create(draftOf(pick))
-			set({ step: "handoff", handoff: handoffOf(created, pick.blurb) })
-			await greet(created)
-		} catch (reason) {
-			report(
-				i18n.t("chat:onboarding.picker.failure.add", { name: pick.name }),
-				reason,
-			)
-		} finally {
-			set({ isBusy: false })
-		}
-	}
-
-	const openCompanion = async () => {
-		const opened = state.handoff
-		if (opened) {
-			world.open(opened.botId)
-		}
-		await finishRun()
 	}
 
 	const openAttempt = () => {
@@ -392,16 +308,9 @@ export const createOnboardingController = (
 
 		summonAgain: settle,
 
-		pickCompanion: readSuggestions,
+		pickCompanion,
 
-		addCompanion,
-
-		askInOwnWords: async (request) => {
-			await world.send(request)
-			await finishRun()
-		},
-
-		openCompanion,
+		greetCompanion,
 
 		finish: finishRun,
 	}

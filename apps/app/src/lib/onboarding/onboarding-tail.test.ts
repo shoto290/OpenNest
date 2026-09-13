@@ -4,7 +4,6 @@ import { createFakeOnboardingPort } from "./fake-onboarding-port"
 import {
 	createFakeOnboardingWorld,
 	type FakeOnboardingWorld,
-	SUGGESTED_SCOUT,
 } from "./fake-onboarding-world"
 import {
 	createOnboardingController,
@@ -158,17 +157,13 @@ describe("the onboarding tail", () => {
 		expect(world.sent).toHaveLength(2)
 	})
 
-	it("asks the first reply again when the suggestions refuse to load", async () => {
+	it("asks nothing more once the reader handed the first companion to Shoto", async () => {
 		const controller = await settled()
 		const chat = chatWith({ messages: [summonsAsked, answered] })
-		const first = tailOf(controller, chat)?.step?.request.id
-		world.refusals.suggest = { kind: "storage", detail: "disk is full" }
 
 		await controller.pickCompanion()
-		const again = tailOf(controller, chat)?.step?.request.id
 
-		expect(again).toBeDefined()
-		expect(again).not.toBe(first)
+		expect(tailOf(controller, chat)).toBeNull()
 	})
 
 	it("stands down in a conversation the onboarding did not start in", async () => {
@@ -177,38 +172,6 @@ describe("the onboarding tail", () => {
 		expect(
 			onboardingTailOf(onboardingOf(controller), chatWith(), OTHER_BOT),
 		).toBeNull()
-	})
-
-	it("shows the picker options once the reader picked", async () => {
-		const controller = await settled()
-		await controller.pickCompanion()
-		const tail = tailOf(controller)
-
-		expect(tail?.picks).toHaveLength(world.suggestions.length)
-		expect(tail?.step).toBeNull()
-		expect(tail?.handoff).toBeNull()
-	})
-
-	it("keeps the picker on screen when the creation is refused", async () => {
-		const controller = await settled()
-		await controller.pickCompanion()
-		world.refusals.create = { kind: "storage", detail: "disk is full" }
-		await controller.addCompanion(SUGGESTED_SCOUT.id)
-		const tail = tailOf(controller)
-
-		expect(tail?.picks).toHaveLength(world.suggestions.length)
-		expect(tail?.handoff).toBeNull()
-	})
-
-	it("shows the handoff once the companion is created", async () => {
-		const controller = await settled()
-		await controller.pickCompanion()
-		await controller.addCompanion(SUGGESTED_SCOUT.id)
-		const tail = tailOf(controller)
-
-		expect(tail?.handoff?.name).toBe(SUGGESTED_SCOUT.name)
-		expect(tail?.picks).toBeNull()
-		expect(tail?.step).toBeNull()
 	})
 })
 
@@ -238,6 +201,14 @@ describe("the summons row", () => {
 		])
 
 		expect(kept.map(({ text }) => text)).toEqual(["Hello."])
+	})
+
+	it("drops the summons that sent Shoto after the first companion", () => {
+		const kept = withoutOnboardingSummons([
+			rowOf({ text: onboardingSummonsFor("firstCompanion") }),
+		])
+
+		expect(kept).toHaveLength(0)
 	})
 
 	it("drops the summons that opened the created companion thread", () => {

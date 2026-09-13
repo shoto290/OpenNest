@@ -1,9 +1,12 @@
 import { useEffect, useRef } from "react"
 
-import { companionsTransport } from "./companions-transport"
+import {
+	type CompanionCreated,
+	companionsTransport,
+} from "./companions-transport"
 
 export type CompanionAnnouncements = {
-	onCreated: () => void
+	onCreated: (created: CompanionCreated) => void
 	onFirstRunDone: () => void
 }
 
@@ -18,7 +21,9 @@ export const useCompanionAnnouncements = (
 
 	useEffect(() => {
 		const listening = Promise.all([
-			companionsTransport.onCreated(() => announce.current.onCreated()),
+			companionsTransport.onCreated((created) =>
+				announce.current.onCreated(created),
+			),
 			companionsTransport.onFirstRunDone(() =>
 				announce.current.onFirstRunDone(),
 			),

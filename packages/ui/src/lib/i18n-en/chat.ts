@@ -675,22 +675,7 @@ const chat = {
 				description: "Ask me a few more things. I'll wait.",
 			},
 		},
-
-		picker: {
-			title: "Who should join first?",
-			option: "{{name}}, {{role}}",
-			requestLabel: "Or say what you need in your own words",
-			requestPlaceholder: "Someone who drafts my emails…",
-			add: "Add {{name}}",
-			skip: "Skip for now",
-			failure: {
-				suggestions: "Couldn't load the suggested companions",
-				add: "Couldn't add {{name}}",
-			},
-		},
-		handoff: {
-			open: "Open {{name}}",
-			stay: "Stay here",
+		arrival: {
 			failure: "{{name}} couldn't say hello",
 		},
 	},

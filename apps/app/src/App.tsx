@@ -183,8 +183,6 @@ export function App() {
 	const onboarding = useOnboarding(onboardingTransport, {
 		homeBotId: () => roster.controller.getState().selectedBotId,
 		send: chat.controller.send,
-		suggest: store.suggestedBots,
-		create: roster.controller.createFromDraft,
 		greet: async (botId, text) => {
 			await chat.controller.openAside(
 				botId,
@@ -192,7 +190,6 @@ export function App() {
 			)
 			await chat.controller.sendTo(botId, text)
 		},
-		open: roster.controller.select,
 		markFirstRunDone: user.controller.markFirstRunDone,
 	})
 
@@ -383,7 +380,12 @@ export function App() {
 	}, [user.controller])
 
 	useCompanionAnnouncements({
-		onCreated: () => void roster.controller.reload(),
+		onCreated: (created) => {
+			void roster.controller.reload()
+			if (!user.controller.getState().preferences.firstRunDone) {
+				void onboarding.controller.greetCompanion(created)
+			}
+		},
 		onFirstRunDone: () => void user.controller.load(),
 	})
 
