@@ -695,7 +695,7 @@ const chat = {
 				description: "Posez-moi encore quelques questions. J'attends.",
 			},
 		},
-		handoff: {
+		arrival: {
 			failure: "{{name}} n'a pas pu dire bonjour",
 		},
 	},

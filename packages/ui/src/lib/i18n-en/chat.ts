@@ -675,7 +675,7 @@ const chat = {
 				description: "Ask me a few more things. I'll wait.",
 			},
 		},
-		handoff: {
+		arrival: {
 			failure: "{{name}} couldn't say hello",
 		},
 	},

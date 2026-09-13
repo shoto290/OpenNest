@@ -172,7 +172,7 @@ export const createOnboardingController = (
 	}
 
 	const pickCompanion = () => {
-		set({ step: "done", connection: null })
+		set({ step: "done" })
 		return world.send(onboardingSummonsFor("firstCompanion"))
 	}
 
@@ -181,7 +181,7 @@ export const createOnboardingController = (
 			await world.greet(created.id, onboardingSummonsFor("arrival"))
 		} catch (reason) {
 			report(
-				i18n.t("chat:onboarding.handoff.failure", { name: created.name }),
+				i18n.t("chat:onboarding.arrival.failure", { name: created.name }),
 				reason,
 			)
 		}
