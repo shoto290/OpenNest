@@ -105,6 +105,14 @@ export const answeredRow = ({
 	runtimeSessionId: null,
 })
 
+type RepliedRow = {
+	turnId: string
+	quotedMessageId: string | null
+}
+
+export const isPostedAnswer = ({ turnId, quotedMessageId }: RepliedRow) =>
+	turnId === quotedMessageId
+
 const rowsOf = ({ asking, answered }: PostedQuestion): TranscriptDraft[] =>
 	answered ? [asking, answered] : [asking]
 
