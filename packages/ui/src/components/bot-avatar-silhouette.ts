@@ -221,9 +221,14 @@ export const headShellPoint = ({
 
 const TANGENT_STEP = 1
 
-type ShellTangent = { spin: number; sx: number; sy: number; at: Vec2 }
+export type BotAvatarShellRest = {
+	spin: number
+	sx: number
+	sy: number
+	at: Vec2
+}
 
-const shellTangent = (projection: ShellProjection): ShellTangent => {
+const shellTangent = (projection: ShellProjection): BotAvatarShellRest => {
 	const { face } = projection
 	const at = headShellPoint(projection)
 	const alongX = headShellPoint({
@@ -246,8 +251,6 @@ const shellTangent = (projection: ShellProjection): ShellTangent => {
 		at,
 	}
 }
-
-export type BotAvatarShellRest = ShellTangent
 
 type ShellAnchor = Omit<ShellProjection, "rotation">
 
