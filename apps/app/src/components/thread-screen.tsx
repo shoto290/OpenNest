@@ -76,6 +76,7 @@ import { isTableBlock } from "@/lib/chat/markdown-blocks"
 import { messageWithAttachments } from "@/lib/chat/message-attachments"
 import { pinTimestamp } from "@/lib/chat/pin-timestamp"
 import type { PinnedBubble } from "@/lib/chat/pinned-bubbles"
+import { isPostedAnswer } from "@/lib/chat/posted-question"
 import {
 	bubbleIdOf,
 	emptyStateStatusFor,
@@ -651,6 +652,9 @@ type RunRowsProps = Omit<ThreadRunProps, "run" | "presentation"> & {
 	presentations: RunPresentation[]
 }
 
+const isSentByReader = (row: TranscriptRow) =>
+	row.role === "user" && !isPostedAnswer(row)
+
 const toRunRows = ({
 	runs,
 	presentations,
@@ -659,7 +663,7 @@ const toRunRows = ({
 	runs.map((run, runIndex) => ({
 		key: bubbleIdOf(run[0].messageId, run[0].blockIndex),
 		messageIds: run.map((row) => bubbleIdOf(row.messageId, row.blockIndex)),
-		isAnchor: run[0].role === "user",
+		isAnchor: run.some(isSentByReader),
 		render: () => (
 			<ThreadRun {...shared} presentation={presentations[runIndex]} run={run} />
 		),

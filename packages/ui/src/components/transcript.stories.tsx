@@ -14,6 +14,7 @@ interface Entry {
 	id: string
 	from: "user" | "assistant"
 	text: string
+	isPosted?: boolean
 }
 
 const FRAME_CLASS =
@@ -87,7 +88,7 @@ const toItems = (entries: Entry[]): TranscriptItem[] =>
 	entries.map((entry) => ({
 		key: entry.id,
 		messageIds: [entry.id],
-		isAnchor: entry.from === "user",
+		isAnchor: entry.from === "user" && !entry.isPosted,
 		render: () => <Bubble entry={entry} />,
 	}))
 
@@ -280,6 +281,53 @@ const StreamingDemo = ({
 				<span className="text-muted-foreground text-xs">
 					{isStreaming ? "Streaming" : "Idle"}
 				</span>
+			</div>
+		</div>
+	)
+}
+
+const POSTED_ROWS: Entry[] = [
+	{
+		id: "question-welcome",
+		from: "assistant",
+		text: "Welcome. Shall we set up how you sign in?",
+	},
+	{ id: "answer-welcome", from: "user", text: "Start", isPosted: true },
+	{
+		id: "question-account",
+		from: "assistant",
+		text: "How do you want to sign in?",
+	},
+	{
+		id: "answer-account",
+		from: "user",
+		text: "Sign in with Claude",
+		isPosted: true,
+	},
+]
+
+type PostedQuestionsDemoProps = Omit<TranscriptProps, "children" | "rows">
+
+const PostedQuestionsDemo = (transcriptProps: PostedQuestionsDemoProps) => {
+	const [posted, setPosted] = useState(1)
+	const hasNext = posted < POSTED_ROWS.length
+
+	return (
+		<div className={FRAME_CLASS}>
+			<Transcript
+				{...transcriptProps}
+				className="flex-1"
+				contentClassName="flex flex-col p-3"
+				rows={toItems(POSTED_ROWS.slice(0, posted))}
+			/>
+			<div className="flex items-center gap-2 border-border border-t p-2">
+				<Button
+					disabled={!hasNext}
+					onClick={() => setPosted((current) => current + 1)}
+					size="sm"
+				>
+					Post next
+				</Button>
 			</div>
 		</div>
 	)
@@ -614,6 +662,30 @@ export const AnchorsTheSentMessage = meta.story({
 			"data-active",
 			"false",
 		)
+	},
+})
+
+export const RestsPostedQuestionsAtTheEnd = meta.story({
+	args: { anchorOnSend: true },
+	render: (args) => <PostedQuestionsDemo {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A solo thread where the app posts two questions and writes each answer itself. Nothing here was sent by the reader, so no row is anchored: every bubble lands at the end and the last one rests against the composer.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const viewport = canvas.getByRole("region", { name: "Conversation" })
+		const postNext = canvas.getByRole("button", { name: "Post next" })
+
+		for (const row of POSTED_ROWS.slice(1)) {
+			await userEvent.click(postNext)
+			const landed = await canvas.findByText(row.text)
+			await atLiveEdge(viewport)
+			await waitFor(() => expectRestingPadding(viewport, landed))
+		}
 	},
 })
 

@@ -2285,6 +2285,13 @@ const renderOnboarding = async (
 	}
 }
 
+const TYPED_MESSAGE = "Hello, what can you do?"
+
+const isAnchored = (content: Element) =>
+	content
+		.closest("[data-scroll-anchor]")
+		?.getAttribute("data-scroll-anchor") === "true"
+
 const isBefore = (earlier: Element, later: Element) =>
 	(earlier.compareDocumentPosition(later) &
 		Node.DOCUMENT_POSITION_FOLLOWING) !==
@@ -2332,6 +2339,33 @@ describe("the first run in a solo thread", () => {
 		expect(isAsking(WELCOME_QUESTION)).toBe(false)
 		expect(screen.getByText("Start")).toBeTruthy()
 		expect(welcome && isBefore(welcome, account)).toBe(true)
+	})
+
+	it("leaves the answer of a posted step unanchored so it rests at the end", async () => {
+		const fixture = await onboardingOf()
+		const shown = await renderOnboarding(fixture)
+
+		await shown.choose("Start")
+
+		expect(isAnchored(screen.getByText("Start"))).toBe(false)
+	})
+
+	it("anchors a message the reader typed", async () => {
+		const solo = await soloOf({})
+		await act(async () => {
+			await solo.thread().chat.controller.send(TYPED_MESSAGE)
+		})
+		render(
+			screenOf(
+				solo.thread(),
+				NO_BOT_RECORDS,
+				() => undefined,
+				createMessageLandingController(),
+			),
+		)
+		await settle()
+
+		expect(isAnchored(screen.getByText(TYPED_MESSAGE))).toBe(true)
 	})
 
 	it("offers the sign-in when nobody is authenticated", async () => {
