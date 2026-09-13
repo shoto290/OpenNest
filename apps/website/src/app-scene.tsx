@@ -54,43 +54,29 @@ const NO_ACTIVITY: EarlierTodayRow[] = []
 
 const doNothing = () => {}
 
-const sceneRow = (
-	key: string,
-	body: ReactNode,
-	opacity = 1,
-): TranscriptItem => ({
+const sceneRow = (key: string, body: ReactNode): TranscriptItem => ({
 	key,
-	render: () => (
-		<div className={ROW_ENTER} style={opacity === 1 ? undefined : { opacity }}>
-			{body}
-		</div>
-	),
+	render: () => <div className={ROW_ENTER}>{body}</div>,
 })
 
 const loopRows = (loop: SceneLoop, frame: SceneFrame): TranscriptItem[] => {
 	const [first, second] = loop.speakers
-	const rows: TranscriptItem[] = []
+	const rows: TranscriptItem[] = [
+		sceneRow(
+			"request",
+			<UserTurn>
+				<Markdown>{loop.request}</Markdown>
+			</UserTurn>,
+		),
+	]
 
-	if (frame.requestOpacity > 0) {
-		rows.push(
-			sceneRow(
-				"request",
-				<UserTurn>
-					<Markdown>{loop.request}</Markdown>
-				</UserTurn>,
-				frame.requestOpacity,
-			),
-		)
-	}
-
-	if (frame.hasFirstAnswer && frame.firstAnswerOpacity > 0) {
+	if (frame.hasFirstAnswer) {
 		rows.push(
 			sceneRow(
 				"first-answer",
 				<AssistantTurn author={first}>
 					<Markdown>{loop.answers[0].slice(0, frame.firstTyped)}</Markdown>
 				</AssistantTurn>,
-				frame.firstAnswerOpacity,
 			),
 		)
 	}
@@ -102,7 +88,6 @@ const loopRows = (loop: SceneLoop, frame: SceneFrame): TranscriptItem[] => {
 				<AssistantTurn author={second}>
 					<Markdown>{loop.answers[1].slice(0, frame.secondTyped)}</Markdown>
 				</AssistantTurn>,
-				frame.closingOpacity,
 			),
 		)
 	}
@@ -112,7 +97,6 @@ const loopRows = (loop: SceneLoop, frame: SceneFrame): TranscriptItem[] => {
 			sceneRow(
 				"mission",
 				<MissionTurn mission={loop.mission} onOpen={doNothing} />,
-				frame.closingOpacity,
 			),
 		)
 	}
@@ -216,20 +200,22 @@ export const AppScene = () => {
 	const [draft, setDraft] = useState("")
 	const readerAvatar = useReaderAvatar()
 	const space = spaceOf(spaceId)
-	const { frame, engage, restart } = useSceneTimeline({
+	const exchange = exchangeOf(selectedId)
+	const { frame, engage, cancelIdle } = useSceneTimeline({
 		answers: space.loop.answers,
 		onIdle: () => {
 			setSelectedId(space.defaultConversation.id)
 			setPanelOpen(false)
 			setDraft("")
 		},
+		runId: exchange ? null : selectedId,
 	})
 	const select = (id: string) => {
 		engage()
 		setSelectedId(id)
 	}
 	const selectSpace = (id: string) => {
-		restart()
+		cancelIdle()
 		setSpaceId(id)
 		setSelectedId(spaceOf(id).defaultConversation.id)
 	}
@@ -237,7 +223,6 @@ export const AppScene = () => {
 		engage()
 		setPanelOpen(isOpen)
 	}
-	const exchange = exchangeOf(selectedId)
 
 	return (
 		<section
