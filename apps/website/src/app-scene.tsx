@@ -44,9 +44,11 @@ import { WindowControls } from "./window-controls"
 const ROW_ENTER =
 	"animate-in slide-in-from-bottom-1 duration-200 ease-out motion-reduce:animate-none"
 
-// The fold at 1440x900 reveals 359px of the shell: the scene reclaims one
-// spacing step of the thread layout's top padding to keep its newest row inside.
-const TRANSCRIPT_INSET = "pt-4"
+// The transcript rests its column against the composer; the scene holds every
+// row it has played, so it anchors the column to the top of the thread area
+// instead and reclaims one spacing step of padding to keep the fold at 1440x900
+// showing the request row and the three that follow it.
+const TRANSCRIPT_INSET = "justify-start pt-4"
 
 const NO_PINS: PinnedMessage[] = []
 
