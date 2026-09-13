@@ -320,6 +320,11 @@ const runOf = (controller: ChatController): RuntimeScope => {
 const previewFor = (controller: ChatController, botId: string) =>
 	lastWordIn(controller.stateFor(botId).messages)
 
+const isAscending = (messages: TranscriptMessage[]) =>
+	messages.every(
+		(message, index) => index === 0 || message.seq > messages[index - 1].seq,
+	)
+
 const spoken = (messages: TranscriptMessage[]) =>
 	messages.map((message) => [message.role, message.content, message.completion])
 
@@ -962,6 +967,9 @@ describe("createChatController", () => {
 					(message) => message.id === questionMessageIdOf(POSTED.id),
 				)
 
+		const isPosted = (message: TranscriptMessage) =>
+			message.turnId === questionMessageIdOf(POSTED.id)
+
 		const answeredIn = (controller: ChatController) =>
 			controller
 				.getState()
@@ -1082,6 +1090,59 @@ describe("createChatController", () => {
 
 			expect(controller.getState().question).toBeNull()
 			expect(askingIn(controller)).toBeUndefined()
+		})
+
+		it("holds the asking and its answer above what is stored afterwards", async () => {
+			const { controller, store } = await bootedHarness()
+			controller.postQuestion(BOT, POSTED, () => Promise.resolve())
+			await vi.runAllTimersAsync()
+			await controller.answer(POSTED.id, POSTED_ANSWER)
+			await vi.runAllTimersAsync()
+
+			await controller.send("hello")
+			await vi.runAllTimersAsync()
+
+			const { messages } = controller.getState()
+			const positions = messages.map((message) => message.content)
+			expect(positions.indexOf("Subscription")).toBe(
+				positions.findIndex((content) =>
+					content.includes("How do you want to sign in?"),
+				) + 1,
+			)
+			expect(positions.indexOf("Subscription")).toBeLessThan(
+				positions.indexOf("hello"),
+			)
+			expect(isAscending(messages)).toBe(true)
+			expect(spoken(await reload(store))).toEqual(
+				spoken(messages.filter((message) => !isPosted(message))),
+			)
+		})
+
+		it("runs the handler and asks nothing more for an answer with no text", async () => {
+			const { controller } = await sessionlessHarness()
+			const onAnswers = vi.fn(() => Promise.resolve())
+			controller.postQuestion(BOT, POSTED, onAnswers)
+			await vi.runAllTimersAsync()
+
+			await controller.answer(POSTED.id, {})
+			await vi.runAllTimersAsync()
+
+			expect(onAnswers).toHaveBeenCalledWith({})
+			expect(controller.getState().question).toBeNull()
+			expect(answeredIn(controller)).toBeUndefined()
+		})
+
+		it("refuses a question that was already answered", async () => {
+			const { controller } = await sessionlessHarness()
+			controller.postQuestion(BOT, POSTED, () => Promise.resolve())
+			await vi.runAllTimersAsync()
+			await controller.answer(POSTED.id, POSTED_ANSWER)
+			await vi.runAllTimersAsync()
+
+			expect(
+				controller.postQuestion(BOT, POSTED, () => Promise.resolve()),
+			).toBe(false)
+			expect(controller.getState().question).toBeNull()
 		})
 
 		it("reports a handler that rejects the way a refused write is reported", async () => {

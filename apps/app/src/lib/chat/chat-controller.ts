@@ -21,6 +21,7 @@ import {
 	askingRow,
 	type PostedAnswerHandler,
 	type PostedQuestion,
+	type PostedRow,
 	rowsOf,
 	withPostedRows,
 } from "./posted-question"
@@ -264,9 +265,11 @@ export function createChatController(
 		)
 	}
 
-	const postedRowsOf = (bot: BotChat, conversationId: string) =>
+	const postedRowsOf = (bot: BotChat, conversationId: string): PostedRow[] =>
 		bot.posted.flatMap((posted) =>
-			posted.conversationId === conversationId ? rowsOf(posted) : [],
+			posted.conversationId === conversationId
+				? rowsOf(posted).map((row) => ({ afterSeq: posted.afterSeq, row }))
+				: [],
 		)
 
 	const syncBot = (bot: BotChat) => {
@@ -1362,15 +1365,15 @@ export function createChatController(
 		answers: QuestionAnswers,
 	) => {
 		const content = answeredText(posted.request, answers)
-		if (content.length === 0) {
-			return
-		}
-		const answered = answeredRow({
-			id: newId(),
-			asking: posted.asking,
-			content,
-			createdAt: now(),
-		})
+		const answered =
+			content.length === 0
+				? null
+				: answeredRow({
+						id: newId(),
+						asking: posted.asking,
+						content,
+						createdAt: now(),
+					})
 		bot.posted = bot.posted.map((known) =>
 			known === posted ? { ...known, answered } : known,
 		)
@@ -1383,13 +1386,17 @@ export function createChatController(
 		}
 	}
 
+	const storedSeqOf = (conversationId: string) =>
+		selectMessages(transcript.getState(), conversationId).at(-1)?.seq ?? 0
+
 	const postQuestion = (
 		bot: BotChat,
 		request: QuestionRequest,
 		onAnswers: PostedAnswerHandler,
 	) => {
-		if (bot.posted.some((posted) => posted.request.id === request.id)) {
-			return true
+		const known = bot.posted.find((posted) => posted.request.id === request.id)
+		if (known) {
+			return known.answered === null
 		}
 		const conversationId = bot.state.conversationId
 		if (!conversationId || bot.state.question) {
@@ -1401,6 +1408,7 @@ export function createChatController(
 				request,
 				onAnswers,
 				conversationId,
+				afterSeq: storedSeqOf(conversationId),
 				asking: askingRow({
 					request,
 					conversationId,
