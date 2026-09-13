@@ -1412,6 +1412,7 @@ export function createChatController(
 		}
 		changePosted(bot, id, {
 			isAnswering: false,
+			isAnswered: true,
 			answered: answeredRowOf(posted, answers),
 		})
 		dispatch(bot, { type: "questionWithdrawn", id })
@@ -1421,20 +1422,23 @@ export function createChatController(
 	const storedSeqOf = (conversationId: string) =>
 		selectMessages(transcript.getState(), conversationId).at(-1)?.seq ?? 0
 
+	const rearmPosted = (bot: BotChat, posted: PostedQuestion) => {
+		const live = bot.state.question
+		if (live) {
+			return live.id === posted.request.id
+		}
+		dispatch(bot, { type: "questionPosted", request: posted.request })
+		return true
+	}
+
 	const postQuestion = (
 		bot: BotChat,
 		request: PostedRequest,
 		onAnswers: PostedAnswerHandler,
 	) => {
 		const known = bot.posted.find((posted) => posted.request.id === request.id)
-		if (known?.answered) {
-			return false
-		}
 		if (known) {
-			if (bot.state.question?.id !== request.id) {
-				dispatch(bot, { type: "questionPosted", request: known.request })
-			}
-			return true
+			return !known.isAnswered && rearmPosted(bot, known)
 		}
 		const conversationId = bot.state.conversationId
 		if (!conversationId || bot.state.question) {
@@ -1455,6 +1459,7 @@ export function createChatController(
 				}),
 				answered: null,
 				isAnswering: false,
+				isAnswered: false,
 			},
 		]
 		dispatch(bot, { type: "questionPosted", request })
@@ -1464,7 +1469,7 @@ export function createChatController(
 
 	const withdrawQuestion = (bot: BotChat, id: string) => {
 		const known = bot.posted.find((posted) => posted.request.id === id)
-		if (!known || known.answered !== null) {
+		if (!known || known.isAnswered) {
 			return
 		}
 		if (!known.isAnswering) {

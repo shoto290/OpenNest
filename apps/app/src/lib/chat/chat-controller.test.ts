@@ -985,6 +985,13 @@ describe("createChatController", () => {
 					(message) => message.id === questionMessageIdOf(POSTED.id),
 				)
 
+		const askingsIn = (controller: ChatController) =>
+			controller
+				.getState()
+				.messages.filter(
+					(message) => message.id === questionMessageIdOf(POSTED.id),
+				)
+
 		const isPosted = (message: TranscriptMessage) =>
 			message.turnId === questionMessageIdOf(POSTED.id)
 
@@ -1164,6 +1171,50 @@ describe("createChatController", () => {
 			expect(onAnswers).toHaveBeenCalledWith({})
 			expect(controller.getState().question).toBeNull()
 			expect(answeredIn(controller)).toBeUndefined()
+			expect(askingsIn(controller)).toHaveLength(1)
+		})
+
+		it("never brings back or withdraws a question answered with no text", async () => {
+			const { controller } = await sessionlessHarness()
+			controller.postQuestion(BOT, MASKED, () => Promise.resolve())
+			await vi.runAllTimersAsync()
+			await controller.answer(MASKED.id, { "Paste your key": MASKED_KEY })
+			await vi.runAllTimersAsync()
+			const answered = controller.getState()
+
+			expect(
+				controller.postQuestion(BOT, MASKED, () => Promise.resolve()),
+			).toBe(false)
+			controller.withdrawQuestion(BOT, MASKED.id)
+			await vi.runAllTimersAsync()
+
+			expect(controller.getState()).toBe(answered)
+			expect(answered.question).toBeNull()
+			expect(
+				answered.messages.filter(
+					(message) => message.id === questionMessageIdOf(MASKED.id),
+				),
+			).toHaveLength(1)
+		})
+
+		it("refuses to re-arm a held question while another request is live", async () => {
+			const { controller, driver } = await bootedHarness()
+			const other = { ...POSTED, id: "posted-2" }
+			controller.postQuestion(BOT, POSTED, () => Promise.resolve())
+			await vi.runAllTimersAsync()
+			driver.pushEvent({
+				type: "permissionResolved",
+				id: POSTED.id,
+				decision: "allowOnce",
+			})
+			await vi.runAllTimersAsync()
+			controller.postQuestion(BOT, other, () => Promise.resolve())
+			await vi.runAllTimersAsync()
+
+			expect(
+				controller.postQuestion(BOT, POSTED, () => Promise.resolve()),
+			).toBe(false)
+			expect(controller.getState().question).toEqual(other)
 		})
 
 		it("keeps what the reader typed into a masked entry out of the transcript", async () => {

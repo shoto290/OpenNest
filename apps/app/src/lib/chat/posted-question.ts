@@ -52,6 +52,7 @@ export type PostedQuestion = {
 	asking: TranscriptDraft
 	answered: TranscriptDraft | null
 	isAnswering: boolean
+	isAnswered: boolean
 }
 
 type AskingInput = {
