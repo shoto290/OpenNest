@@ -19,6 +19,7 @@ import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { type FakeLayout, fakeLayout } from "@/lib/perf/fake-layout"
+import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
 
 const harness = vi.hoisted(
 	(): { store: TranscriptStore | null; driver: FakeChatDriver | null } => ({
@@ -207,11 +208,16 @@ type MountedApp = {
 
 type MountOptions = { delayMs?: number; pageBotIndex?: number }
 
+const seedFirstRunDone = () => {
+	writeMirror({ ...readMirror(), firstRunDone: true })
+}
+
 const mountApp = async ({
 	delayMs = 0,
 	pageBotIndex,
 }: MountOptions = {}): Promise<MountedApp> => {
 	layout = fakeLayout()
+	seedFirstRunDone()
 	const store = createFakeTranscriptStore()
 	const bots = await seedBots(store)
 	for (const [index, bot] of bots.entries()) {
@@ -374,7 +380,7 @@ describe("PRF5 chat open baseline", () => {
 		expect(await measureOpenings(0)).toMatchInlineSnapshot(`
 			{
 			  "busyOpen": {
-			    "commits": 8,
+			    "commits": 6,
 			    "elapsedMs": 0,
 			    "storeCalls": [
 			      "pinnedMessages",
@@ -385,7 +391,7 @@ describe("PRF5 chat open baseline", () => {
 			    "writesAhead": 0,
 			  },
 			  "coldOpen": {
-			    "commits": 8,
+			    "commits": 6,
 			    "elapsedMs": 0,
 			    "storeCalls": [
 			      "pinnedMessages",
@@ -411,7 +417,7 @@ describe("PRF5 chat open baseline", () => {
 		expect(await measureOpenings(CALL_DELAY_MS)).toMatchInlineSnapshot(`
 			{
 			  "busyOpen": {
-			    "commits": 11,
+			    "commits": 9,
 			    "elapsedMs": 16,
 			    "storeCalls": [
 			      "mainChat",
@@ -425,7 +431,7 @@ describe("PRF5 chat open baseline", () => {
 			    "writesAhead": 1,
 			  },
 			  "coldOpen": {
-			    "commits": 8,
+			    "commits": 7,
 			    "elapsedMs": 10,
 			    "storeCalls": [
 			      "pinnedMessages",
@@ -450,12 +456,12 @@ describe("PRF5 chat open baseline", () => {
 
 		expect(await measurePage()).toMatchInlineSnapshot(`
 			{
-			  "commitsToFirstRow": 8,
-			  "commitsToSettled": 17,
+			  "commitsToFirstRow": 6,
+			  "commitsToSettled": 13,
 			  "highlightCalls": 10,
 			  "highlighterBuilds": 0,
-			  "markdownProcessors": 34,
-			  "paintedRows": 21,
+			  "markdownProcessors": 32,
+			  "paintedRows": 20,
 			}
 		`)
 	})
