@@ -129,6 +129,7 @@ export const createOnboardingController = (
 	let state = initialOnboardingState
 	let asked: OnboardingSummons = "greeting"
 	let attempt = 0
+	let running: { isLive: () => boolean } | null = null
 	const listeners = new Set<() => void>()
 
 	const publish = () => {
@@ -295,8 +296,14 @@ export const createOnboardingController = (
 		port.openSignInUrl(signInUrl).catch(live.fail)
 	}
 
+	const isSigningIn = () => running?.isLive() ?? false
+
 	const signIn = async () => {
+		if (isSigningIn()) {
+			return
+		}
 		const live = openAttempt()
+		running = live
 		set({ isBusy: true })
 		let stopListening: (() => void) | undefined
 		try {
@@ -309,6 +316,9 @@ export const createOnboardingController = (
 			live.fail(reason)
 		} finally {
 			stopListening?.()
+			if (running === live) {
+				running = null
+			}
 			if (live.isLive()) {
 				set({ isBusy: false })
 			}
@@ -323,6 +333,11 @@ export const createOnboardingController = (
 				showFailed(reason)
 			}
 		}
+	}
+
+	const endSignIn = async () => {
+		attempt += 1
+		await ignoringNotRunning(() => port.cancelSignIn())
 	}
 
 	return {
@@ -355,6 +370,9 @@ export const createOnboardingController = (
 
 		submitApiKey: async (apiKey) => {
 			set({ isBusy: true })
+			if (isSigningIn()) {
+				await endSignIn()
+			}
 			try {
 				await port.holdApiKey(apiKey)
 			} catch (reason) {
@@ -368,9 +386,8 @@ export const createOnboardingController = (
 		},
 
 		pasteKeyInstead: async () => {
-			attempt += 1
 			askApiKey()
-			await ignoringNotRunning(() => port.cancelSignIn())
+			await endSignIn()
 		},
 
 		summonAgain: settle,

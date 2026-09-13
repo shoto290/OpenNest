@@ -68,6 +68,8 @@ const createController = () => {
 
 const commands = () => port.calls.map(({ command }) => command)
 
+const flushed = () => new Promise((resolve) => setTimeout(resolve, 0))
+
 beforeEach(() => {
 	controller = createController()
 })
@@ -318,6 +320,39 @@ describe("the api key", () => {
 		controller.askApiKey()
 
 		expect(controller.getState().round).toBe(offered + 1)
+	})
+
+	it("ends the running sign-in before holding the key", async () => {
+		port.refusals.cancelSignIn = { kind: "notRunning" }
+		port.report = authenticated({ email: null, plan: null })
+		controller.askApiKey()
+		const signingIn = controller.signIn()
+		await flushed()
+
+		await controller.submitApiKey(API_KEY)
+		port.announceStarted(SIGN_IN_URL)
+		port.completeSignIn()
+		await signingIn
+
+		expect(commands().indexOf("cancelSignIn")).toBeGreaterThan(-1)
+		expect(commands().indexOf("cancelSignIn")).toBeLessThan(
+			commands().indexOf("holdApiKey"),
+		)
+		expect(world.sent).toHaveLength(1)
+		expect(controller.getState().connection).toBeNull()
+	})
+
+	it("leaves a running sign-in alone when the reader asks to sign in again", async () => {
+		controller.askApiKey()
+		const signingIn = controller.signIn()
+		await flushed()
+
+		await controller.signIn()
+
+		expect(commands().filter((command) => command === "signIn")).toHaveLength(1)
+
+		port.completeSignIn()
+		await signingIn
 	})
 
 	it("holds the key and reads the account again", async () => {
