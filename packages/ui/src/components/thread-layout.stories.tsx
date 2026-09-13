@@ -5,9 +5,7 @@ import preview from "@workspace/storybook/preview"
 import { AppHeader } from "@workspace/ui/components/app-header"
 import { ChatEmptyState } from "@workspace/ui/components/chat-empty-state"
 import { ConnectionStatus } from "@workspace/ui/components/connection-status"
-import { MessageBubbleGroup } from "@workspace/ui/components/message-bubble"
 import { Notice } from "@workspace/ui/components/notice"
-import { OnboardingHandoffCard } from "@workspace/ui/components/onboarding-handoff-card"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
 import type { RosterBot } from "@workspace/ui/components/roster"
 import {
@@ -250,33 +248,6 @@ export const StreamingIntoShortTranscript = meta.story({
 		const after = await settledRestOf(canvasElement)
 		await expect(after.above).toBeLessThan(before.above)
 		await expect(Math.abs(after.below - before.below)).toBeLessThanOrEqual(1)
-	},
-})
-
-export const OnboardingCards = meta.story({
-	args: {
-		children: (
-			<MessageBubbleGroup spacing="default">
-				<OnboardingHandoffCard
-					description="Looks things up and reports back short"
-					name="Scout"
-					onOpen={fn()}
-					onStay={fn()}
-					seed="scout"
-				/>
-			</MessageBubbleGroup>
-		),
-	},
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"Reach for this for the first-run thread, where the onboarding cards are handed in as children rather than rows. Check that they take the same rest as a conversation: against the composer, with the free space above them. Pick `Empty` for a thread with nothing to show.",
-			},
-		},
-	},
-	play: async ({ canvasElement }) => {
-		await expectRestingAtBottom(canvasElement)
 	},
 })
 

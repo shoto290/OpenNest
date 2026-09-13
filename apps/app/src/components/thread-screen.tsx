@@ -4,7 +4,6 @@ import {
 	useEffect,
 	useMemo,
 	useRef,
-	useState,
 	useSyncExternalStore,
 } from "react"
 
@@ -17,7 +16,6 @@ import { HeaderConversationButton } from "@workspace/ui/components/header-conver
 import { HeaderIdentityButton } from "@workspace/ui/components/header-identity-button"
 import { InitialsAvatar } from "@workspace/ui/components/initials-avatar"
 import type { MessageAuthor } from "@workspace/ui/components/message"
-import { MessageBubbleGroup } from "@workspace/ui/components/message-bubble"
 import {
 	MessageQuote,
 	type QuotedMessage,
@@ -26,11 +24,6 @@ import type { MissionBot } from "@workspace/ui/components/mission"
 import { MissionEventRow } from "@workspace/ui/components/mission-event-row"
 import { MissionHeader } from "@workspace/ui/components/mission-header"
 import { MissionTurn } from "@workspace/ui/components/mission-turn"
-import { OnboardingHandoffCard } from "@workspace/ui/components/onboarding-handoff-card"
-import {
-	type OnboardingCompanion,
-	OnboardingPickerCard,
-} from "@workspace/ui/components/onboarding-picker-card"
 import {
 	PINNED_AVATAR_SIZE,
 	type PinnedMessage,
@@ -151,7 +144,6 @@ import {
 import { toMissionCard } from "@/lib/missions/missions-model"
 import { useMissionSendFailure } from "@/lib/missions/use-mission-failure-notices"
 import { useMissions } from "@/lib/missions/use-missions"
-import type { OnboardingController } from "@/lib/onboarding/onboarding-controller"
 import { withoutOnboardingSummons } from "@/lib/onboarding/onboarding-summons"
 import {
 	type OnboardingTail,
@@ -743,70 +735,6 @@ const withMissionEvents = ({
 		},
 	])
 
-type ThreadPickerCardProps = {
-	controller: OnboardingController
-	picks: OnboardingCompanion[]
-	isBusy: boolean
-}
-
-const ThreadPickerCard = ({
-	controller,
-	picks,
-	isBusy,
-}: ThreadPickerCardProps) => {
-	const [chosenId, setChosenId] = useState<string | null>(null)
-	const [request, setRequest] = useState("")
-	const picked = chosenId ?? picks[0]?.id ?? ""
-
-	return (
-		<OnboardingPickerCard
-			companions={picks}
-			disabled={isBusy}
-			onAdd={() => void controller.addCompanion(picked)}
-			onRequestChange={setRequest}
-			onRequestSubmit={(typed) => void controller.askInOwnWords(typed)}
-			onSkip={() => void controller.finish()}
-			onValueChange={setChosenId}
-			request={request}
-			value={picked}
-		/>
-	)
-}
-
-type ThreadOnboardingProps = {
-	tail: OnboardingTail
-}
-
-const ThreadOnboarding = ({ tail }: ThreadOnboardingProps) => {
-	const { controller, isBusy, picks, handoff } = tail
-	if (!picks && !handoff) {
-		return null
-	}
-
-	return (
-		<MessageBubbleGroup spacing="default">
-			{picks ? (
-				<ThreadPickerCard
-					controller={controller}
-					isBusy={isBusy}
-					picks={picks}
-				/>
-			) : null}
-			{handoff ? (
-				<OnboardingHandoffCard
-					animal={handoff.animal}
-					blot={handoff.blot ?? undefined}
-					description={handoff.description}
-					disabled={isBusy}
-					name={handoff.name}
-					onOpen={() => void controller.openCompanion()}
-					onStay={() => void controller.finish()}
-				/>
-			) : null}
-		</MessageBubbleGroup>
-	)
-}
-
 type BotThreadTailProps = {
 	thread: LoadedBotThread
 	face: ThreadFace
@@ -846,7 +774,6 @@ const BotThreadTail = ({
 					))}
 				</TurnGroup>
 			) : null}
-			{onboarding ? <ThreadOnboarding tail={onboarding} /> : null}
 		</>
 	)
 }

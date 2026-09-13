@@ -58,7 +58,10 @@ describe("useCompanionAnnouncements", () => {
 
 		await announcing(CREATED_EVENT, { id: "b2", name: "Quill" })
 
-		expect(onCreated).toHaveBeenCalledTimes(1)
+		expect(onCreated).toHaveBeenCalledExactlyOnceWith({
+			id: "b2",
+			name: "Quill",
+		})
 		expect(onFirstRunDone).not.toHaveBeenCalled()
 	})
 

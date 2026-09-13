@@ -695,22 +695,7 @@ const chat = {
 				description: "Posez-moi encore quelques questions. J'attends.",
 			},
 		},
-
-		picker: {
-			title: "Qui doit arriver en premier ?",
-			option: "{{name}}, {{role}}",
-			requestLabel: "Ou dites ce dont vous avez besoin, avec vos mots",
-			requestPlaceholder: "Quelqu'un qui rédige mes e-mails…",
-			add: "Ajouter {{name}}",
-			skip: "Plus tard",
-			failure: {
-				suggestions: "Impossible de charger les compagnons suggérés",
-				add: "Impossible d'ajouter {{name}}",
-			},
-		},
 		handoff: {
-			open: "Ouvrir {{name}}",
-			stay: "Rester ici",
 			failure: "{{name}} n'a pas pu dire bonjour",
 		},
 	},
