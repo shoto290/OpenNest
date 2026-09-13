@@ -152,6 +152,7 @@ const chat = {
 		preview: "Preview",
 		submit: "Send answers",
 		next: "Next question",
+		continue: "Continue",
 		dismiss: "Dismiss",
 		copy: "Copy",
 		copied: "Copied",

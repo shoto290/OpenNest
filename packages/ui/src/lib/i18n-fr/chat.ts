@@ -157,6 +157,7 @@ const chat = {
 		preview: "Aperçu",
 		submit: "Envoyer les réponses",
 		next: "Question suivante",
+		continue: "Continuer",
 		dismiss: "Ignorer",
 		copy: "Copier",
 		copied: "Copié",

@@ -106,6 +106,7 @@ const ToolQuestion = ({
 	const { t } = useTranslation("chat")
 	const cardRef = useAutoFocus<HTMLFormElement>()
 	const askedId = useId()
+	const failureId = useId()
 	const [drafts, setDrafts] = useState<Record<string, Draft>>({})
 	const [asked, setAsked] = useState(questions[0]?.question)
 
@@ -190,6 +191,7 @@ const ToolQuestion = ({
 
 	return (
 		<form
+			aria-describedby={item.failure ? failureId : undefined}
 			aria-labelledby={askedId}
 			className={cn(QUESTION_FORM_CLASS, className)}
 			onKeyDown={readKey}
@@ -215,7 +217,9 @@ const ToolQuestion = ({
 			</Tabs>
 
 			<div className={cn("grid", item.entry ? "gap-3" : "gap-2")}>
-				{item.failure ? <FailureBlock failure={item.failure} /> : null}
+				{item.failure ? (
+					<FailureBlock failure={item.failure} titleId={failureId} />
+				) : null}
 
 				<p className="font-medium text-foreground" id={askedId}>
 					{item.question}
@@ -266,7 +270,9 @@ const ToolQuestion = ({
 					) : (
 						<>
 							<Icons.Send data-icon="inline-start" />
-							{t("toolQuestion.submit")}
+							{item.entry
+								? t("toolQuestion.continue")
+								: t("toolQuestion.submit")}
 						</>
 					)}
 				</Button>
@@ -294,9 +300,10 @@ const ToolQuestion = ({
 
 type FailureBlockProps = {
 	failure: ToolQuestionFailure
+	titleId: string
 }
 
-const FailureBlock = ({ failure }: FailureBlockProps) => (
+const FailureBlock = ({ failure, titleId }: FailureBlockProps) => (
 	<div className={QUESTION_GROUP_CLASS} data-slot="tool-question-failure">
 		<div className="flex gap-2">
 			<span
@@ -304,12 +311,15 @@ const FailureBlock = ({ failure }: FailureBlockProps) => (
 				className="mt-1.75 size-1.5 shrink-0 rounded-full bg-destructive"
 				data-slot="tool-question-failure-dot"
 			/>
-			<p className="min-w-0 wrap-break-word font-medium text-foreground text-sm leading-5">
+			<p
+				className="min-w-0 flex-1 wrap-break-word font-medium text-foreground text-sm leading-5"
+				id={titleId}
+			>
 				{failure.title}
 			</p>
 		</div>
 		{failure.detail ? (
-			<p className="wrap-break-word rounded-md bg-background px-2 py-1 text-start font-mono text-muted-foreground text-xs leading-4.5">
+			<p className="self-start wrap-break-word rounded-md bg-background px-2 py-1 text-start font-mono text-muted-foreground text-xs leading-4.5">
 				{failure.detail}
 			</p>
 		) : null}

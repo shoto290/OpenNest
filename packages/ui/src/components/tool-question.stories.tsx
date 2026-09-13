@@ -432,52 +432,53 @@ const tokenColor = (token: string) => {
 }
 
 const SIGN_IN_URL =
-	"https://claude.ai/oauth/authorize?client_id=opennest&scope=inference&state=8f3c1a"
+	"claude.ai/oauth/authorize?code=true&client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e&response_type=code&scope=user%3Ainference&state=8f3c1a"
+
+const SIGN_IN_CODE = "Xk3nQ8#7f2a1c4e"
 
 const WELCOME_STEP: ToolQuestionItem = {
-	question: "Want me to walk you through setting the nest up?",
-	header: "Welcome",
+	question: "Ready to start?",
+	header: "Setup",
 	optionsOnly: true,
 	options: [
+		{ label: "Start", description: "Three steps, about a minute." },
 		{
-			label: "Walk me through it",
-			description: "A few short steps, and you can stop at any one.",
-		},
-		{
-			label: "I'll look around first",
-			description: "Nothing is set up, and I wait here.",
+			label: "Tell me more first",
+			description: "What Kiroshi is, before you connect anything.",
 		},
 	],
 }
 
 const ACCOUNT_STEP: ToolQuestionItem = {
-	question: "A Claude account is already signed in on this machine. Use it?",
-	header: "Account",
+	question: "Use the account already on this machine?",
+	header: "Your Claude account",
 	optionsOnly: true,
 	options: [
 		{
 			label: "Use this account",
-			description: "The one Claude Code signed in with, on this machine.",
+			description:
+				"Signed in with your Claude subscription, under your own login.",
 		},
 		{
 			label: "Use another account",
-			description: "Sign in again in the browser.",
+			description: "Sign in again with a different one.",
 		},
 	],
 }
 
 const ACCESS_STEP: ToolQuestionItem = {
-	question: "How should I reach Claude?",
-	header: "Access",
+	question: "How do you want to connect?",
+	header: "Your Claude account",
 	optionsOnly: true,
 	options: [
 		{
 			label: "Sign in with Claude",
-			description: "Opens the browser once, then comes back here.",
+			description:
+				"Opens your browser once. Works with your Pro or Max subscription.",
 		},
 		{
 			label: "Paste an API key",
-			description: "Pay per call, with a key you already hold.",
+			description: "Pay per use, with nothing to sign in to.",
 		},
 	],
 }
@@ -485,88 +486,87 @@ const ACCESS_STEP: ToolQuestionItem = {
 const pasteKeyInstead = fn()
 
 const CODE_STEP: ToolQuestionItem = {
-	question: "Open the link, sign in, then paste the code Claude gives you.",
-	header: "Code",
+	question: "Paste the code Claude gave you",
+	header: "Sign in",
 	options: [],
-	link: { label: "Sign-in link", url: SIGN_IN_URL },
-	entry: {
-		label: "Code from the browser",
-		placeholder: "Paste the code here",
-	},
-	exit: { label: "Paste an API key instead", onSelect: pasteKeyInstead },
+	link: { label: "Open this link and sign in", url: SIGN_IN_URL },
+	entry: { label: "Then paste the code it gives you" },
+	exit: { label: "Paste a key instead", onSelect: pasteKeyInstead },
 }
 
 const KEY_STEP: ToolQuestionItem = {
-	question: "Paste the API key I should call Claude with.",
+	question: "Paste your Anthropic API key",
 	header: "API key",
 	options: [],
-	entry: {
-		label: "Anthropic API key",
-		placeholder: "sk-ant-…",
-		isSecret: true,
-	},
+	entry: { label: "Key", placeholder: "sk-ant-…", isSecret: true },
 	exit: { label: "Sign in instead", onSelect: fn() },
 }
 
 const SIGN_IN_FAILED_STEP: ToolQuestionItem = {
-	question: "What should I do now?",
-	header: "Sign-in",
+	question: "Try again, or use a key instead?",
+	header: "Sign in",
 	optionsOnly: true,
 	failure: {
-		title: "The sign-in came back refused.",
-		detail:
-			"oauth: the authorization code expired before it was exchanged (400)",
+		title: "Couldn't sign you in",
+		detail: "auth login exited with code 1",
 	},
 	options: [
+		{ label: "Try again", description: "Opens your browser once more." },
 		{
-			label: "Try signing in again",
-			description: "Opens a fresh link in the browser.",
-		},
-		{
-			label: "Paste an API key instead",
-			description: "Skip the browser and pay per call.",
+			label: "Paste an API key",
+			description: "Pay per use, with nothing to sign in to.",
 		},
 	],
 }
 
 const FIRST_REPLY_STEP: ToolQuestionItem = {
-	question: "What should I answer first?",
-	header: "First reply",
+	question: "That's it working. Ready for the last one?",
+	header: "Last step",
+	optionsOnly: true,
 	options: [
 		{
-			label: "Tell me what you can do",
-			description: "A short tour, in your own words.",
+			label: "Pick my first companion",
+			description: "One more question, then you're set up.",
 		},
 		{
-			label: "Read a file on this machine",
-			description: "Pick a file and say what is in it.",
+			label: "Keep talking first",
+			description: "Ask me a few more things. I'll wait.",
 		},
 	],
 }
 
 const FIRST_COMPANION_STEP: ToolQuestionItem = {
-	question: "Which companion should join the nest first?",
-	header: "Companion",
-	optionsOnly: true,
+	question: "Who should join first?",
+	header: "First companion",
 	options: [
-		{ label: "Atlas", description: "Plans the work and splits it." },
-		{ label: "Basile", description: "Reads and writes the code." },
-		{ label: "Elia", description: "Reviews what the others wrote." },
+		{
+			label: "Scout, who looks things up",
+			description: "Reads long pages and reports back short.",
+		},
+		{
+			label: "Ledger, who keeps things in order",
+			description: "Watches your files and says what changed.",
+		},
+		{
+			label: "Maker, who writes code",
+			description: "Edits the folders you point it at.",
+		},
 	],
 }
 
 const HAND_OFF_STEP: ToolQuestionItem = {
-	question: "Where should I leave you?",
-	header: "Hand-off",
+	question: "Where do you want to go?",
+	header: "Done",
 	optionsOnly: true,
 	options: [
 		{
-			label: "In the thread",
-			description: "Straight into the conversation we started.",
+			label: "Open Scout",
+			description: "Say hello and give it something to look up.",
 		},
 		{
-			label: "In the roster",
-			description: "The companions first, the thread after.",
+			label: "Stay here",
+			description:
+				"Keep talking to me. Scout is in the sidebar when you want it.",
 		},
 	],
 }
@@ -578,7 +578,7 @@ export const StepWelcome = meta.story({
 		docs: {
 			description: {
 				story:
-					"The first onboarding step, asked the way every step is asked: a question bubble from Shoto, with the gutter avatar and the name line the transcript draws. Nothing here is a card of its own — the step is the question, and the two options are the whole answer.",
+					"The first onboarding step, asked the way every step is asked: a question bubble from Shoto, with the gutter avatar and the name line the transcript draws. Nothing here is a card of its own: the step is the question, and the two options are the whole answer.",
 			},
 		},
 	},
@@ -626,7 +626,7 @@ export const StepPasteTheCode = meta.story({
 		docs: {
 			description: {
 				story:
-					"The step that waits on the browser: the sign-in link to carry away, then the code to bring back. The way out to an API key sits beside the submit control as a low emphasis control, because it leaves the step rather than answering it.",
+					"The step that waits on the browser: the sign-in link to carry away, then the code to bring back, drawn here holding the code so `Continue` takes a press. The way out to an API key sits beside the primary control as a low emphasis control, because it leaves the step rather than answering it.",
 			},
 		},
 	},
@@ -634,8 +634,14 @@ export const StepPasteTheCode = meta.story({
 		pasteKeyInstead.mockClear()
 		await expectAskedByShoto(canvasElement, CODE_STEP.question)
 
+		await userEvent.type(
+			canvas.getByLabelText("Then paste the code it gives you"),
+			SIGN_IN_CODE,
+		)
+		await expect(canvas.getByRole("button", { name: "Continue" })).toBeEnabled()
+
 		await userEvent.click(
-			canvas.getByRole("button", { name: "Paste an API key instead" }),
+			canvas.getByRole("button", { name: "Paste a key instead" }),
 		)
 		await expect(pasteKeyInstead).toHaveBeenCalledTimes(1)
 	},
@@ -648,12 +654,16 @@ export const StepPasteAnApiKey = meta.story({
 		docs: {
 			description: {
 				story:
-					"The same bubble with a single masked field. The key is never drawn, so a screen share during onboarding shows the step without showing the secret.",
+					"The same bubble with a single masked field, drawn empty, so `Continue` is refused until a key is pasted. The key is never drawn, so a screen share during onboarding shows the step without showing the secret.",
 			},
 		},
 	},
-	play: async ({ canvasElement }) => {
+	play: async ({ canvas, canvasElement }) => {
 		await expectAskedByShoto(canvasElement, KEY_STEP.question)
+		await expect(canvas.getByLabelText("Key")).toHaveValue("")
+		await expect(
+			canvas.getByRole("button", { name: "Continue" }),
+		).toBeDisabled()
 	},
 })
 
@@ -680,12 +690,15 @@ export const StepFirstReply = meta.story({
 		docs: {
 			description: {
 				story:
-					"The first thing the nest is asked to do, once it can reach Claude. This step keeps the free-text field, because the answer it wants is whatever the reader came for.",
+					"The step after the first answer came back, asking whether to go on. Its two options are the whole answer, so no free-text field is drawn.",
 			},
 		},
 	},
-	play: async ({ canvasElement }) => {
+	play: async ({ canvas, canvasElement }) => {
 		await expectAskedByShoto(canvasElement, FIRST_REPLY_STEP.question)
+		await expect(
+			canvas.queryByLabelText("Other answer"),
+		).not.toBeInTheDocument()
 	},
 })
 
@@ -696,12 +709,13 @@ export const StepFirstCompanion = meta.story({
 		docs: {
 			description: {
 				story:
-					"Three companions, one seat. The options carry what each one does, so the choice is read from the rows rather than from a name.",
+					"Three companions, one seat. The options carry what each one does, and the free-text field stays under them, because the reader may want a companion none of the three is.",
 			},
 		},
 	},
-	play: async ({ canvasElement }) => {
+	play: async ({ canvas, canvasElement }) => {
 		await expectAskedByShoto(canvasElement, FIRST_COMPANION_STEP.question)
+		await expect(canvas.getByLabelText("Other answer")).toBeVisible()
 	},
 })
 
@@ -750,7 +764,7 @@ export const NoDismiss = meta.story({
 		docs: {
 			description: {
 				story:
-					"The same card asked by a host that offers no way to refuse. With no `onDeny`, the dismiss control is not drawn at all — a disabled one would read as a way out that stopped working. The submit control keeps its place.",
+					"The same card asked by a host that offers no way to refuse. With no `onDeny`, the dismiss control is not drawn at all: a disabled one would read as a way out that stopped working. The submit control keeps its place.",
 			},
 		},
 	},
@@ -775,7 +789,7 @@ export const EntryWithLink = meta.story({
 		docs: {
 			description: {
 				story:
-					"An entry question in a 320px column: its fields replace the option rows, so neither a radio nor the free-text field is drawn. The link is read only and cut to one line while the copy control keeps its full size beside it, and copying is announced in a polite region — the refused write leaves the link on screen and says so in the same region, since a link nobody can copy is still a link that can be read out.",
+					"An entry question in a 320px column: its fields replace the option rows, so neither a radio nor the free-text field is drawn. The link is read only and cut to one line while the copy control keeps its full size beside it, and copying is announced in a polite region, and the refused write leaves the link on screen and says so in the same region, since a link nobody can copy is still a link that can be read out.",
 			},
 		},
 	},
@@ -789,7 +803,7 @@ export const EntryWithLink = meta.story({
 			canvas.queryByLabelText("Other answer"),
 		).not.toBeInTheDocument()
 
-		const link = canvas.getByLabelText("Sign-in link")
+		const link = canvas.getByLabelText("Open this link and sign in")
 		const copy = canvas.getByRole("button", { name: "Copy" })
 
 		await expect(link).toHaveAttribute("readonly")
@@ -828,19 +842,19 @@ export const EntryWithSecret = meta.story({
 		docs: {
 			description: {
 				story:
-					"The entry question that holds a secret: the value is masked, and autocomplete and spell checking are off, so a key is neither stored by the browser nor sent to a dictionary. The submit control refuses an empty field, and Enter inside the field submits the question rather than reaching for the button.",
+					"The entry question that holds a secret: the value is masked, and autocomplete and spell checking are off, so a key is neither stored by the browser nor sent to a dictionary. The primary control reads `Continue` in place of the send label and refuses an empty field, and Enter inside the field submits the question rather than reaching for the button.",
 			},
 		},
 	},
 	play: async ({ args, canvas, userEvent }) => {
-		const field = canvas.getByLabelText("Anthropic API key")
+		const field = canvas.getByLabelText("Key")
 
 		await expect(field).toHaveAttribute("type", "password")
 		await expect(field).toHaveAttribute("autocomplete", "off")
 		await expect(field).toHaveAttribute("spellcheck", "false")
-		await expect(
-			canvas.getByRole("button", { name: /send answers/i }),
-		).toBeDisabled()
+		const primary = canvas.getByRole("button", { name: "Continue" })
+		await expect(primary).toHaveTextContent(/^Continue$/)
+		await expect(primary).toBeDisabled()
 
 		await userEvent.type(field, "sk-ant-0f3c1a{Enter}")
 		await expect(args.onAnswer).toHaveBeenCalledWith({
@@ -855,16 +869,22 @@ export const Failure = meta.story({
 		docs: {
 			description: {
 				story:
-					"A failure carried by the question itself. The block sits above the question line inside the same card — a dot in the destructive token, the sentence that says what went wrong, and the raw detail on its own surface — and the question keeps its options below, so the reader reads the failure and answers it without moving.",
+					"A failure carried by the question itself. The block sits above the question line inside the same card: a dot in the destructive token, the sentence that says what went wrong across the whole row, and the raw detail on a surface sized to its own text at the inline start. The question keeps its options below, and the form names the failure in its accessible description, so a screen reader hears what went wrong along with the question it asks.",
 			},
 		},
 	},
 	play: async ({ canvas, canvasElement }) => {
 		const failure = slotIn(canvasElement, "tool-question-failure")
 		const question = canvas.getByText(SIGN_IN_FAILED_STEP.question)
-		const detail = canvas.getByText(/authorization code expired/)
+		const title = canvas.getByText("Couldn't sign you in")
+		const detail = canvas.getByText("auth login exited with code 1")
+		const form = canvas.getByRole("form")
 
-		await expect(canvas.getByRole("form")).toContainElement(failure)
+		await expect(form).toContainElement(failure)
+		await expect(form).toHaveAccessibleDescription("Couldn't sign you in")
+		await expect(detail.getBoundingClientRect().width).toBeLessThan(
+			title.getBoundingClientRect().width,
+		)
 		await expect(
 			failure.compareDocumentPosition(question) &
 				Node.DOCUMENT_POSITION_FOLLOWING,
@@ -877,6 +897,6 @@ export const Failure = meta.story({
 				.backgroundColor,
 		).toBe(tokenColor("--destructive"))
 
-		await expect(canvas.getByRole("radio", { name: /again/ })).toBeVisible()
+		await expect(canvas.getByRole("radio", { name: /Try again/ })).toBeVisible()
 	},
 })
