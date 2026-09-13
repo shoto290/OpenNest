@@ -15,6 +15,7 @@ import {
 } from "@workspace/ui/components/message-bubble"
 import {
 	ToolQuestion,
+	type ToolQuestionAnswers,
 	type ToolQuestionItem,
 	type ToolQuestionProps,
 } from "@workspace/ui/components/tool-question"
@@ -423,6 +424,31 @@ const expectAskedByShoto = async (canvasElement: HTMLElement, step: string) => {
 	await expect(
 		within(bubble).queryByRole("button", { name: /dismiss/i }),
 	).not.toBeInTheDocument()
+}
+
+type EnterHeldThenSent = {
+	field: HTMLElement
+	composingEvent: KeyboardEventInit
+	onAnswer: ToolQuestionProps["onAnswer"]
+	answer: ToolQuestionAnswers
+}
+
+const expectEnterHeldThenSent = async ({
+	field,
+	composingEvent,
+	onAnswer,
+	answer,
+}: EnterHeldThenSent) => {
+	const isDefaultKept = fireEvent.keyDown(field, {
+		key: "Enter",
+		...composingEvent,
+	})
+	await expect(isDefaultKept).toBe(true)
+	await expect(onAnswer).not.toHaveBeenCalled()
+
+	fireEvent.keyDown(field, { key: "Enter" })
+	await expect(onAnswer).toHaveBeenCalledTimes(1)
+	await expect(onAnswer).toHaveBeenCalledWith(answer)
 }
 
 const tokenColor = (token: string) => {
@@ -953,13 +979,57 @@ export const EntryComposing = meta.story({
 		const field = canvas.getByLabelText("Key")
 		await userEvent.type(field, "sk-ant-0f3c1a")
 
-		fireEvent.keyDown(field, { key: "Enter", isComposing: true })
-		await expect(args.onAnswer).not.toHaveBeenCalled()
+		await expectEnterHeldThenSent({
+			field,
+			composingEvent: { isComposing: true },
+			onAnswer: args.onAnswer,
+			answer: { [KEY_STEP.question]: "sk-ant-0f3c1a" },
+		})
+	},
+})
 
-		fireEvent.keyDown(field, { key: "Enter" })
-		await expect(args.onAnswer).toHaveBeenCalledTimes(1)
-		await expect(args.onAnswer).toHaveBeenCalledWith({
-			[KEY_STEP.question]: "sk-ant-0f3c1a",
+export const EntryComposingLegacyKeyCodeOnCode = meta.story({
+	args: { questions: [CODE_STEP] },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The code field under an older WebKit, which reports a composition in flight only through keyCode 229. That Enter commits the composition, so the code stays unsent and the key keeps its default action; the next Enter, carrying neither signal, sends it once.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const field = canvas.getByLabelText("Then paste the code it gives you")
+		await userEvent.type(field, "Xk3nQ8#7f2a1c4e")
+
+		await expectEnterHeldThenSent({
+			field,
+			composingEvent: { keyCode: 229 },
+			onAnswer: args.onAnswer,
+			answer: { [CODE_STEP.question]: "Xk3nQ8#7f2a1c4e" },
+		})
+	},
+})
+
+export const EntryComposingLegacyKeyCodeOnKey = meta.story({
+	args: { questions: [KEY_STEP] },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The API key field under an older WebKit, which reports a composition in flight only through keyCode 229. That Enter commits the composition, so the key stays unsent and the key event keeps its default action; the next Enter, carrying neither signal, sends it once.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const field = canvas.getByLabelText("Key")
+		await userEvent.type(field, "sk-ant-0f3c1a")
+
+		await expectEnterHeldThenSent({
+			field,
+			composingEvent: { keyCode: 229 },
+			onAnswer: args.onAnswer,
+			answer: { [KEY_STEP.question]: "sk-ant-0f3c1a" },
 		})
 	},
 })
