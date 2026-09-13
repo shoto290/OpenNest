@@ -1267,13 +1267,8 @@ describe("createChatController", () => {
 			).toBe(true)
 			await vi.runAllTimersAsync()
 
-			const { question, messages } = controller.getState()
-			expect(question).toEqual(POSTED)
-			expect(
-				messages.filter(
-					(message) => message.id === questionMessageIdOf(POSTED.id),
-				),
-			).toHaveLength(1)
+			expect(controller.getState().question).toEqual(POSTED)
+			expect(askingsIn(controller)).toHaveLength(1)
 		})
 
 		it("keeps the question answerable and names the rejection when the handler rejects", async () => {
