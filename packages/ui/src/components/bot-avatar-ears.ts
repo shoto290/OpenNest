@@ -58,8 +58,7 @@ export const trackPose = (
 	trail: BotAvatarPoseTrail,
 	at: number,
 	pose: EulerAngles,
-): BotAvatarPoseTrail => {
+) => {
 	trail.push({ at, pose: { ...pose } })
 	while (trail.length > 2 && trail[1].at <= at - EAR_LAG) trail.shift()
-	return trail
 }
