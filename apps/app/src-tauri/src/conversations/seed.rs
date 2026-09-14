@@ -144,15 +144,15 @@ async fn withdrawn(
 	bot_id: Option<String>,
 	picture: &Path,
 ) -> Refusal {
-	let row = match bot_id {
-		Some(id) => database.conversations().delete_bot(id).await.err(),
-		None => None,
-	};
-	let leftovers: Vec<String> = row
-		.map(|failure| format!("its row ({failure:?})"))
-		.into_iter()
-		.chain(discarded(picture).err().map(|failure| format!("its picture ({failure})")))
-		.collect();
+	let mut leftovers = Vec::new();
+	if let Some(id) = bot_id {
+		if let Err(failure) = database.conversations().delete_bot(id).await {
+			leftovers.push(format!("its row ({failure:?})"));
+		}
+	}
+	if let Err(failure) = discarded(picture) {
+		leftovers.push(format!("its picture ({failure})"));
+	}
 	if leftovers.is_empty() {
 		return cause;
 	}
