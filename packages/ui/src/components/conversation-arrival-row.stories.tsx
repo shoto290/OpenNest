@@ -183,15 +183,16 @@ export const LongContent = meta.story({
 	},
 	play: async ({ canvas, canvasElement }) => {
 		const frame = canvas.getByTestId("narrow-frame")
-		const sentence = slotIn(canvasElement, "conversation-arrival-row")
-			.lastElementChild as HTMLElement
+		const row = slotIn(canvasElement, "conversation-arrival-row")
+		const sentence = row.lastElementChild as HTMLElement
 		const sentenceBox = sentence.getBoundingClientRect()
-		const drawn = getComputedStyle(sentence)
-		const lineHeight = Number.parseFloat(drawn.lineHeight)
+		const drawnRow = getComputedStyle(row)
+		const lineHeight = Number.parseFloat(getComputedStyle(sentence).lineHeight)
 
 		await expect(sentenceBox.height).toBeGreaterThan(lineHeight)
-		await expect(drawn.textOverflow).toBe("clip")
-		await expect(drawn.webkitLineClamp).toBe("none")
+		await expect(drawnRow.overflowWrap).toBe("anywhere")
+		await expect(drawnRow.textOverflow).toBe("clip")
+		await expect(drawnRow.webkitLineClamp).toBe("none")
 		await expect(lineRectsOf(sentence, LONG_NAMED.name).length).toBeGreaterThan(
 			1,
 		)
