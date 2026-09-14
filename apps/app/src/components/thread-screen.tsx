@@ -43,12 +43,7 @@ import { type ChatCopy, useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 import { FaceAvatar } from "@/components/face-avatar"
 import { ThreadComposer } from "@/components/thread-composer"
 import { botThreadMenu, conversationThreadMenu } from "@/components/thread-menu"
-import {
-	ConnectorSessionNotice,
-	PinsNotice,
-	ThreadNotice,
-	TransportNotice,
-} from "@/components/thread-notice"
+import { PinsNotice, ThreadNotice } from "@/components/thread-notice"
 import {
 	ApprovalPrompt,
 	QuestionPrompt,
@@ -115,6 +110,7 @@ import {
 	useQuotedMessages,
 } from "@/lib/chat/use-quoted-messages"
 import { type SentInMount, useSentInMount } from "@/lib/chat/use-sent-in-mount"
+import { useSessionFailureNotice } from "@/lib/chat/use-session-failure-notice"
 import { useThreadJump } from "@/lib/chat/use-thread-jump"
 import { useComposerFocus, useThreadReply } from "@/lib/chat/use-thread-reply"
 import {
@@ -123,7 +119,6 @@ import {
 	useThreadRoster,
 } from "@/lib/chat/use-thread-roster"
 import type { WorkingState } from "@/lib/chat/working-kind"
-import { useSessionConnector } from "@/lib/connectors/use-session-connector"
 import type { SpeakingBot } from "@/lib/conversations/conversation-controller"
 import type { ConversationRuntimes } from "@/lib/conversations/conversation-runtimes"
 import { leadOf } from "@/lib/conversations/roster-conversations"
@@ -913,48 +908,16 @@ const ThreadTail = ({
 type ThreadNoticesProps = {
 	staged: StagedFiles
 	pins: PinnedBubbles
-	error?: ChatError
-	speakerId?: string
-	onDismissError: (id: string) => void
-	onRestart?: (id: string) => void
-	onSignIn?: () => void
 }
 
-const ThreadNotices = ({
-	staged,
-	pins,
-	error,
-	speakerId,
-	onDismissError,
-	onRestart,
-	onSignIn,
-}: ThreadNoticesProps) => {
-	const leftOut = useSessionConnector(error, speakerId)
-
-	return (
-		<ThreadNotice
-			onDismissRefusal={staged.dismissRefusal}
-			refusal={staged.refusal}
-		>
-			{error && leftOut ? (
-				<ConnectorSessionNotice
-					name={leftOut.name}
-					onDismiss={() => onDismissError(error.id)}
-					onOpen={leftOut.open}
-				/>
-			) : null}
-			{error && !leftOut ? (
-				<TransportNotice
-					error={error}
-					onDismiss={onDismissError}
-					onRestart={onRestart}
-					onSignIn={onSignIn}
-				/>
-			) : null}
-			{pins.hasFailed ? <PinsNotice onDismiss={pins.dismissFailure} /> : null}
-		</ThreadNotice>
-	)
-}
+const ThreadNotices = ({ staged, pins }: ThreadNoticesProps) => (
+	<ThreadNotice
+		onDismissRefusal={staged.dismissRefusal}
+		refusal={staged.refusal}
+	>
+		{pins.hasFailed ? <PinsNotice onDismiss={pins.dismissFailure} /> : null}
+	</ThreadNotice>
+)
 
 type NewerControl = {
 	hasNewer: boolean
@@ -1095,14 +1058,14 @@ function ThreadView({
 		},
 		[botController],
 	)
-	const restartAfterError = useCallback(
-		(id: string) => {
-			controller.dismissError(id)
-			void botController?.restart()
-		},
-		[botController, controller],
-	)
 	const offerSignIn = signInOfferOf(signIn, facts.bot?.id)
+	useSessionFailureNotice({
+		error: facts.latestError,
+		speakerId: speakerIdOf(thread, facts.latestError),
+		onDismiss: controller.dismissError,
+		onRestart: botController ? restart : undefined,
+		onSignIn: offerSignIn,
+	})
 	const stop = useCallback(() => {
 		void controller.stop()
 	}, [controller])
@@ -1217,17 +1180,7 @@ function ThreadView({
 			}
 			highlightedMessageId={highlightedMessageId}
 			label={missionSeat ? t("missions.feed.label") : t("screen.label")}
-			notice={
-				<ThreadNotices
-					error={facts.latestError}
-					speakerId={speakerIdOf(thread, facts.latestError)}
-					onDismissError={controller.dismissError}
-					onRestart={botController ? restartAfterError : undefined}
-					onSignIn={offerSignIn}
-					pins={pins}
-					staged={staged}
-				/>
-			}
+			notice={<ThreadNotices pins={pins} staged={staged} />}
 			countsNewMessages={!isSoloThread}
 			marksNewMessages={!isSoloThread}
 			newer={newerControlOf({
