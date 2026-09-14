@@ -398,7 +398,8 @@ const applyMessageAppended = (
 	return withConversation(state, draft.conversationId, {
 		...current,
 		messages,
-		arrivals: arrivalsFrom(current.arrivals, messages),
+		arrivals:
+			dropped > 0 ? arrivalsFrom(current.arrivals, messages) : current.arrivals,
 		hasMore: current.hasMore || dropped > 0,
 	})
 }

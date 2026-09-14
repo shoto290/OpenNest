@@ -947,6 +947,30 @@ describe("the arrivals a conversation holds", () => {
 		expect(announce(landed, arrivalOf("a-99", 99))).toBe(landed)
 	})
 
+	it("keeps an arrival below the oldest message when an append drops nothing", () => {
+		const held = load(
+			initialTranscriptState,
+			pageWith([message({ id: "m-1", seq: 1 })], [arrivalOf("a-0", 0)]),
+		)
+
+		const grown = append(held, streamingDraft("live"))
+
+		expect(selectMessages(grown, CONVERSATION)).toHaveLength(2)
+		expect(arrivalIdsOf(grown)).toEqual(["a-0"])
+	})
+
+	it("still holds a companion invited into an empty conversation once a message is appended", () => {
+		const invited = announce(
+			load(initialTranscriptState, pageWith([], [])),
+			arrivalOf("a-0", 0),
+		)
+
+		const grown = append(invited, streamingDraft("live"))
+
+		expect(idsOf(grown)).toEqual(["live"])
+		expect(arrivalIdsOf(grown)).toEqual(["a-0"])
+	})
+
 	it("drops the arrivals below the oldest message kept when the head is trimmed", () => {
 		const history = Array.from({ length: TRANSCRIPT_WINDOW_SIZE }, (_, index) =>
 			message({ id: `m-${index + 1}`, seq: index + 1, turnId: `t-${index}` }),
