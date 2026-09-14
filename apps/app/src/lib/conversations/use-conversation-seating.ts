@@ -1,10 +1,4 @@
-import {
-	createContext,
-	useCallback,
-	useContext,
-	useEffect,
-	useState,
-} from "react"
+import { createContext, useContext, useEffect, useState } from "react"
 
 import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 import type { RosterBot } from "@workspace/ui/components/roster"
@@ -23,20 +17,12 @@ export const ConversationSeatingContext =
 
 const NO_BOTS: RosterBot[] = []
 
-export const useSeatInConversation = (
-	conversationId: string | null,
-): ((botId: string) => Promise<boolean>) | undefined => {
+export const useSeatInConversation = (conversationId: string | null) => {
 	const seating = useContext(ConversationSeatingContext)
 
-	const seat = useCallback(
-		(botId: string) =>
-			seating && conversationId
-				? seating.seat(conversationId, botId)
-				: Promise.resolve(false),
-		[seating, conversationId],
-	)
-
-	return seating && conversationId ? seat : undefined
+	return seating && conversationId
+		? (botId: string) => seating.seat(conversationId, botId)
+		: undefined
 }
 
 export const useBotsByPresence = (conversationId: string | null) => {
