@@ -960,10 +960,7 @@ describe("the arrivals a conversation holds", () => {
 	})
 
 	it("still holds a companion invited into an empty conversation once a message is appended", () => {
-		const invited = announce(
-			load(initialTranscriptState, pageWith([], [])),
-			arrivalOf("a-0", 0),
-		)
+		const invited = announce(initialTranscriptState, arrivalOf("a-0", 0))
 
 		const grown = append(invited, streamingDraft("live"))
 
