@@ -253,7 +253,7 @@ export function PromptInput({
 
 			{joining.length > 0 ? (
 				<div
-					className="flex w-full min-w-0 items-center gap-1.5 py-0.5 text-muted-foreground text-xs"
+					className="flex w-full min-w-0 items-center gap-1.5 px-2 py-0.5 text-muted-foreground text-xs"
 					data-slot="prompt-joining"
 				>
 					<span aria-hidden="true" className="flex shrink-0 -space-x-1.5">

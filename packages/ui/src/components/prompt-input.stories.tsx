@@ -332,6 +332,11 @@ export const WithOneJoining = meta.story({
 		const avatars = slotsIn(lines[0], "bot-identity-avatar")
 		await expect(avatars).toHaveLength(1)
 		await expect(box(avatars[0]).width).toBe(JOINING_AVATAR_SIZE)
+		const textarea = canvas.getByRole("textbox", { name: "Message" })
+		await expect(box(avatars[0]).left).toBe(
+			box(textarea).left +
+				Number.parseFloat(getComputedStyle(textarea).paddingInlineStart),
+		)
 		await expect(
 			isBelow(canvas.getByRole("button", { name: "Send" }), lines[0]),
 		).toBe(true)
