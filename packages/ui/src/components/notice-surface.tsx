@@ -188,13 +188,11 @@ const NoticeSurface = ({
 }
 
 export {
-	type NoticeAction,
 	type NoticeMessage,
 	NoticeSurface,
 	type NoticeSurfaceProps,
 	raiseFailureNotice,
 	raiseTransientNotice,
 	TRANSIENT_NOTICE_DELAY,
-	type TransientNotice,
 	type TransientNoticeType,
 }
