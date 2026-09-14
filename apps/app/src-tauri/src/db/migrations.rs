@@ -39,6 +39,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 30, statements: BOT_SPACES },
 	Migration { version: 31, statements: SOLO_THREAD_PER_SPACE },
 	Migration { version: 32, statements: MISSION_CHECKS_FAILED },
+	Migration { version: 33, statements: CONVERSATION_ARRIVALS },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -738,6 +739,24 @@ WHEN EXISTS (SELECT 1 FROM missions WHERE id = OLD.mission_id)
 BEGIN
 	SELECT RAISE(ABORT, 'a mission event is never erased while its mission stands');
 END;
+";
+
+const CONVERSATION_ARRIVALS: &str = "
+CREATE TABLE conversation_arrivals (
+	id TEXT PRIMARY KEY,
+	conversation_id TEXT NOT NULL REFERENCES conversations (id) ON DELETE CASCADE,
+	bot_id TEXT NOT NULL,
+	invited_by_bot_id TEXT,
+	last_message_seq INTEGER NOT NULL,
+	created_at INTEGER NOT NULL,
+	FOREIGN KEY (conversation_id, bot_id)
+		REFERENCES conversation_participants (conversation_id, bot_id) ON DELETE CASCADE,
+	FOREIGN KEY (conversation_id, invited_by_bot_id)
+		REFERENCES conversation_participants (conversation_id, bot_id) ON DELETE CASCADE
+);
+
+CREATE INDEX conversation_arrivals_in_order
+	ON conversation_arrivals (conversation_id, last_message_seq, created_at, id);
 ";
 
 pub fn latest_version() -> u32 {

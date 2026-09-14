@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::avatars;
 use crate::bundles;
-use crate::db::repositories::{conversations, messages, runtime_context};
+use crate::db::repositories::{arrivals, conversations, messages, runtime_context};
 use crate::db::DatabaseError;
 use crate::environment::contract::EnvError;
 
@@ -682,11 +682,38 @@ impl MessageReference {
 	}
 }
 
+pub const COMPANION_ARRIVED_EVENT: &str = "conversation://companion-arrived";
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompanionArrival {
+	pub id: String,
+	pub conversation_id: String,
+	pub bot_id: String,
+	pub invited_by_bot_id: Option<String>,
+	pub last_message_seq: i64,
+	pub created_at: i64,
+}
+
+impl From<arrivals::Arrival> for CompanionArrival {
+	fn from(arrival: arrivals::Arrival) -> Self {
+		Self {
+			id: arrival.id,
+			conversation_id: arrival.conversation_id,
+			bot_id: arrival.bot_id,
+			invited_by_bot_id: arrival.invited_by_bot_id,
+			last_message_seq: arrival.last_message_seq,
+			created_at: arrival.created_at,
+		}
+	}
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TranscriptPage {
 	pub conversation_id: String,
 	pub messages: Vec<TranscriptMessage>,
+	pub arrivals: Vec<CompanionArrival>,
 	pub has_more: bool,
 }
 
@@ -697,7 +724,8 @@ impl TranscriptPage {
 			.into_iter()
 			.map(|stored| TranscriptMessage::of(&conversation_id, stored))
 			.collect();
-		Self { conversation_id, messages, has_more: page.has_more }
+		let arrivals = page.arrivals.into_iter().map(Into::into).collect();
+		Self { conversation_id, messages, arrivals, has_more: page.has_more }
 	}
 }
 
@@ -706,6 +734,7 @@ impl TranscriptPage {
 pub struct TranscriptWindow {
 	pub conversation_id: String,
 	pub messages: Vec<TranscriptMessage>,
+	pub arrivals: Vec<CompanionArrival>,
 	pub has_older: bool,
 	pub has_newer: bool,
 }
@@ -717,7 +746,14 @@ impl TranscriptWindow {
 			.into_iter()
 			.map(|stored| TranscriptMessage::of(&conversation_id, stored))
 			.collect();
-		Self { conversation_id, messages, has_older: around.has_older, has_newer: around.has_newer }
+		let arrivals = around.arrivals.into_iter().map(Into::into).collect();
+		Self {
+			conversation_id,
+			messages,
+			arrivals,
+			has_older: around.has_older,
+			has_newer: around.has_newer,
+		}
 	}
 }
 
@@ -1249,9 +1285,29 @@ mod tests {
 			TranscriptPage {
 				conversation_id: "c1".into(),
 				messages: vec![a_message()],
+				arrivals: vec![CompanionArrival {
+					id: "a1".into(),
+					conversation_id: "c1".into(),
+					bot_id: "b2".into(),
+					invited_by_bot_id: Some("b1".into()),
+					last_message_seq: 3,
+					created_at: 9,
+				}],
 				has_more: true,
 			},
-			json!({ "conversationId": "c1", "messages": [a_message_wire()], "hasMore": true }),
+			json!({
+				"conversationId": "c1",
+				"messages": [a_message_wire()],
+				"arrivals": [{
+					"id": "a1",
+					"conversationId": "c1",
+					"botId": "b2",
+					"invitedByBotId": "b1",
+					"lastMessageSeq": 3,
+					"createdAt": 9
+				}],
+				"hasMore": true
+			}),
 		);
 	}
 
@@ -1261,12 +1317,14 @@ mod tests {
 			TranscriptWindow {
 				conversation_id: "c1".into(),
 				messages: vec![a_message()],
+				arrivals: Vec::new(),
 				has_older: true,
 				has_newer: false,
 			},
 			json!({
 				"conversationId": "c1",
 				"messages": [a_message_wire()],
+				"arrivals": [],
 				"hasOlder": true,
 				"hasNewer": false
 			}),

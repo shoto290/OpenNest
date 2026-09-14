@@ -31,6 +31,7 @@ export const createFakeTranscriptPort = (
 			return Promise.resolve({
 				conversationId,
 				messages,
+				arrivals: [],
 				hasMore: older.length > messages.length,
 			})
 		},
@@ -51,6 +52,7 @@ export const createFakeTranscriptPort = (
 			return Promise.resolve({
 				conversationId,
 				messages: owned.slice(start, end),
+				arrivals: [],
 				hasOlder: start > 0,
 				hasNewer: end < owned.length,
 			})

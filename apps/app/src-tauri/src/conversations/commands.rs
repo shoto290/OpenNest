@@ -5,7 +5,7 @@ use tauri::{AppHandle, Manager, Runtime, State};
 use super::context;
 use super::contract::{
 	AvatarAnimal, AvatarBlot, Bot, BotChangedFile, BotDraft, BotHistoryEntry, BotIdentity, Chat,
-	ContextCheckpoint, Conversation, McpServer, MessageReference, NewAssistantMessage, NewTurn,
+	CompanionArrival, ContextCheckpoint, Conversation, COMPANION_ARRIVED_EVENT, McpServer, MessageReference, NewAssistantMessage, NewTurn,
 	NewUserMessage, PinnedBubble, RuntimeSession, Skill, SkillDraft, SuggestedBot,
 	TerminalCompletion, TranscriptPage, TranscriptStoreError, TranscriptWindow,
 };
@@ -884,9 +884,16 @@ pub async fn conversation_add_participant<R: Runtime>(
 	state: State<'_, db::DatabaseState>,
 	conversation_id: String,
 	bot_id: String,
+	invited_by_bot_id: Option<String>,
 ) -> Result<Conversation, TranscriptStoreError> {
-	let joined = ready(&state)?.conversations().add_participant(conversation_id, bot_id).await?;
-	Ok(drawn(&app, joined))
+	let joined = ready(&state)?
+		.conversations()
+		.add_participant(conversation_id, bot_id, invited_by_bot_id)
+		.await?;
+	if let Some(arrival) = joined.arrival {
+		launch::announce(&app, COMPANION_ARRIVED_EVENT, CompanionArrival::from(arrival));
+	}
+	Ok(drawn(&app, joined.conversation))
 }
 
 #[tauri::command]

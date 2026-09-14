@@ -2,6 +2,7 @@
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use rusqlite::{params, Connection, OptionalExtension, Row, Transaction, TransactionBehavior};
 
+use super::arrivals::{self, Arrival, SeqSpan};
 use crate::db::{Access, DatabaseError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -251,6 +252,7 @@ pub struct MessagePageQuery {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MessagePage {
 	pub messages: Vec<StoredMessage>,
+	pub arrivals: Vec<Arrival>,
 	pub has_more: bool,
 }
 
@@ -263,6 +265,7 @@ pub struct MessagesAroundQuery {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MessagesAround {
 	pub messages: Vec<StoredMessage>,
+	pub arrivals: Vec<Arrival>,
 	pub has_older: bool,
 	pub has_newer: bool,
 }
@@ -507,7 +510,15 @@ impl MessagesRepository {
 					messages.push(read_message(row)?);
 				}
 				messages.reverse();
-				Ok(MessagePage { messages, has_more })
+				let span = SeqSpan {
+					lowest: match has_more {
+						true => messages.first().map_or(before_seq, |message| message.seq),
+						false => i64::MIN,
+					},
+					highest: before_seq.saturating_sub(1),
+				};
+				let arrivals = arrivals::within(connection, &query.conversation_id, span)?;
+				Ok(MessagePage { messages, arrivals, has_more })
 			})
 			.await?)
 	}
@@ -1070,10 +1081,23 @@ fn read_around(
 	messages.push(centre);
 	messages.extend(newer);
 
+	let has_older = sits_beside(connection, MESSAGE_OLDER_THAN_SEQ, conversation_id, first_seq)?;
+	let has_newer = sits_beside(connection, MESSAGE_NEWER_THAN_SEQ, conversation_id, last_seq)?;
+	let span = SeqSpan {
+		lowest: match has_older {
+			true => first_seq,
+			false => i64::MIN,
+		},
+		highest: match has_newer {
+			true => last_seq,
+			false => i64::MAX,
+		},
+	};
 	Ok(Some(MessagesAround {
 		messages,
-		has_older: sits_beside(connection, MESSAGE_OLDER_THAN_SEQ, conversation_id, first_seq)?,
-		has_newer: sits_beside(connection, MESSAGE_NEWER_THAN_SEQ, conversation_id, last_seq)?,
+		arrivals: arrivals::within(connection, conversation_id, span)?,
+		has_older,
+		has_newer,
 	}))
 }
 

@@ -1,6 +1,8 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::mpsc;
+use std::time::Duration;
 
 use kiroshi_app::bundles;
 use kiroshi_app::commands::invoke_handler;
@@ -10,7 +12,7 @@ use kiroshi_app::environment::store;
 use serde_json::{json, Value};
 use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime, INVOKE_KEY};
 use tauri::webview::InvokeRequest;
-use tauri::{App, Manager, WebviewWindow, WebviewWindowBuilder};
+use tauri::{App, Listener, Manager, WebviewWindow, WebviewWindowBuilder};
 
 const TURN: &str = "t1";
 const BOT: &str = "default";
@@ -372,6 +374,7 @@ fn a_turn_written_over_ipc_reads_back_as_the_page_the_reader_displays() {
 		page,
 		Ok(json!({
 			"conversationId": conversation,
+			"arrivals": [],
 			"hasMore": false,
 			"messages": [
 				{
@@ -905,7 +908,12 @@ fn a_bot_created_over_ipc_is_listed_described_and_deleted_with_its_chat() {
 				"limit": 20
 			})
 		),
-		Ok(json!({ "conversationId": conversation, "messages": [], "hasMore": false })),
+		Ok(json!({
+			"conversationId": conversation,
+			"messages": [],
+			"arrivals": [],
+			"hasMore": false
+		})),
 		"the transcript of a deleted bot is still reachable"
 	);
 }
@@ -1962,6 +1970,7 @@ fn a_duplicated_bot_carries_the_bundle_and_none_of_the_transcript() {
 		Ok(json!({
 			"conversationId": duplicate_conversation,
 			"messages": [],
+			"arrivals": [],
 			"hasMore": false
 		})),
 		"a duplicate opened on what the source had said"
@@ -2807,6 +2816,37 @@ fn a_room_created_over_ipc_is_listed_in_its_space_with_its_participants_and_its_
 		present(&joined),
 		"the seat taken over ipc was not kept"
 	);
+}
+
+#[test]
+fn a_companion_seated_over_ipc_is_announced_and_read_back_on_the_page() {
+	let home = Home::new();
+	let app = home.app();
+	let window = window(&app);
+	let space = a_space(&window, "Nest");
+	let host = a_bot_in(&window, &space, "Nyx");
+	let latecomer = a_bot_in(&window, &space, "Iris");
+	let room = id_of(&a_room(&window, &space, "Standup", vec![host]));
+	let (announced, heard) = mpsc::channel();
+	app.listen_any("conversation://companion-arrived", move |event| {
+		announced.send(event.payload().to_owned()).expect("the announcement is kept");
+	});
+
+	call(
+		&window,
+		"conversation_add_participant",
+		json!({ "conversationId": room, "botId": latecomer, "invitedByBotId": null }),
+	)
+	.expect("the bot joins");
+	let page = call(&window, "conversation_message_page", a_page(&room, None, 20))
+		.expect("the transcript");
+
+	let heard = heard.recv_timeout(Duration::from_secs(5)).expect("the arrival was announced");
+	let arrival: Value = serde_json::from_str(&heard).expect("the arrival crosses as json");
+	assert_eq!(arrival["botId"], json!(latecomer));
+	assert_eq!(arrival["invitedByBotId"], Value::Null);
+	assert_eq!(arrival["lastMessageSeq"], json!(0));
+	assert_eq!(page["arrivals"], json!([arrival]), "the page and the announcement disagree");
 }
 
 #[test]

@@ -1,3 +1,4 @@
+pub mod arrivals;
 pub mod bot_spaces;
 pub mod catalogue;
 pub mod conversations;
