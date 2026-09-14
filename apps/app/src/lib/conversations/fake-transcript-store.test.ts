@@ -4,7 +4,7 @@ import {
 	createFakeTranscriptStore,
 	FAKE_CHAT_ID,
 } from "./fake-transcript-store"
-import type { NewAssistantMessage, NewUserMessage } from "./store-contract"
+import type { Bot, NewAssistantMessage, NewUserMessage } from "./store-contract"
 import { botIdentity, message, named } from "./transcript-fixtures"
 
 import { FACES, newBotIdentity } from "../bots/bot-settings"
@@ -39,6 +39,40 @@ const contentOf = async (
 }
 
 describe("createFakeTranscriptStore", () => {
+	it("ranks the companions of a space by the rooms they still sit in", async () => {
+		const store = createFakeTranscriptStore()
+		const ada = await store.createBot(botIdentity({ name: "Ada" }), "personal")
+		const zed = await store.createBot(botIdentity({ name: "Zed" }), "personal")
+		const room = (bots: Bot[]) =>
+			store.createConversation({
+				spaceId: "personal",
+				sectionId: null,
+				title: "Walls",
+				botIds: bots.map((bot) => bot.id),
+			})
+		await room([zed])
+		const excluded = await room([zed])
+		const left = await room([ada, zed])
+		await store.removeConversationParticipant(left.id, zed.id)
+		const elsewhere = await store.createSpace("Elsewhere")
+		await store.addBotToSpace(ada.id, elsewhere.id)
+		await store.createConversation({
+			spaceId: elsewhere.id,
+			sectionId: null,
+			title: "Walls",
+			botIds: [ada.id],
+		})
+
+		expect(
+			(await store.botsByPresence("personal")).map((bot) => bot.name),
+		).toEqual(["Zed", "Ada", "Claude"])
+		expect(
+			(await store.botsByPresence("personal", excluded.id)).map(
+				(bot) => bot.name,
+			),
+		).toEqual(["Ada", "Zed", "Claude"])
+	})
+
 	it("answers a replayed write with the place it already gave the row", async () => {
 		const store = createFakeTranscriptStore()
 

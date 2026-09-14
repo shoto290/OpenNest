@@ -244,6 +244,14 @@ const WRITES: WriteCase[] = [
 		call: ["conversation_bots", { spaceId: "s-1" }],
 	},
 	{
+		member: "botsByPresence",
+		write: () => conversationStore.botsByPresence("s-1", "c-1"),
+		call: [
+			"conversation_bots_by_presence",
+			{ spaceId: "s-1", excludedConversationId: "c-1" },
+		],
+	},
+	{
 		member: "createBot",
 		write: () => conversationStore.createBot(IDENTITY, "s-1"),
 		call: ["conversation_create_bot", { identity: IDENTITY, spaceId: "s-1" }],

@@ -306,6 +306,20 @@ impl ConversationsRepository {
 		self.call(move |connection| Ok(bots_of(connection, space_id.as_deref())?)).await
 	}
 
+	pub async fn bots_by_presence(
+		&self,
+		space_id: String,
+		excluded_conversation_id: Option<String>,
+	) -> Result<Vec<Bot>, DatabaseError> {
+		self.call(move |connection| {
+			let mut statement = connection.prepare_cached(&format!("{BOT_COLUMNS} {PRESENCE_ORDER}"))?;
+			let rows = statement
+				.query_map(params![space_id, excluded_conversation_id, TOPIC_KIND], bot)?;
+			Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+		})
+		.await
+	}
+
 	pub async fn holds_a_bot(&self) -> Result<bool, DatabaseError> {
 		self.call(|connection| Ok(counted_bots(connection)? > 0)).await
 	}
@@ -553,6 +567,15 @@ const OLDEST_MEMBERSHIP: &str = "membership.space_id = (SELECT space_id FROM bot
 		WHERE bot_id = bots.id ORDER BY joined_at ASC, space_id ASC LIMIT 1)";
 
 const BOT_ORDER: &str = "ORDER BY bots.created_at ASC, bots.id ASC";
+
+const PRESENCE_ORDER: &str = "LEFT JOIN (SELECT seat.bot_id, count(DISTINCT seat.conversation_id) AS seated
+		FROM conversation_participants AS seat
+		JOIN conversations ON conversations.id = seat.conversation_id
+		WHERE conversations.space_id = ?1 AND conversations.kind = ?3
+			AND seat.left_at IS NULL AND conversations.id IS NOT ?2
+		GROUP BY seat.bot_id) AS presence ON presence.bot_id = bots.id
+	WHERE bots.deleted_at IS NULL AND membership.space_id = ?1
+	ORDER BY coalesce(presence.seated, 0) DESC, bots.name ASC, bots.id ASC";
 
 const LIVE_BOT: &str = "SELECT EXISTS
 	(SELECT 1 FROM bots WHERE id = ?1 AND deleted_at IS NULL)";
@@ -2515,6 +2538,126 @@ mod tests {
 		assert!(
 			plan.iter().any(|step| step.contains("bot_spaces_of_space")),
 			"the roster read scans the memberships: got {plan:?}"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	async fn named_by_presence(
+		repository: &ConversationsRepository,
+		space_id: &str,
+		excluded_conversation_id: Option<&str>,
+	) -> Vec<String> {
+		repository
+			.bots_by_presence(space_id.to_owned(), excluded_conversation_id.map(str::to_owned))
+			.await
+			.expect("the bots by presence")
+			.into_iter()
+			.map(|listed| listed.name)
+			.collect()
+	}
+
+	#[tokio::test]
+	async fn a_bot_seated_in_three_rooms_is_ranked_ahead_of_one_seated_in_one() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let repository = database.conversations();
+		let ada = repository.create_bot(an_identity("Ada"), None, None).await.expect("the bot");
+		let zed = repository.create_bot(an_identity("Zed"), None, None).await.expect("the bot");
+		repository.create_bot(an_identity("Mia"), None, None).await.expect("the bot");
+		let space_id = home_of(repository, &ada).await;
+		for seated in [&[&ada, &zed][..], &[&zed][..], &[&zed][..]] {
+			repository.create_conversation(a_draft(&space_id, seated)).await.expect("the room");
+		}
+
+		assert_eq!(
+			named_by_presence(repository, &space_id, None).await,
+			vec!["Zed".to_owned(), "Ada".to_owned(), "Mia".to_owned()]
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_seat_that_was_left_counts_for_no_presence() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let repository = database.conversations();
+		let ada = repository.create_bot(an_identity("Ada"), None, None).await.expect("the bot");
+		let zed = repository.create_bot(an_identity("Zed"), None, None).await.expect("the bot");
+		let space_id = home_of(repository, &ada).await;
+		repository.create_conversation(a_draft(&space_id, &[&zed])).await.expect("the room");
+		let left =
+			repository.create_conversation(a_draft(&space_id, &[&ada, &zed])).await.expect("the room");
+		repository.remove_participant(left.id, zed.id.clone()).await.expect("zed leaves");
+
+		assert_eq!(
+			named_by_presence(repository, &space_id, None).await,
+			vec!["Ada".to_owned(), "Zed".to_owned()],
+			"a left seat still counted"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_bot_of_another_space_is_absent_and_its_rooms_count_for_nothing() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let repository = database.conversations();
+		let elsewhere = database.spaces().create("Writers".to_owned()).await.expect("the space");
+		let ada = repository.create_bot(an_identity("Ada"), None, None).await.expect("the bot");
+		let zed = repository.create_bot(an_identity("Zed"), None, None).await.expect("the bot");
+		let stranger = repository
+			.create_bot(an_identity("Bob"), Some(elsewhere.id.clone()), None)
+			.await
+			.expect("the bot");
+		database
+			.spaces()
+			.add_bot(zed.id.clone(), elsewhere.id.clone(), None)
+			.await
+			.expect("zed joins the second space");
+		let space_id = home_of(repository, &ada).await;
+		repository.create_conversation(a_draft(&space_id, &[&ada])).await.expect("the room");
+		for _ in 0..2 {
+			repository
+				.create_conversation(a_draft(&elsewhere.id, &[&zed, &stranger]))
+				.await
+				.expect("the room elsewhere");
+		}
+
+		assert_eq!(
+			named_by_presence(repository, &space_id, None).await,
+			vec!["Ada".to_owned(), "Zed".to_owned()]
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn the_excluded_room_counts_for_no_presence() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let repository = database.conversations();
+		let ada = repository.create_bot(an_identity("Ada"), None, None).await.expect("the bot");
+		let zed = repository.create_bot(an_identity("Zed"), None, None).await.expect("the bot");
+		let space_id = home_of(repository, &ada).await;
+		let excluded =
+			repository.create_conversation(a_draft(&space_id, &[&ada])).await.expect("the room");
+		repository.create_conversation(a_draft(&space_id, &[&zed])).await.expect("the room");
+
+		assert_eq!(
+			named_by_presence(repository, &space_id, None).await,
+			vec!["Ada".to_owned(), "Zed".to_owned()]
+		);
+		assert_eq!(
+			named_by_presence(repository, &space_id, Some(&excluded.id)).await,
+			vec!["Zed".to_owned(), "Ada".to_owned()],
+			"the excluded room still counted"
 		);
 
 		drop(database);

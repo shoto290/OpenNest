@@ -51,6 +51,10 @@ export type TranscriptStore = TranscriptPort & {
 	moveBotToSection: (botId: string, sectionId: string | null) => Promise<void>
 	moveBotToSpace: (botId: string, spaceId: string) => Promise<void>
 	bots: (spaceId?: string | null) => Promise<Bot[]>
+	botsByPresence: (
+		spaceId: string,
+		excludedConversationId?: string | null,
+	) => Promise<Bot[]>
 	createBot: (identity: BotIdentity, spaceId?: string | null) => Promise<Bot>
 	createBotFromDraft: (draft: BotDraft, spaceId: string) => Promise<Bot>
 	suggestedBots: () => Promise<SuggestedBot[]>

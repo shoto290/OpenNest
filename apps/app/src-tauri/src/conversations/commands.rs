@@ -194,6 +194,22 @@ pub async fn conversation_bots<R: Runtime>(
 }
 
 #[tauri::command]
+pub async fn conversation_bots_by_presence<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	space_id: String,
+	excluded_conversation_id: Option<String>,
+) -> Result<Vec<Bot>, TranscriptStoreError> {
+	let dir = avatars::dir(&app);
+	let bundle_root = bundles::root(&app);
+	let stored = ready(&state)?
+		.conversations()
+		.bots_by_presence(space_id, excluded_conversation_id)
+		.await?;
+	Ok(stored.into_iter().map(|bot| Bot::of(bot, dir.as_deref(), bundle_root.as_deref())).collect())
+}
+
+#[tauri::command]
 pub async fn conversation_create_bot<R: Runtime>(
 	app: AppHandle<R>,
 	state: State<'_, db::DatabaseState>,
