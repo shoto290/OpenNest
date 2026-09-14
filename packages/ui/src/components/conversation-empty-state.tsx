@@ -7,7 +7,7 @@ import type { RosterBot } from "@workspace/ui/components/roster"
 import { Button } from "@workspace/ui/components/ui/button"
 import { cn } from "@workspace/ui/lib/utils"
 
-type SuggestedBotsProps =
+type SuggestionProps =
 	| { suggestedBots?: never; onSuggestedBotPress?: never }
 	| {
 			suggestedBots: RosterBot[]
@@ -20,7 +20,7 @@ type ConversationEmptyStateProps = Omit<
 > & {
 	title: string
 	bots: RosterBot[]
-} & SuggestedBotsProps
+} & SuggestionProps
 
 const MARK_SIZE = 56
 
@@ -28,12 +28,12 @@ const SUGGESTED_AVATAR_SIZE = 20
 
 const MENTION_GLYPH = "@"
 
-type SuggestedBotListProps = {
+type SuggestedBotsProps = {
 	bots: RosterBot[]
 	onPress: (bot: RosterBot) => void
 }
 
-const SuggestedBots = ({ bots, onPress }: SuggestedBotListProps) => {
+const SuggestedBots = ({ bots, onPress }: SuggestedBotsProps) => {
 	const { t } = useTranslation("chat")
 	const labelId = useId()
 
