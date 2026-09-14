@@ -13,6 +13,7 @@ import {
 import type { Conversation } from "./store-contract"
 import type { TranscriptStore } from "./store-port"
 import {
+	type CompanionArrival,
 	TRANSCRIPT_PAGE_SIZE,
 	TRANSCRIPT_WINDOW_SIZE,
 } from "./transcript-contract"
@@ -2393,5 +2394,76 @@ describe("a conversation landed away from its newest end", () => {
 				.messages.some((said) => said.content === "the north"),
 		).toBe(false)
 		detach()
+	})
+})
+
+describe("the arrivals a conversation hears announced", () => {
+	const arrivalOf = (conversationId: string, id: string): CompanionArrival => ({
+		id,
+		conversationId,
+		botId: "bot-2",
+		invitedByBotId: null,
+		lastMessageSeq: 0,
+		createdAt: 0,
+	})
+
+	const openedHearingArrivals = async () => {
+		const store = createFakeTranscriptStore()
+		const conversation = await store.createConversation({
+			spaceId: SPACE,
+			sectionId: null,
+			title: "Walls",
+			botIds: [],
+		})
+		const listeners: ((arrival: CompanionArrival) => void)[] = []
+		const unlisten = vi.fn()
+		const controller = createConversationController(
+			createScriptedDriver(),
+			store,
+			{
+				onCompanionArrived: async (listener) => {
+					listeners.push(listener)
+					return unlisten
+				},
+			},
+		)
+		const detach = controller.attach()
+		await controller.open(conversation)
+		await settled()
+		const announce = (arrival: CompanionArrival) => {
+			for (const listener of listeners) {
+				listener(arrival)
+			}
+		}
+		return { controller, conversation, detach, unlisten, announce }
+	}
+
+	it("holds an arrival announced on the open conversation", async () => {
+		const { controller, conversation, detach, announce } =
+			await openedHearingArrivals()
+		const arrival = arrivalOf(conversation.id, "a-1")
+
+		announce(arrival)
+
+		expect(controller.getState().arrivals).toEqual([arrival])
+		detach()
+	})
+
+	it("ignores an arrival announced on another conversation", async () => {
+		const { controller, detach, announce } = await openedHearingArrivals()
+
+		announce(arrivalOf("c-elsewhere", "a-1"))
+
+		expect(controller.getState().arrivals).toEqual([])
+		detach()
+	})
+
+	it("stops listening for announced arrivals when it detaches", async () => {
+		const { detach, unlisten } = await openedHearingArrivals()
+
+		detach()
+		await settled()
+
+		expect(unlisten).toHaveBeenCalledTimes(1)
 	})
 })

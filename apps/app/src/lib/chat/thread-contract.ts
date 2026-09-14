@@ -20,6 +20,7 @@ import type {
 import type { ConversationRuntimes } from "../conversations/conversation-runtimes"
 import { presentParticipants } from "../conversations/roster-conversations"
 import type { Bot, Conversation } from "../conversations/store-contract"
+import type { CompanionArrival } from "../conversations/transcript-contract"
 import type { Mission } from "../missions/mission-contract"
 import type { ReportedRunsByTurnId } from "../routines/routine-contract"
 
@@ -102,9 +103,12 @@ export type ThreadFacts = {
 	workingBotIds: (string | null)[]
 	causes: ReportedRunsByTurnId
 	mission: ThreadMission | null
+	arrivals: CompanionArrival[]
 }
 
 const NO_WORKING_BOT_IDS: (string | null)[] = []
+
+const NO_ARRIVALS: CompanionArrival[] = []
 
 const questionIn = (prompt: PendingPrompt | null): QuestionRequest | null =>
 	prompt?.kind === "question" ? prompt.request : null
@@ -142,6 +146,7 @@ const botFactsOf = (thread: LoadedBotThread): ThreadFacts => {
 		workingBotIds: NO_WORKING_BOT_IDS,
 		causes: thread.state.reportedCauses,
 		mission: null,
+		arrivals: NO_ARRIVALS,
 	}
 }
 
@@ -171,6 +176,7 @@ const conversationFactsOf = (
 	],
 	causes: thread.state.reportedCauses,
 	mission: thread.mission ?? null,
+	arrivals: thread.state.arrivals,
 })
 
 export const factsOf = (thread: LoadedThread): ThreadFacts =>

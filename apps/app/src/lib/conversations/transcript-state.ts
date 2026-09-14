@@ -1,4 +1,5 @@
 import {
+	type CompanionArrival,
 	type TerminalCompletion,
 	TRANSCRIPT_PAGE_SIZE,
 	TRANSCRIPT_WINDOW_SIZE,
@@ -24,6 +25,7 @@ export type TranscriptSettlement = {
 
 export type TranscriptConversation = {
 	messages: TranscriptMessage[]
+	arrivals: CompanionArrival[]
 	hasMore: boolean
 	hasNewer: boolean
 }
@@ -42,6 +44,7 @@ export type TranscriptAction =
 			draft: TranscriptDraft
 			isAtLiveEdge: boolean
 	  }
+	| { type: "arrivalAnnounced"; arrival: CompanionArrival }
 	| { type: "messageStreamed"; delta: TranscriptDelta }
 	| { type: "messageSettled"; settlement: TranscriptSettlement }
 	| { type: "threadLeft"; conversationId: string }
@@ -50,14 +53,18 @@ export const initialTranscriptState: TranscriptState = { conversations: {} }
 
 const NO_MESSAGES: TranscriptMessage[] = []
 
+const NO_ARRIVALS: CompanionArrival[] = []
+
 const EMPTY_CONVERSATION: TranscriptConversation = {
 	messages: NO_MESSAGES,
+	arrivals: NO_ARRIVALS,
 	hasMore: false,
 	hasNewer: false,
 }
 
 const FORGOTTEN_CONVERSATION: TranscriptConversation = {
 	messages: NO_MESSAGES,
+	arrivals: NO_ARRIVALS,
 	hasMore: true,
 	hasNewer: false,
 }
@@ -85,6 +92,12 @@ export const selectMessages = (
 	conversationId: string,
 ): TranscriptMessage[] =>
 	state.conversations[conversationId]?.messages ?? NO_MESSAGES
+
+export const selectArrivals = (
+	state: TranscriptState,
+	conversationId: string,
+): CompanionArrival[] =>
+	state.conversations[conversationId]?.arrivals ?? NO_ARRIVALS
 
 export const selectHasMore = (
 	state: TranscriptState,
@@ -155,6 +168,51 @@ const byPosition = (
 		return 0
 	}
 	return left.id < right.id ? -1 : 1
+}
+
+const byArrivalPosition = (
+	left: CompanionArrival,
+	right: CompanionArrival,
+): number => {
+	if (left.lastMessageSeq !== right.lastMessageSeq) {
+		return left.lastMessageSeq - right.lastMessageSeq
+	}
+	if (left.createdAt !== right.createdAt) {
+		return left.createdAt - right.createdAt
+	}
+	if (left.id === right.id) {
+		return 0
+	}
+	return left.id < right.id ? -1 : 1
+}
+
+const orderedArrivals = (arrivals: CompanionArrival[]): CompanionArrival[] =>
+	arrivals.length === 0 ? NO_ARRIVALS : [...arrivals].sort(byArrivalPosition)
+
+const mergeArrivals = (
+	current: CompanionArrival[],
+	incoming: CompanionArrival[],
+): CompanionArrival[] => {
+	if (incoming.length === 0) {
+		return current
+	}
+	const byId = new Map(current.map((arrival) => [arrival.id, arrival]))
+	for (const arrival of incoming) {
+		byId.set(arrival.id, arrival)
+	}
+	return orderedArrivals([...byId.values()])
+}
+
+const arrivalsFrom = (
+	arrivals: CompanionArrival[],
+	messages: TranscriptMessage[],
+): CompanionArrival[] => {
+	const oldest = oldestSeq(messages)
+	if (oldest === null) {
+		return arrivals
+	}
+	const kept = arrivals.filter(({ lastMessageSeq }) => lastMessageSeq >= oldest)
+	return kept.length === arrivals.length ? arrivals : kept
 }
 
 const recoveredFromPort = (message: TranscriptMessage): TranscriptMessage =>
@@ -248,13 +306,18 @@ const applyPageLoaded = (
 	page: TranscriptPage,
 ): TranscriptState => {
 	const current = state.conversations[page.conversationId] ?? EMPTY_CONVERSATION
-	if (page.messages.length === 0 && page.hasMore === current.hasMore) {
+	if (
+		page.messages.length === 0 &&
+		page.arrivals.length === 0 &&
+		page.hasMore === current.hasMore
+	) {
 		return state
 	}
 	const messages = mergePage(current.messages, page.messages)
 	return withConversation(state, page.conversationId, {
 		...current,
 		messages,
+		arrivals: mergeArrivals(current.arrivals, page.arrivals),
 		hasMore: nextHasMore(current, page, messages),
 	})
 }
@@ -265,6 +328,7 @@ const applyWindowLanded = (
 ): TranscriptState =>
 	withConversation(state, window.conversationId, {
 		messages: window.messages.map(recoveredFromPort),
+		arrivals: orderedArrivals(window.arrivals),
 		hasMore: window.hasOlder,
 		hasNewer: window.hasNewer,
 	})
@@ -275,6 +339,7 @@ const applyLatestLoaded = (
 ): TranscriptState =>
 	withConversation(state, page.conversationId, {
 		messages: page.messages.map(recoveredFromPort),
+		arrivals: orderedArrivals(page.arrivals),
 		hasMore: page.hasMore,
 		hasNewer: false,
 	})
@@ -288,6 +353,7 @@ const applyNewerLoaded = (
 	return withConversation(state, window.conversationId, {
 		...current,
 		messages: mergePage(current.messages, window.messages),
+		arrivals: mergeArrivals(current.arrivals, window.arrivals),
 		hasNewer: window.hasNewer,
 	})
 }
@@ -328,9 +394,11 @@ const applyMessageAppended = (
 	const dropped = isAtLiveEdge
 		? droppedCount(grown, TRANSCRIPT_WINDOW_SIZE, isRunning)
 		: 0
+	const messages = grown.slice(dropped)
 	return withConversation(state, draft.conversationId, {
 		...current,
-		messages: grown.slice(dropped),
+		messages,
+		arrivals: arrivalsFrom(current.arrivals, messages),
 		hasMore: current.hasMore || dropped > 0,
 	})
 }
@@ -354,10 +422,30 @@ const applyThreadLeft = (
 	if (dropped === 0) {
 		return state
 	}
+	const messages = current.messages.slice(dropped)
 	return withConversation(state, conversationId, {
 		...current,
-		messages: current.messages.slice(dropped),
+		messages,
+		arrivals: arrivalsFrom(current.arrivals, messages),
 		hasMore: true,
+	})
+}
+
+const applyArrivalAnnounced = (
+	state: TranscriptState,
+	arrival: CompanionArrival,
+): TranscriptState => {
+	const current =
+		state.conversations[arrival.conversationId] ?? EMPTY_CONVERSATION
+	if (isAwayFromNewest(current)) {
+		return state
+	}
+	if (current.arrivals.some(({ id }) => id === arrival.id)) {
+		return state
+	}
+	return withConversation(state, arrival.conversationId, {
+		...current,
+		arrivals: mergeArrivals(current.arrivals, [arrival]),
 	})
 }
 
@@ -432,6 +520,8 @@ export const transcriptReducer = (
 			return applyNewerLoaded(state, action.window)
 		case "messageAppended":
 			return applyMessageAppended(state, action.draft, action.isAtLiveEdge)
+		case "arrivalAnnounced":
+			return applyArrivalAnnounced(state, action.arrival)
 		case "messageStreamed":
 			return applyMessageStreamed(state, action.delta)
 		case "messageSettled":
