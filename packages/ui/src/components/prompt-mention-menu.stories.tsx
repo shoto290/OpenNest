@@ -249,7 +249,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The mention popup of the composer, and the only way to bring a companion into a conversation. The host hands it every companion of the space, each flagged `isOutside` when it is not in the conversation yet. On an empty query it lists the first six companions already in the conversation and, once the host names the space through `spaceName`, a footer counting how many more of that space typing reaches; a typed query matches the whole space case-insensitively, companions of the conversation first, then a *Not in this conversation* boundary above the rest, drawn dimmed with an add glyph. Only a row carrying the crown of the lead or the add glyph draws the 56px trailing slot; every other row gives that width to its name and title badge. A mention reaches exactly one companion, so a selection reports a single companion id plus whether it was outside, and the menu closes on it. A row whose companion the draft already names carries the count of those mentions after its name, given by the host as data. It draws only: reading the arobase in the draft, owning `open` and `query`, and writing the mention back into the text all belong to the host. ArrowUp/ArrowDown travel and wrap, Enter and Tab select, Escape or a press outside dismisses, and a query matching no companion renders no menu at all. Reach for `PromptCommandMenu` for the slash commands of the same composer.",
+					"The mention popup of the composer, and the only way to bring a companion into a conversation. The host hands it every companion of the space, each flagged `isOutside` when it is not in the conversation yet. An empty query lists only companions already in the conversation, the first six of them, so a conversation with none seated draws no menu at all on a bare arobase; beneath them, once the host names the space through `spaceName`, a footer counts how many more of that space typing reaches. The panel carries the `shadow-popover` elevation it shares with `PromptCommandMenu`, a soft shadow in light and a hairline halo over a deeper shadow in dark. A typed query a typed query matches the whole space case-insensitively, companions of the conversation first, then a *Not in this conversation* boundary above the rest, drawn dimmed with an add glyph. Only a row carrying the crown of the lead or the add glyph draws the 56px trailing slot; every other row gives that width to its name and title badge. A mention reaches exactly one companion, so a selection reports a single companion id plus whether it was outside, and the menu closes on it. A row whose companion the draft already names carries the count of those mentions after its name, given by the host as data. It draws only: reading the arobase in the draft, owning `open` and `query`, and writing the mention back into the text all belong to the host. ArrowUp/ArrowDown travel and wrap, Enter and Tab select, Escape or a press outside dismisses, and a query matching no companion renders no menu at all. Reach for `PromptCommandMenu` for the slash commands of the same composer.",
 			},
 		},
 	},
@@ -720,5 +720,27 @@ export const CountedAgain = meta.story({
 
 		await expect(canvas.getByText("\u00d72")).toBeVisible()
 		await expect(canvas.getByRole("listbox")).toBeInTheDocument()
+	},
+})
+
+export const InDarkTheme = meta.story({
+	args: { bots: SPACE_BOTS, spaceName: SPACE_NAME },
+	globals: { theme: "dark" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The opened popover under the dark theme, where a light-theme shadow vanishes against the dark surface. Check that the panel still lifts off the page through a hairline light halo over a deeper shadow, the same `shadow-popover` token the command popover wears, and that every row, the badge and the footer read on the dark popover surface.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const panel = canvas.getByRole("listbox").parentElement as HTMLElement
+		const { boxShadow } = getComputedStyle(panel)
+
+		await expect(document.documentElement).toHaveClass("dark")
+		await expect(boxShadow).toContain("rgba(255, 255, 255, 0.16)")
+		await expect(boxShadow).toContain("rgba(0, 0, 0, 0.7)")
+		await expect(canvas.getAllByRole("option")).toHaveLength(6)
 	},
 })

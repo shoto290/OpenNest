@@ -240,7 +240,7 @@ const PromptMentionMenu = ({
 						style={{ transformOrigin: "bottom left" }}
 						className={cn(
 							POPUP_CLASS,
-							"absolute bottom-full left-0 z-50 mb-2 w-84 max-w-full overflow-hidden rounded-xl p-1.5 shadow-[0_1px_2px_rgb(0_0_0/0.06),0_12px_28px_rgb(0_0_0/0.12)]",
+							"absolute bottom-full left-0 z-50 mb-2 w-84 max-w-full overflow-hidden rounded-xl p-1.5 shadow-popover",
 						)}
 					>
 						<div

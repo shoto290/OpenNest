@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { expect, fn, waitFor } from "storybook/test"
+import { expect, fn, waitFor, type within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { slotsIn } from "@workspace/storybook/story-utils"
@@ -126,6 +126,21 @@ const rowsOf = (textarea: HTMLElement) =>
 		textarea.scrollHeight /
 			Number.parseFloat(getComputedStyle(textarea).lineHeight),
 	)
+
+const expectJoiningBetweenDraftAndControls = async (
+	canvas: ReturnType<typeof within>,
+	line: HTMLElement,
+) => {
+	const textarea = canvas.getByRole("textbox", { name: "Message" })
+
+	await expect(box(line).top).toBeGreaterThanOrEqual(box(textarea).bottom)
+	await expect(
+		isBelow(canvas.getByRole("button", { name: "Add context" }), line),
+	).toBe(true)
+	await expect(
+		isBelow(canvas.getByRole("button", { name: "Send" }), line),
+	).toBe(true)
+}
 
 const LONG_DRAFT = [
 	"Review the release branch and write the changelog for v0.1.",
@@ -338,6 +353,8 @@ export const WithOneJoining = meta.story({
 	args: {
 		defaultValue: "@Atlas look at the notes",
 		joining: [JOINING_BOTS[0]],
+		leading: leadingControls,
+		trailing: trailingControls,
 	},
 	parameters: {
 		docs: {
@@ -362,9 +379,32 @@ export const WithOneJoining = meta.story({
 			box(textarea).left +
 				Number.parseFloat(getComputedStyle(textarea).paddingInlineStart),
 		)
+		await expectJoiningBetweenDraftAndControls(canvas, lines[0])
+	},
+})
+
+export const WithJoiningLongDraft = meta.story({
+	args: {
+		defaultValue: WRAPPED_DRAFT,
+		joining: [JOINING_BOTS[0]],
+		leading: leadingControls,
+		trailing: trailingControls,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A draft that already wraps, bringing one companion in. Check that the joining line still falls between the last line of the draft and the control row, so a long draft never pushes it above the text. `WithOneJoining` covers the short draft.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const [line] = slotsIn(canvasElement, "prompt-joining")
+
 		await expect(
-			isBelow(canvas.getByRole("button", { name: "Send" }), lines[0]),
-		).toBe(true)
+			rowsOf(canvas.getByRole("textbox", { name: "Message" })),
+		).toBeGreaterThan(1)
+		await expectJoiningBetweenDraftAndControls(canvas, line)
 	},
 })
 
