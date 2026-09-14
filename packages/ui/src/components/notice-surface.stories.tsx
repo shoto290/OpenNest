@@ -15,6 +15,7 @@ import {
 } from "@workspace/storybook/story-utils"
 import { DialogSurface } from "@workspace/ui/components/dialog-surface"
 import {
+	endNotice,
 	type NoticeMessage,
 	NoticeSurface,
 	type NoticeSurfaceProps,
@@ -56,6 +57,10 @@ const STACK: NoticeMessage[] = [
 ]
 
 const MARKED_TYPES: TransientNoticeType[] = ["info", "warning", "loading"]
+
+const WORKING = "Indexing the watched folder"
+
+const UNKNOWN_NOTICE_ID = "notice-that-was-never-raised"
 
 const SHORT_DELAY = 700
 
@@ -166,7 +171,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The window's notice surface: one viewport mounted once in the shell, anchored to the top edge of the window and centred on it, and two ways to raise something into it. `raiseTransientNotice` reports what went right and leaves on its own once `TRANSIENT_NOTICE_DELAY` has passed, on the `success` mark unless it is handed `info`, `warning` or `loading`; `raiseFailureNotice` reports what went wrong on the `error` mark, wears the destructive border and stays until the reader closes it - a failure that dismisses itself is close to silence. Both are module-level calls, so a controller, a driver or a scheduler raises a notice without a hook and without a component in scope, and both take an optional action drawn between the text and the close control. Notices land against the top edge, newest nearest it, three at most, with the ones beyond the limit marked `data-limited` rather than removed. Enter and leave travel through the top edge over 500ms, and drop to a fade with no movement under `prefers-reduced-motion` - see `ReducedMotion`. `transientDelay` on the viewport overrides the delay for the whole surface; a failure ignores it.",
+					"The window's notice surface: one viewport mounted once in the shell, anchored to the top edge of the window and centred on it, and two ways to raise something into it. `raiseTransientNotice` reports what went right on the `success` mark, or on the `info`, `warning` or `loading` mark when it is handed a type, and leaves on its own once `TRANSIENT_NOTICE_DELAY` has passed - except on `loading`, which holds until its caller ends it, because the work it reports has no deadline; `raiseFailureNotice` reports what went wrong on the `error` mark, wears the destructive border and stays until the reader closes it - a failure that dismisses itself is close to silence. Both are module-level calls, so a controller, a driver or a scheduler raises a notice without a hook and without a component in scope, and both take an optional action drawn between the text and the close control. Both return the identifier of the notice they raised, and `endNotice` takes that identifier and takes the notice off screen; an identifier no notice on screen carries leaves the surface as it was. Notices land against the top edge, newest nearest it, three at most, with the ones beyond the limit marked `data-limited` rather than removed. Enter and leave travel through the top edge over 500ms, and drop to a fade with no movement under `prefers-reduced-motion` - see `ReducedMotion`. `transientDelay` on the viewport overrides the delay for the whole surface; a failure ignores it.",
 			},
 		},
 	},
@@ -373,7 +378,7 @@ export const Marks = meta.story({
 		docs: {
 			description: {
 				story:
-					"One notice per remaining type, raised from the module: `info`, `warning` and `loading`. Check that each carries its own mark from the icon registry rather than a shared glyph, and that the loading mark turns while the work it reports is still running. `Default` carries the `success` mark and `Error` the `error` one, which completes the vendored set of five.",
+					"One notice per remaining type, raised from the module: `info`, `warning` and `loading`. Check that each carries its own mark from the icon registry rather than a shared glyph, and that the loading mark turns while the work it reports is still running, unless the reader asked the system to stop moving things, in which case it stands still. `Default` carries the `success` mark and `Error` the `error` one, which completes the vendored set of five.",
 			},
 		},
 	},
@@ -391,7 +396,44 @@ export const Marks = meta.story({
 		await expect(glyphs.size).toBe(MARKED_TYPES.length)
 
 		const loading = markOf(noticesOnScreen()[0])
-		await expect(getComputedStyle(loading).animationName).toBe("spin")
+		const asksForStillness = window.matchMedia(
+			"(prefers-reduced-motion: reduce)",
+		).matches
+		await expect(getComputedStyle(loading).animationName).toBe(
+			asksForStillness ? "none" : "spin",
+		)
+	},
+})
+
+export const Loading = meta.story({
+	render: () => <NoticeSurface transientDelay={SHORT_DELAY} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The one transient notice that does not leave on its own: the library never schedules a dismissal for a `loading` type, so the work it reports decides when the notice ends. The story raises it from the module, keeps the identifier the raise handed back, then raises and outlives a second transient to show the delay passing without touching it, calls `endNotice` with an identifier nothing carries to show the surface untouched, and finally ends the notice it owns.",
+			},
+		},
+	},
+	play: async () => {
+		const id = raiseTransientNotice({ title: WORKING, type: "loading" })
+		await within(viewport()).findByText(WORKING)
+
+		raiseTransientNotice(SAVED)
+		await within(viewport()).findByText(SAVED.title)
+		await waitFor(
+			() => expect(within(viewport()).queryByText(SAVED.title)).toBe(null),
+			{ timeout: SHORT_DELAY + 4000 },
+		)
+		await expect(within(viewport()).getByText(WORKING)).toBeVisible()
+
+		endNotice(UNKNOWN_NOTICE_ID)
+		await expect(within(viewport()).getByText(WORKING)).toBeVisible()
+
+		endNotice(id)
+		await waitFor(() =>
+			expect(within(viewport()).queryByText(WORKING)).toBe(null),
+		)
 	},
 })
 

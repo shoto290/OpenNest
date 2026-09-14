@@ -55,13 +55,13 @@ const raiseNotice = ({ action, ...notice }: RaisedNotice) => {
 	raisedNoticeCount += 1
 	const id = `notice-${raisedNoticeCount}`
 
-	noticeManager.add({
+	return noticeManager.add({
 		...notice,
 		actionProps: action && {
 			children: action.label,
 			onClick: () => {
 				action.onPress()
-				noticeManager.close(id)
+				endNotice(id)
 			},
 		},
 		id,
@@ -71,12 +71,13 @@ const raiseNotice = ({ action, ...notice }: RaisedNotice) => {
 const raiseTransientNotice = ({
 	type = "success",
 	...message
-}: TransientNotice) => {
-	raiseNotice({ ...message, priority: "low", type })
-}
+}: TransientNotice) => raiseNotice({ ...message, priority: "low", type })
 
-const raiseFailureNotice = (message: NoticeMessage) => {
+const raiseFailureNotice = (message: NoticeMessage) =>
 	raiseNotice({ ...message, priority: "high", timeout: 0, type: "error" })
+
+const endNotice = (id: string) => {
+	noticeManager.close(id)
 }
 
 const NOTICE_MARKS = {
@@ -117,7 +118,7 @@ const NoticeMark = ({ type }: NoticeMarkProps) => {
 			className={cn(
 				"pointer-events-none size-4 shrink-0",
 				type === "error" && "text-destructive",
-				type === "loading" && "animate-spin",
+				type === "loading" && "animate-spin motion-reduce:animate-none",
 			)}
 		/>
 	)
@@ -188,6 +189,7 @@ const NoticeSurface = ({
 }
 
 export {
+	endNotice,
 	type NoticeMessage,
 	NoticeSurface,
 	type NoticeSurfaceProps,
