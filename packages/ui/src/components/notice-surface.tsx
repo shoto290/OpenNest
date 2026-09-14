@@ -191,7 +191,6 @@ const NoticeSurface = ({
 
 export {
 	endNotice,
-	type FailureNotice,
 	type NoticeMessage,
 	NoticeSurface,
 	type NoticeSurfaceProps,

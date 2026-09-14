@@ -115,17 +115,20 @@ export const useSessionFailureNotice = ({
 		if (!error || !key) {
 			return
 		}
-		const failure: RaisedFailure = { key, noticeId: "" }
-		failure.noticeId = raiseFailureNotice({
-			...failureMessageOf(t, { error, leftOut, onRestart, onSignIn }),
-			onClose: () => {
-				if (raised.current !== failure) {
-					return
-				}
-				raised.current = null
-				onDismiss(error.id)
-			},
-		})
+		const dismissUnlessReleased = () => {
+			if (raised.current !== failure) {
+				return
+			}
+			raised.current = null
+			onDismiss(error.id)
+		}
+		const failure: RaisedFailure = {
+			key,
+			noticeId: raiseFailureNotice({
+				...failureMessageOf(t, { error, leftOut, onRestart, onSignIn }),
+				onClose: dismissUnlessReleased,
+			}),
+		}
 		raised.current = failure
 	}, [key, error, leftOut, onDismiss, onRestart, onSignIn, t])
 
