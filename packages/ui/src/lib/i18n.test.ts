@@ -51,6 +51,14 @@ describe("the runtime", () => {
 		expect(i18n.t("common:sidebar.close")).toBe("Fermer la barre latérale")
 	})
 
+	it("invites in French on the conversation nobody is in yet", () => {
+		activateLanguage("fr")
+
+		expect(i18n.t("chat:conversationEmptyState.nobody.description")).toBe(
+			"Tapez @ et choisissez un nom. Le compagnon que vous mentionnez rejoint la conversation, et peut à son tour inviter ceux dont il a besoin.",
+		)
+	})
+
 	it("counts in the plural forms French takes", () => {
 		activateLanguage("fr")
 

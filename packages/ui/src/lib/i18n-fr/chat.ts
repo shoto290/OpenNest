@@ -27,7 +27,7 @@ const chat = {
 		nobody: {
 			title: "Personne n'est encore dans cette conversation",
 			description:
-				"Tapez @ et choisissez un nom. Qui vous mentionnez rejoint la conversation, et peut à son tour faire venir qui il lui faut.",
+				"Tapez @ et choisissez un nom. Le compagnon que vous mentionnez rejoint la conversation, et peut à son tour inviter ceux dont il a besoin.",
 			suggested: "Ceux à qui vous parlez le plus",
 		},
 	},

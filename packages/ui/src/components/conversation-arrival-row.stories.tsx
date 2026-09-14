@@ -26,7 +26,7 @@ const HAPPY: RosterBot = {
 }
 const LONG_NAMED: RosterBot = {
 	id: "bot_6f0b27",
-	name: "Lighthousekeeperofthenorthshore",
+	name: "Lighthousekeeperofthenorthshoreandthesouthernbayharbourwatchtower",
 	animal: "koala",
 	blot: "green",
 }
@@ -177,21 +177,31 @@ export const LongContent = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this when both companions carry long unbreakable names in a 320 pixel wide transcript. Check that the sentence wraps onto further centered lines, that each name stays whole on one line instead of splitting mid-word, and that nothing scrolls sideways. Pick `InvitedByCompanion` for nominal names.",
+					"Reach for this when both companions carry long unbreakable names in a 320 pixel wide transcript. A name too long for one line is not shortened and not clamped: it breaks wherever the line ends and carries on onto the next one, so the sentence is always read in full. Check that the arriving name runs across more than one line, that no line reaches past the sentence, and that nothing scrolls sideways. Pick `InvitedByCompanion` for nominal names.",
 			},
 		},
 	},
 	play: async ({ canvas, canvasElement }) => {
 		const frame = canvas.getByTestId("narrow-frame")
-		const sentence = slotIn(canvasElement, "conversation-arrival-row")
-			.lastElementChild as HTMLElement
+		const row = slotIn(canvasElement, "conversation-arrival-row")
+		const sentence = row.lastElementChild as HTMLElement
+		const sentenceBox = sentence.getBoundingClientRect()
+		const drawnRow = getComputedStyle(row)
 		const lineHeight = Number.parseFloat(getComputedStyle(sentence).lineHeight)
 
-		await expect(sentence.getBoundingClientRect().height).toBeGreaterThan(
-			lineHeight,
+		await expect(sentenceBox.height).toBeGreaterThan(lineHeight)
+		await expect(drawnRow.overflowWrap).toBe("anywhere")
+		await expect(drawnRow.textOverflow).toBe("clip")
+		await expect(drawnRow.webkitLineClamp).toBe("none")
+		await expect(lineRectsOf(sentence, LONG_NAMED.name).length).toBeGreaterThan(
+			1,
 		)
-		await expect(lineRectsOf(sentence, LONG_NAMED.name)).toHaveLength(1)
-		await expect(lineRectsOf(sentence, LONG_NAMED_INVITER.name)).toHaveLength(1)
+		for (const line of lineRectsOf(sentence, sentence.textContent ?? "")) {
+			await expect(line.left).toBeGreaterThanOrEqual(sentenceBox.left)
+			await expect(line.right).toBeLessThanOrEqual(sentenceBox.right)
+		}
 		await expect(frame.scrollWidth).toBeLessThanOrEqual(frame.clientWidth)
+		await expect(sentence.textContent).toContain(LONG_NAMED.name)
+		await expect(sentence.textContent).toContain(LONG_NAMED_INVITER.name)
 	},
 })
