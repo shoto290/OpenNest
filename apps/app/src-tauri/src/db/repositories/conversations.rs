@@ -2765,7 +2765,11 @@ mod tests {
 			.expect("the page is read")
 	}
 
-	async fn arrived(repository: &ConversationsRepository, room: &Conversation, bot: &Bot) -> Arrival {
+	async fn arrived(
+		repository: &ConversationsRepository,
+		room: &Conversation,
+		bot: &Bot,
+	) -> Arrival {
 		repository
 			.add_participant(room.id.clone(), bot.id.clone(), None)
 			.await
@@ -2813,7 +2817,11 @@ mod tests {
 		let page = page_of(&database, &room.id, None, 10).await;
 		let window = database
 			.messages()
-			.messages_around(MessagesAroundQuery { conversation_id: room.id.clone(), seq: 2, limit: 3 })
+			.messages_around(MessagesAroundQuery {
+				conversation_id: room.id.clone(),
+				seq: 2,
+				limit: 3,
+			})
 			.await
 			.expect("the window is read")
 			.expect("the window holds the message");
@@ -2843,8 +2851,11 @@ mod tests {
 
 		let mut ordered = first.clone();
 		ordered.sort_by(|left, right| {
-			(left.last_message_seq, left.created_at, &left.id)
-				.cmp(&(right.last_message_seq, right.created_at, &right.id))
+			(left.last_message_seq, left.created_at, &left.id).cmp(&(
+				right.last_message_seq,
+				right.created_at,
+				&right.id,
+			))
 		});
 		assert_eq!(first.len(), 3);
 		assert_eq!(first, ordered, "the arrivals came back out of seq, time and id order");
@@ -2948,12 +2959,19 @@ mod tests {
 
 		let window = database
 			.messages()
-			.messages_around(MessagesAroundQuery { conversation_id: room.id.clone(), seq: 3, limit: 3 })
+			.messages_around(MessagesAroundQuery {
+				conversation_id: room.id.clone(),
+				seq: 3,
+				limit: 3,
+			})
 			.await
 			.expect("the window is read")
 			.expect("the window holds the message");
 
-		assert_eq!(window.messages.iter().map(|message| message.seq).collect::<Vec<_>>(), [2, 3, 4]);
+		assert_eq!(
+			window.messages.iter().map(|message| message.seq).collect::<Vec<_>>(),
+			[2, 3, 4]
+		);
 		assert!(window.has_older && window.has_newer);
 		assert_eq!(window.arrivals, inside, "the window held an arrival beyond its messages");
 
@@ -2989,6 +3007,41 @@ mod tests {
 		assert!(matches!(absent_inviter, Err(ConversationError::UnknownParticipant { .. })));
 		assert_eq!(arrivals_after_refusals, 0, "a refused seat left an arrival behind");
 		assert_eq!(invited.invited_by_bot_id, Some(bots[0].id.clone()));
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn an_arrival_outlives_the_seat_of_the_companion_that_invited_it() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let repository = database.conversations();
+		let (room, bots) = a_room_of(&database, &["Nyx", "Ada"]).await;
+		let invited = repository
+			.add_participant(room.id.clone(), bots[1].id.clone(), Some(bots[0].id.clone()))
+			.await
+			.expect("the bot is invited")
+			.arrival
+			.expect("the arrival is recorded");
+		let (conversation_id, inviter_id) = (room.id.clone(), bots[0].id.clone());
+
+		database
+			.call_mut(move |connection| {
+				Ok(connection.execute(
+					"DELETE FROM conversation_participants
+						WHERE conversation_id = ?1 AND bot_id = ?2",
+					params![conversation_id, inviter_id],
+				)?)
+			})
+			.await
+			.expect("the inviter seat goes");
+
+		assert_eq!(
+			page_of(&database, &room.id, None, 10).await.arrivals,
+			vec![invited],
+			"the arrival went with the seat of its inviter"
+		);
 
 		drop(database);
 		fs::remove_dir_all(&dir).expect("cleanup");

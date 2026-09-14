@@ -750,8 +750,6 @@ CREATE TABLE conversation_arrivals (
 	last_message_seq INTEGER NOT NULL,
 	created_at INTEGER NOT NULL,
 	FOREIGN KEY (conversation_id, bot_id)
-		REFERENCES conversation_participants (conversation_id, bot_id) ON DELETE CASCADE,
-	FOREIGN KEY (conversation_id, invited_by_bot_id)
 		REFERENCES conversation_participants (conversation_id, bot_id) ON DELETE CASCADE
 );
 

@@ -50,7 +50,11 @@ pub fn settle<R: Runtime>(
 	}
 }
 
-pub(crate) fn announce<R: Runtime, T: Serialize + Clone + Debug>(app: &AppHandle<R>, event: &str, payload: T) {
+pub(crate) fn announce<R: Runtime, T: Serialize + Clone + Debug>(
+	app: &AppHandle<R>,
+	event: &str,
+	payload: T,
+) {
 	if let Err(failure) = app.emit(event, payload.clone()) {
 		eprintln!("{event} was not announced for {payload:?}: {failure}");
 	}

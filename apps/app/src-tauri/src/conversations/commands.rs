@@ -5,9 +5,10 @@ use tauri::{AppHandle, Manager, Runtime, State};
 use super::context;
 use super::contract::{
 	AvatarAnimal, AvatarBlot, Bot, BotChangedFile, BotDraft, BotHistoryEntry, BotIdentity, Chat,
-	CompanionArrival, ContextCheckpoint, Conversation, COMPANION_ARRIVED_EVENT, McpServer, MessageReference, NewAssistantMessage, NewTurn,
-	NewUserMessage, PinnedBubble, RuntimeSession, Skill, SkillDraft, SuggestedBot,
-	TerminalCompletion, TranscriptPage, TranscriptStoreError, TranscriptWindow,
+	CompanionArrival, ContextCheckpoint, Conversation, McpServer, MessageReference,
+	NewAssistantMessage, NewTurn, NewUserMessage, PinnedBubble, RuntimeSession, Skill, SkillDraft,
+	SuggestedBot, TerminalCompletion, TranscriptPage, TranscriptStoreError, TranscriptWindow,
+	COMPANION_ARRIVED_EVENT,
 };
 use super::seed;
 use crate::agent::contract::AgentCommand;
