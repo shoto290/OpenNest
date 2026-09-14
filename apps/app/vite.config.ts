@@ -21,6 +21,7 @@ export default defineConfig({
 	},
 	build: {
 		target: "safari13",
+		cssTarget: "safari14.1",
 		minify: !process.env.TAURI_ENV_DEBUG,
 		sourcemap: Boolean(process.env.TAURI_ENV_DEBUG),
 	},

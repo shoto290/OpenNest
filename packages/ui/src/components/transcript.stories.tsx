@@ -122,6 +122,19 @@ const expectRestingPadding = (viewport: HTMLElement, bubble: HTMLElement) =>
 
 const RETURN_CONTROL = { name: /Jump to latest|new messages?/ }
 
+const expectCentredOver = (viewport: HTMLElement, button: HTMLElement) =>
+	waitFor(async () => {
+		await expect(button).toHaveAttribute("data-active", "true")
+		const room = viewport.getBoundingClientRect()
+		const box = button.getBoundingClientRect()
+		await expect(box.left + box.width / 2).toBeCloseTo(
+			room.left + room.width / 2,
+			0,
+		)
+		await expect(box.left).toBeGreaterThanOrEqual(room.left)
+		await expect(box.right).toBeLessThanOrEqual(room.right)
+	})
+
 const scrollUp = async (viewport: HTMLElement) => {
 	viewport.dispatchEvent(
 		new WheelEvent("wheel", { bubbles: true, deltaY: -200 }),
@@ -721,6 +734,35 @@ export const MarksAndCountsNewMessages = meta.story({
 			expect(
 				canvas.getByRole("button", { name: "2 new messages" }),
 			).toBeInTheDocument(),
+		)
+	},
+})
+
+export const ReturnControlCentredOverViewport = meta.story({
+	args: { countsNewMessages: true },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The return control, short and counted, measured against the viewport it floats over. Check its centre sits on the viewport centre and both of its edges stay inside the viewport, whichever label it carries.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const viewport = canvas.getByRole("region", { name: "Conversation" })
+		await atLiveEdge(viewport)
+
+		await scrollUp(viewport)
+		await waitFor(() => expect(args.onFollowChange).toHaveBeenCalledWith(false))
+		await expectCentredOver(
+			viewport,
+			canvas.getByRole("button", { name: "Jump to latest" }),
+		)
+
+		await userEvent.click(canvas.getByRole("button", { name: "Send reply" }))
+		await expectCentredOver(
+			viewport,
+			await canvas.findByRole("button", { name: "1 new message" }),
 		)
 	},
 })

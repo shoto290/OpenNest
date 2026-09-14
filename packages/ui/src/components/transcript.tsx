@@ -389,7 +389,7 @@ const TranscriptBody = ({
 
 			<MessageScrollerButton
 				behavior={behavior}
-				className="start-1/2 rounded-full shadow-xl tabular-nums"
+				className="rounded-full shadow-xl tabular-nums"
 				onClick={
 					newer
 						? (event) => {
