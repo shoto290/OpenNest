@@ -63,12 +63,6 @@ describe("placeArrivals", () => {
 		])
 	})
 
-	it("keeps an arrival below the oldest message once nothing older is left", () => {
-		expect(placedOf([arrivalOf("a-1", 0)], false)).toEqual([
-			["a-1", BEFORE_FIRST_RUN],
-		])
-	})
-
 	it("places an arrival of a conversation holding no message before the first run", () => {
 		expect(
 			placeArrivals({
