@@ -79,6 +79,11 @@ import {
 	type OnboardingController,
 } from "@/lib/onboarding/onboarding-controller"
 import { onboardingSummonsFor } from "@/lib/onboarding/onboarding-summons"
+import {
+	createSignInController,
+	type SignInController,
+	signInWorldOf,
+} from "@/lib/onboarding/sign-in-controller"
 import type { Onboarding } from "@/lib/onboarding/use-onboarding"
 import { type FakeLayout, fakeLayout } from "@/lib/perf/fake-layout"
 import { createOpenedRoutineController } from "@/lib/routines/opened-routine-controller"
@@ -318,6 +323,7 @@ type ThreadScreenHarnessProps = {
 	bots: Bot[]
 	landings: MessageLandingController
 	onboarding?: OnboardingController
+	signIn?: SignInController
 	onOpenMission: (missionId: string) => void
 }
 
@@ -326,12 +332,17 @@ const ThreadScreenHarness = ({
 	bots,
 	landings,
 	onboarding,
+	signIn,
 	onOpenMission,
 }: ThreadScreenHarnessProps) => {
 	const [isOpen, setOpen] = useState(false)
 	const onboardingState = useSyncExternalStore(
 		onboarding ? onboarding.subscribe : NEVER_CHANGES,
 		onboarding ? onboarding.getState : NO_ONBOARDING_STATE,
+	)
+	const signInState = useSyncExternalStore(
+		signIn ? signIn.subscribe : NEVER_CHANGES,
+		signIn ? signIn.getState : NO_SIGN_IN_STATE,
 	)
 
 	return createElement(ThreadScreen, {
@@ -354,6 +365,10 @@ const ThreadScreenHarness = ({
 		onOpenMission,
 		readerName: "Reader",
 		runtimes: runtimesOf(thread),
+		signIn:
+			signIn && signInState
+				? { state: signInState, controller: signIn }
+				: undefined,
 		thread,
 	})
 }
@@ -362,18 +377,22 @@ const NEVER_CHANGES = () => () => undefined
 
 const NO_ONBOARDING_STATE = () => null
 
+const NO_SIGN_IN_STATE = () => null
+
 const screenOf = (
 	thread: Thread,
 	bots: Bot[] = NO_BOT_RECORDS,
 	onOpenMission: (missionId: string) => void = () => undefined,
 	landings: MessageLandingController = createMessageLandingController(),
 	onboarding?: OnboardingController,
+	signIn?: SignInController,
 ) =>
 	createElement(ThreadScreenHarness, {
 		bots,
 		landings,
 		onboarding,
 		onOpenMission,
+		signIn,
 		thread,
 	})
 
@@ -2243,15 +2262,15 @@ const onboardingScreen = ({ controller, solo }: OnboardingFixture) =>
 		controller,
 	)
 
-const renderOnboarding = async (
-	fixture: OnboardingFixture,
+const renderAsking = async (
+	view: () => ReturnType<typeof screenOf>,
 ): Promise<OnboardingScreen> => {
-	const { rerender } = render(onboardingScreen(fixture))
+	const { rerender } = render(view())
 	const refresh = async () => {
 		await settle()
-		rerender(onboardingScreen(fixture))
+		rerender(view())
 		await settle()
-		rerender(onboardingScreen(fixture))
+		rerender(view())
 		await settle()
 	}
 	await refresh()
@@ -2279,6 +2298,9 @@ const renderOnboarding = async (
 		},
 	}
 }
+
+const renderOnboarding = (fixture: OnboardingFixture) =>
+	renderAsking(() => onboardingScreen(fixture))
 
 const TYPED_MESSAGE = "Hello, what can you do?"
 
@@ -2488,5 +2510,300 @@ describe("the first run in a solo thread", () => {
 		expect(isAsking(FIRST_REPLY_QUESTION)).toBe(false)
 		expect(screen.getAllByText(FIRST_REPLY_QUESTION).length).toBeGreaterThan(0)
 		expect(screen.getByText("Keep talking first")).toBeTruthy()
+	})
+})
+
+const SIGNED_OUT = {
+	connection: "unavailable",
+	binaryVersion: null,
+	authenticated: false,
+	error: { kind: "notAuthenticated" },
+} satisfies CheckReport
+
+const AGENT_MISSING = {
+	connection: "unavailable",
+	binaryVersion: null,
+	authenticated: false,
+	error: { kind: "binaryNotFound", searched: [] },
+} satisfies CheckReport
+
+const SIGNED_IN = {
+	connection: "ready",
+	binaryVersion: "1",
+	authenticated: true,
+	error: null,
+} satisfies CheckReport
+
+const ACCESS_QUESTION = "How do you want to connect?"
+
+const NOT_CONNECTED_TITLE = "You're not signed in"
+
+const UNAVAILABLE_TITLE = "Couldn't reach the agent"
+
+const SIGN_IN = "Sign in"
+
+const EMPTY_STATE_SLOT = '[data-slot="chat-empty-state"]'
+
+type SignedOutAgent = {
+	checked: CheckReport
+	sessionsOpened: number
+}
+
+type SignedOutFixture = {
+	agent: SignedOutAgent
+	port: FakeOnboardingPort
+	signIn: SignInController
+	driver: ScriptedDriver
+	thread: () => BotThread
+}
+
+const signedOutOf = async (
+	checked: CheckReport = SIGNED_OUT,
+): Promise<SignedOutFixture> => {
+	const store = createFakeTranscriptStore()
+	const [bot] = await seatBots(store, SPACE, ["Ada"])
+	const driver = createScriptedDriver()
+	const agent: SignedOutAgent = { checked, sessionsOpened: 0 }
+	const chat = createChatController(
+		{
+			...driver,
+			check: () => Promise.resolve(agent.checked),
+			startOrResumeSession: (...opened) => {
+				agent.sessionsOpened += 1
+				return driver.startOrResumeSession(...opened)
+			},
+		},
+		store,
+	)
+	chat.attach()
+	await act(async () => {
+		await chat.open(bot.id, null)
+	})
+	const port = createFakeOnboardingPort()
+	const signIn = createSignInController(
+		port,
+		signInWorldOf({ chat, selectedBotId: () => bot.id }),
+	)
+
+	return {
+		agent,
+		port,
+		signIn,
+		driver,
+		thread: () => ({
+			kind: "bot",
+			bot,
+			chat: { state: chat.stateFor(bot.id), controller: chat },
+			isSettingsOpen: false,
+			isOverlayOpen: false,
+			onToggleSettings: () => undefined,
+		}),
+	}
+}
+
+const renderSignIn = (
+	fixture: SignedOutFixture,
+	onboarding?: OnboardingController,
+) =>
+	renderAsking(() =>
+		screenOf(
+			fixture.thread(),
+			NO_BOT_RECORDS,
+			() => undefined,
+			createMessageLandingController(),
+			onboarding,
+			fixture.signIn,
+		),
+	)
+
+const emptyState = () => {
+	const drawn = document.querySelector<HTMLElement>(EMPTY_STATE_SLOT)
+	if (!drawn) throw new Error("the thread draws no empty state")
+	return drawn
+}
+
+const pressWithin = async (
+	shown: OnboardingScreen,
+	region: HTMLElement,
+	name: string,
+) => {
+	await act(async () => {
+		fireEvent.click(within(region).getByRole("button", { name }))
+	})
+	await shown.refresh()
+}
+
+const askedToConnect = async (fixture: SignedOutFixture) => {
+	const shown = await renderSignIn(fixture)
+	await pressWithin(shown, emptyState(), SIGN_IN)
+	return shown
+}
+
+const choice = (label: string) =>
+	screen.getByRole("radio", { name: (name) => name.startsWith(label) })
+
+const firstRunElsewhere = async () => {
+	const world = createFakeOnboardingWorld()
+	const onboarding = createOnboardingController(
+		createFakeOnboardingPort(),
+		world,
+	)
+	await act(async () => {
+		await onboarding.start()
+	})
+	return { world, onboarding }
+}
+
+describe("signing in from a companion's solo thread", () => {
+	let layout: FakeLayout
+
+	beforeEach(() => {
+		layout = fakeLayout()
+		vi.clearAllMocks()
+		listRoutines.mockResolvedValue([])
+		listRuns.mockResolvedValue([])
+		listSources.mockResolvedValue([SCHEDULE_SOURCE])
+		listMissions.mockResolvedValue({ open: [], done: [] })
+		listenToMissions.mockResolvedValue(() => undefined)
+	})
+
+	afterEach(() => {
+		cleanup()
+		layout.restore()
+	})
+
+	it("draws the not-connected empty state when nobody is signed in", async () => {
+		const fixture = await signedOutOf()
+		await renderSignIn(fixture)
+
+		const drawn = within(emptyState())
+		expect(
+			drawn.getByRole("heading", { name: NOT_CONNECTED_TITLE }),
+		).toBeTruthy()
+		expect(drawn.getByRole("button", { name: SIGN_IN })).toBeTruthy()
+		expect(drawn.queryByText(UNAVAILABLE_TITLE)).toBeNull()
+	})
+
+	it("keeps the empty state it draws today when the agent fails for another reason", async () => {
+		const fixture = await signedOutOf(AGENT_MISSING)
+		await renderSignIn(fixture)
+
+		expect(
+			within(emptyState()).getByRole("heading", { name: UNAVAILABLE_TITLE }),
+		).toBeTruthy()
+		expect(screen.queryByText(NOT_CONNECTED_TITLE)).toBeNull()
+	})
+
+	it("draws the not-connected empty state while the first run goes on in another companion", async () => {
+		const fixture = await signedOutOf()
+		const { onboarding } = await firstRunElsewhere()
+		await renderSignIn(fixture, onboarding)
+
+		expect(
+			within(emptyState()).getByRole("heading", { name: NOT_CONNECTED_TITLE }),
+		).toBeTruthy()
+	})
+
+	it("asks the question the onboarding asks when nobody is authenticated", async () => {
+		const fixture = await signedOutOf()
+		await askedToConnect(fixture)
+
+		expect(isAsking(ACCESS_QUESTION)).toBe(true)
+		expect(choice("Sign in with Claude")).toBeTruthy()
+		expect(choice("Paste an API key")).toBeTruthy()
+		expect(document.querySelector(EMPTY_STATE_SLOT)).toBeNull()
+	})
+
+	it("asks for the code on the url the sign-in announced, with a key as the way out", async () => {
+		const fixture = await signedOutOf()
+		const shown = await askedToConnect(fixture)
+		await shown.choose("Sign in with Claude")
+
+		await act(async () => {
+			fixture.port.announceStarted(SIGN_IN_LINK)
+		})
+		await shown.refresh()
+
+		expect(isAsking(CODE_QUESTION)).toBe(true)
+		expect(screen.getByDisplayValue(SIGN_IN_LINK)).toBeTruthy()
+		await shown.press("Paste a key instead")
+		expect(isAsking(KEY_QUESTION)).toBe(true)
+	})
+
+	it("offers the retry and the key after a refused sign-in", async () => {
+		const fixture = await signedOutOf()
+		const shown = await askedToConnect(fixture)
+		await shown.choose("Sign in with Claude")
+
+		await act(async () => {
+			fixture.port.refuseSignIn({
+				kind: "failed",
+				detail: "auth login exited with 1",
+			})
+		})
+		await shown.refresh()
+
+		expect(isAsking(SIGN_IN_FAILED_QUESTION)).toBe(true)
+		expect(screen.getByText("Couldn't sign you in")).toBeTruthy()
+		expect(choice("Try again")).toBeTruthy()
+		expect(choice("Paste an API key")).toBeTruthy()
+	})
+
+	it("withdraws the code step and opens the session once the account is connected", async () => {
+		const fixture = await signedOutOf()
+		const shown = await askedToConnect(fixture)
+		await shown.choose("Sign in with Claude")
+		await act(async () => {
+			fixture.port.announceStarted(SIGN_IN_LINK)
+		})
+		await shown.refresh()
+
+		fixture.agent.checked = SIGNED_IN
+		await act(async () => {
+			fixture.port.completeSignIn()
+		})
+		await shown.refresh()
+
+		expect(screen.queryByText(CODE_QUESTION)).toBeNull()
+		expect(screen.queryByRole("alert")).toBeNull()
+		expect(fixture.agent.sessionsOpened).toBe(1)
+	})
+
+	it("offers the sign-in in place of the restart on a signed-out notice", async () => {
+		const fixture = await signedOutOf()
+		const shown = await renderSignIn(fixture)
+		const notice = screen.getByRole("alert")
+
+		expect(
+			within(notice).queryByRole("button", { name: "Restart session" }),
+		).toBeNull()
+		expect(within(notice).getByText(NOT_CONNECTED_TITLE)).toBeTruthy()
+		expect(
+			within(notice).getByText(
+				"Your Claude account isn't connected. Sign in to keep talking.",
+			),
+		).toBeTruthy()
+		expect(within(notice).queryByText(/restart/i)).toBeNull()
+		await pressWithin(shown, notice, SIGN_IN)
+		expect(isAsking(ACCESS_QUESTION)).toBe(true)
+	})
+
+	it("leaves the first run alone and summons nobody while connecting", async () => {
+		const fixture = await signedOutOf()
+		const { world, onboarding } = await firstRunElsewhere()
+		const shown = await renderSignIn(fixture, onboarding)
+		await pressWithin(shown, emptyState(), SIGN_IN)
+		await shown.choose("Paste an API key")
+
+		fixture.port.report = AUTHENTICATED_ANONYMOUSLY
+		fixture.agent.checked = SIGNED_IN
+		await shown.type("Key", ONBOARDING_KEY)
+
+		expect(isAsking(KEY_QUESTION)).toBe(false)
+		expect(fixture.agent.sessionsOpened).toBe(1)
+		expect(world.firstRunDone).toBe(0)
+		expect(world.sent).toEqual([])
+		expect(world.greetings).toEqual([])
+		expect(fixture.driver.submissions).toEqual([])
 	})
 })

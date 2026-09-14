@@ -266,13 +266,21 @@ export function sidebarActivityFor(state: ChatState): SidebarActivity {
 	return { isWorking: true, kind: working.kind }
 }
 
+export function isSignedOut(error: TransportError): boolean {
+	return error.kind === "notAuthenticated"
+}
+
 export function emptyStateStatusFor(
 	connection: ConnectionState,
+	latestError: TransportError | undefined,
 ): ChatEmptyStateStatus | null {
-	if (connection === "checking") {
-		return null
+	if (connection === "ready") {
+		return "ready"
 	}
-	return connection === "ready" ? "ready" : "unavailable"
+	if (latestError && isSignedOut(latestError)) {
+		return "notConnected"
+	}
+	return connection === "checking" ? null : "unavailable"
 }
 
 export function needsFreshSession(error: TransportError): boolean {
@@ -280,6 +288,9 @@ export function needsFreshSession(error: TransportError): boolean {
 }
 
 export function noticeTitleFor(t: ChatCopy, error: TransportError): string {
+	if (isSignedOut(error)) {
+		return t("screen.notice.notAuthenticated")
+	}
 	if (error.kind === "crashed") {
 		return t("screen.notice.crashed")
 	}

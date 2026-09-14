@@ -16,6 +16,7 @@ import type { Bot, Conversation } from "@/lib/conversations/store-contract"
 import { hasOverlayWindowControls } from "@/lib/host"
 import type { OpenedMissionController } from "@/lib/missions/opened-mission-controller"
 import type { Onboarding } from "@/lib/onboarding/use-onboarding"
+import type { SignIn } from "@/lib/onboarding/use-sign-in"
 import type { MessageLandingController } from "@/lib/search/message-landing-controller"
 
 type WorkspaceBodyProps = {
@@ -38,6 +39,7 @@ type WorkspaceBodyProps = {
 	onOpenConversationSettings: (conversationId: string) => void
 	missions: OpenedMissionController
 	onboarding?: Onboarding
+	signIn: SignIn
 }
 
 const threadOf = ({
@@ -141,6 +143,7 @@ export function WorkspaceBody(props: WorkspaceBodyProps) {
 			onOpenMission={openMission}
 			readerName={props.readerName}
 			runtimes={props.conversationRuntimes}
+			signIn={props.signIn}
 			thread={thread}
 		/>
 	)

@@ -90,7 +90,9 @@ import { useMissionRunDriver } from "@/lib/missions/use-mission-run-driver"
 import { useWaitingMissions } from "@/lib/missions/use-waiting-missions"
 import { useNotifications } from "@/lib/notifications/use-notifications"
 import { onboardingTransport } from "@/lib/onboarding/onboarding-transport"
+import { signInWorldOf } from "@/lib/onboarding/sign-in-controller"
 import { useOnboarding } from "@/lib/onboarding/use-onboarding"
+import { useSignIn } from "@/lib/onboarding/use-sign-in"
 import { createOpenedRoutineController } from "@/lib/routines/opened-routine-controller"
 import { useRunDriver } from "@/lib/routines/use-run-driver"
 import { createMessageLandingController } from "@/lib/search/message-landing-controller"
@@ -192,6 +194,13 @@ export function App() {
 		},
 		markFirstRunDone: user.controller.markFirstRunDone,
 	})
+	const signIn = useSignIn(
+		onboardingTransport,
+		signInWorldOf({
+			chat: chat.controller,
+			selectedBotId: () => roster.controller.getState().selectedBotId,
+		}),
+	)
 
 	const updater = useUpdater()
 
@@ -846,6 +855,7 @@ export function App() {
 						onRetrySpaces={loadSpaces}
 						onToggleSettings={toggleSettings}
 						readerName={preferences.displayName}
+						signIn={signIn}
 					/>
 				</SessionConnectorsContext.Provider>
 			</WorkspaceShell>

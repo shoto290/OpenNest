@@ -9,9 +9,14 @@ const chat = {
 			title: "Couldn't reach the agent",
 			description: "Kiroshi's built-in agent didn't answer. Try again.",
 		},
+		notConnected: {
+			title: "You're not signed in",
+			description: "Connect your Claude account so your companions can answer.",
+		},
 		settings: "Companion settings",
 		hint: "Message a companion to start.",
 		setup: "Try again",
+		signIn: "Sign in",
 	},
 	conversationEmptyState: {
 		description_one: "{{count}} companion is ready.",
@@ -208,6 +213,7 @@ const chat = {
 			workingDirectoryRefused: "Couldn't find the companion's folder",
 			settingsRejected: "Couldn't apply the companion's settings",
 			serverEnvRejected: "Couldn't start a connector",
+			notAuthenticated: "You're not signed in",
 			unavailable: "Couldn't reach the agent",
 			failed: "Couldn't send that request",
 			readFailed: "Couldn't load earlier messages",
@@ -216,6 +222,8 @@ const chat = {
 			binaryNotFound: "Couldn't find the agent. Reinstall Kiroshi.",
 			notAuthenticated:
 				"You're signed out of your Claude subscription. Sign in to Claude, then restart the conversation.",
+			notConnected:
+				"Your Claude account isn't connected. Sign in to keep talking.",
 			authCheckFailed:
 				"Couldn't check your sign-in ({{detail}}). Restart the session.",
 			spawnFailed:

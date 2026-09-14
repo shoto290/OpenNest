@@ -28,10 +28,14 @@ const meta = preview.meta({
 	},
 	args: {
 		onSetup: fn(),
+		onSignIn: fn(),
 		...BOT,
 	},
 	argTypes: {
-		status: { control: "inline-radio", options: ["ready", "unavailable"] },
+		status: {
+			control: "inline-radio",
+			options: ["ready", "unavailable", "notConnected"],
+		},
 	},
 })
 
@@ -146,5 +150,28 @@ export const Unavailable = meta.story({
 		await expect(canvas.queryByText(BOT.name)).toBeNull()
 		await userEvent.click(setup)
 		await expect(args.onSetup).toHaveBeenCalled()
+	},
+})
+
+export const NotConnected = meta.story({
+	args: { status: "notConnected" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this when the agent answers but no Claude account is connected: talking to the companion cannot work until the reader signs in, so the empty state carries the sign-in action. Check that the alert mark replaces the companion's face, that the title says the reader is not signed in rather than blaming the agent, and that the sign-in button is the single focusable target. Pick `Unavailable` when the agent itself does not answer.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const signIn = canvas.getByRole("button", { name: "Sign in" })
+
+		await expect(
+			canvas.getByRole("heading", { name: "You're not signed in" }),
+		).toBeVisible()
+		await expect(botIdentityAvatars(canvasElement)).toHaveLength(0)
+		await userEvent.click(signIn)
+		await expect(args.onSignIn).toHaveBeenCalled()
+		await expect(args.onSetup).not.toHaveBeenCalled()
 	},
 })

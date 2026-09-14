@@ -7,11 +7,11 @@ import type {
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import type {
-	ConnectionStep,
 	OnboardingController,
 	OnboardingState,
 } from "./onboarding-controller"
 import type { SummonOutcome } from "./onboarding-summons"
+import type { ConnectionStep, SignInActions } from "./sign-in-flow"
 
 import type {
 	PostedAnswerHandler,
@@ -137,7 +137,7 @@ const welcomeStep = (
 
 const accountStep = (
 	id: string,
-	controller: OnboardingController,
+	controller: SignInActions,
 ): OnboardingStepQuestion =>
 	choiceStep({
 		id,
@@ -159,7 +159,7 @@ const accountStep = (
 
 const accessStep = (
 	id: string,
-	controller: OnboardingController,
+	controller: SignInActions,
 ): OnboardingStepQuestion =>
 	choiceStep({
 		id,
@@ -177,7 +177,7 @@ const accessStep = (
 const codeStep = (
 	id: string,
 	signInUrl: string,
-	controller: OnboardingController,
+	controller: SignInActions,
 ): OnboardingStepQuestion =>
 	entryStep({
 		id,
@@ -194,7 +194,7 @@ const codeStep = (
 
 const apiKeyStep = (
 	id: string,
-	controller: OnboardingController,
+	controller: SignInActions,
 ): OnboardingStepQuestion =>
 	entryStep({
 		id,
@@ -216,7 +216,7 @@ const signInFailedStep = (
 	id: string,
 	exitDetail: string,
 	retry: () => Promise<void>,
-	controller: OnboardingController,
+	controller: SignInActions,
 ): OnboardingStepQuestion =>
 	choiceStep({
 		id,
@@ -239,7 +239,7 @@ const signInFailedStep = (
 const apiKeyFailedStep = (
 	id: string,
 	exitDetail: string,
-	controller: OnboardingController,
+	controller: SignInActions,
 ): OnboardingStepQuestion =>
 	choiceStep({
 		id,
@@ -288,10 +288,10 @@ const firstReplyStep = (
 		],
 	})
 
-const connectionStepOf = (
+export const connectionStepOf = (
 	connection: ConnectionStep,
 	id: string,
-	controller: OnboardingController,
+	controller: SignInActions,
 ): OnboardingStepQuestion => {
 	switch (connection.state) {
 		case "detected":

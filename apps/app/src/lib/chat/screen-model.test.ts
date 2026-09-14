@@ -23,7 +23,7 @@ import {
 	workingStateFor,
 } from "./screen-model"
 
-import type { ActivityEvent } from "../agent/contract"
+import type { ActivityEvent, TransportError } from "../agent/contract"
 import type {
 	TranscriptCompletion,
 	TranscriptMessage,
@@ -419,10 +419,32 @@ describe("sidebarActivityFor", () => {
 
 describe("emptyStateStatusFor", () => {
 	it("says nothing while the preflight is still running", () => {
-		expect(emptyStateStatusFor("checking")).toBeNull()
-		expect(emptyStateStatusFor("ready")).toBe("ready")
-		expect(emptyStateStatusFor("unavailable")).toBe("unavailable")
-		expect(emptyStateStatusFor("crashed")).toBe("unavailable")
+		expect(emptyStateStatusFor("checking", undefined)).toBeNull()
+		expect(emptyStateStatusFor("ready", undefined)).toBe("ready")
+		expect(emptyStateStatusFor("unavailable", undefined)).toBe("unavailable")
+		expect(emptyStateStatusFor("crashed", undefined)).toBe("unavailable")
+	})
+
+	it("draws not connected when the latest error says nobody is signed in", () => {
+		const signedOut = { kind: "notAuthenticated" } as const
+
+		expect(emptyStateStatusFor("unavailable", signedOut)).toBe("notConnected")
+		expect(emptyStateStatusFor("crashed", signedOut)).toBe("notConnected")
+	})
+
+	it("keeps the ready empty state while the connection is ready, even signed out", () => {
+		expect(emptyStateStatusFor("ready", { kind: "notAuthenticated" })).toBe(
+			"ready",
+		)
+	})
+
+	it("keeps today's state when the latest error is anything else", () => {
+		const missing: TransportError = { kind: "binaryNotFound", searched: [] }
+		const failed: TransportError = { kind: "authCheckFailed", detail: "t/o" }
+
+		expect(emptyStateStatusFor("unavailable", missing)).toBe("unavailable")
+		expect(emptyStateStatusFor("unavailable", failed)).toBe("unavailable")
+		expect(emptyStateStatusFor("ready", failed)).toBe("ready")
 	})
 })
 
@@ -441,6 +463,12 @@ describe("notices", () => {
 		)
 		expect(noticeTitleFor(t, { kind: "noActiveTurn" })).toBe(
 			"Couldn't send that request",
+		)
+	})
+
+	it("titles a signed-out notice on the missing sign-in", () => {
+		expect(noticeTitleFor(t, { kind: "notAuthenticated" })).toBe(
+			"You're not signed in",
 		)
 	})
 
