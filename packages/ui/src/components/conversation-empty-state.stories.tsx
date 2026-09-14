@@ -113,6 +113,12 @@ const SUGGESTED: RosterBot[] = [
 	{ id: "bot_2b9a06", name: "Pebble Clerk", animal: "cat", blot: "pink" },
 ]
 
+const NOBODY_SEATED_WITH_SUGGESTIONS = {
+	bots: [],
+	suggestedBots: SUGGESTED,
+	onSuggestedBotPress: fn(),
+}
+
 const NOBODY_TITLE = "Nobody is in this conversation yet"
 
 const NOBODY_DESCRIPTION =
@@ -149,7 +155,7 @@ export const Empty = meta.story({
 })
 
 export const EmptyWithSuggestions = meta.story({
-	args: { bots: [], suggestedBots: SUGGESTED, onSuggestedBotPress: fn() },
+	args: NOBODY_SEATED_WITH_SUGGESTIONS,
 	parameters: {
 		docs: {
 			description: {
@@ -174,7 +180,7 @@ export const EmptyWithSuggestions = meta.story({
 })
 
 export const EmptyWithSuggestionsFocused = meta.story({
-	args: { bots: [], suggestedBots: SUGGESTED, onSuggestedBotPress: fn() },
+	args: NOBODY_SEATED_WITH_SUGGESTIONS,
 	parameters: {
 		docs: {
 			description: {
@@ -195,7 +201,7 @@ export const EmptyWithSuggestionsFocused = meta.story({
 })
 
 export const EmptyWithSuggestionsNarrow = meta.story({
-	args: { bots: [], suggestedBots: SUGGESTED, onSuggestedBotPress: fn() },
+	args: NOBODY_SEATED_WITH_SUGGESTIONS,
 	decorators: [
 		(Story) => (
 			<div className="w-80" data-testid="narrow-frame">
