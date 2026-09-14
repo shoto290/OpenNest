@@ -124,6 +124,18 @@ export function PromptInput({
 	const canAttach = Boolean(onAttach) && !disabled
 	const isDropTarget = canAttach && (dropTarget || isDragOver)
 	const canSubmit = hasPayload && !disabled
+	const joiningSentence =
+		joining.length > 0
+			? t("composer.joining", {
+					count: joining.length,
+					name: joining[0].name,
+					names: joining
+						.slice(0, -1)
+						.map((bot) => bot.name)
+						.join(t("composer.joiningSeparator")),
+					last: joining[joining.length - 1].name,
+				})
+			: ""
 
 	const resizeTextarea = useCallback(() => {
 		const textarea = textareaRef.current
@@ -251,12 +263,17 @@ export function PromptInput({
 				{attachments}
 			</div>
 
+			<span role="status" className="sr-only">
+				{joiningSentence}
+			</span>
+
 			{joining.length > 0 ? (
 				<div
+					aria-hidden="true"
 					className="flex w-full min-w-0 items-center gap-1.5 px-2 py-0.5 text-muted-foreground text-xs"
 					data-slot="prompt-joining"
 				>
-					<span aria-hidden="true" className="flex shrink-0 -space-x-1.5">
+					<span className="flex shrink-0">
 						{joining.map((bot) => (
 							<BotIdentityAvatar
 								key={bot.id}
@@ -269,17 +286,7 @@ export function PromptInput({
 							/>
 						))}
 					</span>
-					<span className="min-w-0 wrap-break-word">
-						{t("composer.joining", {
-							count: joining.length,
-							name: joining[0].name,
-							names: joining
-								.slice(0, -1)
-								.map((bot) => bot.name)
-								.join(t("composer.joiningSeparator")),
-							last: joining[joining.length - 1].name,
-						})}
-					</span>
+					<span className="min-w-0 wrap-break-word">{joiningSentence}</span>
 				</div>
 			) : null}
 

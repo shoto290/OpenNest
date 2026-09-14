@@ -178,11 +178,11 @@ const NAME_TO_COUNT_GAP = 4
 
 const ROW_EDGE_PADDING = 8
 
-const ROW_GAP = 8
-
 const TRAILING_SLOT_WIDTH = 56
 
-const FOOTER_TEXT = /^Type a name to reach/
+const FOOTER_TEXT = /^Keep typing to reach/
+
+const SPACE_NAME = "Personal"
 
 const namesOf = (options: HTMLElement[]) =>
 	options.map(
@@ -249,7 +249,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The mention popup of the composer, and the only way to bring a companion into a conversation. The host hands it every companion of the space, each flagged `isOutside` when it is not in the conversation yet. On an empty query it lists the first six companions already in the conversation and a footer counting how many more typing reaches; a typed query matches the whole space case-insensitively, companions of the conversation first, then a *Not in this conversation* boundary above the rest, drawn dimmed with an add glyph. Every row reserves the same trailing slot, carrying the crown of the lead or the add glyph. A mention reaches exactly one companion, so a selection reports a single companion id plus whether it was outside, and the menu closes on it. A row whose companion the draft already names carries the count of those mentions after its name, given by the host as data. It draws only: reading the arobase in the draft, owning `open` and `query`, and writing the mention back into the text all belong to the host. ArrowUp/ArrowDown travel and wrap, Enter and Tab select, Escape or a press outside dismisses, and a query matching no companion renders no menu at all. Reach for `PromptCommandMenu` for the slash commands of the same composer.",
+					"The mention popup of the composer, and the only way to bring a companion into a conversation. The host hands it every companion of the space, each flagged `isOutside` when it is not in the conversation yet. On an empty query it lists the first six companions already in the conversation and, once the host names the space through `spaceName`, a footer counting how many more of that space typing reaches; a typed query matches the whole space case-insensitively, companions of the conversation first, then a *Not in this conversation* boundary above the rest, drawn dimmed with an add glyph. Only a row carrying the crown of the lead or the add glyph draws the 56px trailing slot; every other row gives that width to its name and title badge. A mention reaches exactly one companion, so a selection reports a single companion id plus whether it was outside, and the menu closes on it. A row whose companion the draft already names carries the count of those mentions after its name, given by the host as data. It draws only: reading the arobase in the draft, owning `open` and `query`, and writing the mention back into the text all belong to the host. ArrowUp/ArrowDown travel and wrap, Enter and Tab select, Escape or a press outside dismisses, and a query matching no companion renders no menu at all. Reach for `PromptCommandMenu` for the slash commands of the same composer.",
 			},
 		},
 	},
@@ -410,12 +410,12 @@ export const KeyboardTravel = meta.story({
 })
 
 export const SpaceOpened = meta.story({
-	args: { bots: SPACE_BOTS },
+	args: { bots: SPACE_BOTS, spaceName: SPACE_NAME },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The popover opened on an empty query in a space of thirty companions, twelve of them in the conversation, listed by the host with outsiders interleaved. Check that exactly the first six companions of the conversation show in the host's order, with no scrollbar, no group label and no boundary, and that the footer counts the twenty-four more that typing reaches. `SpaceQueried` covers the same space once a name is typed.",
+					"The popover opened on an empty query in a space of thirty companions, twelve of them in the conversation, listed by the host with outsiders interleaved. Check that exactly the first six companions of the conversation show in the host's order, with no scrollbar, no group label and no boundary, that only the crowned lead row draws a trailing slot, and that the footer counts the twenty-four more that typing reaches and names the space. `SpaceQueried` covers the same space once a name is typed.",
 			},
 		},
 	},
@@ -441,13 +441,18 @@ export const SpaceOpened = meta.story({
 			1,
 		)
 		await expect(
-			canvas.getByText("Type a name to reach 24 more companions"),
+			canvas.getByText("Keep typing to reach the other 24 in Personal"),
 		).toBeVisible()
+		await expect(
+			options.map(
+				(option) => slotsIn(option, "prompt-mention-trailing").length,
+			),
+		).toEqual([1, 0, 0, 0, 0, 0])
 	},
 })
 
 export const SpaceQueried = meta.story({
-	args: { bots: SPACE_BOTS, query: "AR" },
+	args: { bots: SPACE_BOTS, query: "AR", spaceName: SPACE_NAME },
 	parameters: {
 		docs: {
 			description: {
@@ -471,7 +476,7 @@ export const SpaceQueried = meta.story({
 			boundary.compareDocumentPosition(options[1]) &
 				Node.DOCUMENT_POSITION_FOLLOWING,
 		).toBeTruthy()
-		await expect(slotsIn(options[0], "prompt-mention-invite")).toHaveLength(0)
+		await expect(slotsIn(options[0], "prompt-mention-trailing")).toHaveLength(0)
 		await expect(slotsIn(options[1], "prompt-mention-invite")).toHaveLength(1)
 		await expect(options[1]).toHaveAccessibleName(
 			"Margaux Research Add to this conversation",
@@ -680,7 +685,7 @@ export const CountedLongName = meta.story({
 		docs: {
 			description: {
 				story:
-					"A count on a companion named far past the width of its row. Check that the name is the only part that gives way to an ellipsis and that the digits stay whole, one row gap before the reserved trailing slot: a reader must never lose the number to the overflow of a name.",
+					"A count on a companion named far past the width of its row. Check that the name is the only part that gives way to an ellipsis and that the digits stay whole at the row's end, since a row with neither crown nor add glyph draws no trailing slot: a reader must never lose the number to the overflow of a name.",
 			},
 		},
 	},
@@ -691,10 +696,8 @@ export const CountedLongName = meta.story({
 		await expect(name.scrollWidth).toBeGreaterThan(name.clientWidth)
 		await expect(count.scrollWidth).toBe(count.clientWidth)
 		await expect(gap).toBeCloseTo(NAME_TO_COUNT_GAP, 0)
-		await expect(tail).toBeCloseTo(
-			ROW_EDGE_PADDING + TRAILING_SLOT_WIDTH + ROW_GAP,
-			0,
-		)
+		await expect(tail).toBeCloseTo(ROW_EDGE_PADDING, 0)
+		await expect(slotsIn(row, "prompt-mention-trailing")).toHaveLength(0)
 	},
 })
 

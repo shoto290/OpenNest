@@ -140,11 +140,11 @@ const chat = {
 		mentioned_other: "{{count}} mentions in the draft",
 		outside: "Not in this conversation",
 		invite: "Add to this conversation",
-		further_one: "Type a name to reach {{count}} more companion",
-		further_other: "Type a name to reach {{count}} more companions",
-		joining_one: "{{name}} joins this conversation when you send the message",
+		further_one: "Keep typing to reach the other {{count}} in {{space}}",
+		further_other: "Keep typing to reach the other {{count}} in {{space}}",
+		joining_one: "{{name}} joins this conversation when you send",
 		joining_other:
-			"{{names}} and {{last}} join this conversation when you send the message",
+			"{{names}} and {{last}} join this conversation when you send",
 		joiningSeparator: ", ",
 	},
 	toolApproval: {

@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { expect, fn, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
@@ -11,7 +12,11 @@ import {
 	PASTED_PROMPT_FILE,
 	PROMPT_ATTACHMENTS,
 } from "@workspace/ui/components/prompt-attachments.fixtures"
-import { PromptInput } from "@workspace/ui/components/prompt-input"
+import {
+	PromptInput,
+	type PromptInputProps,
+} from "@workspace/ui/components/prompt-input"
+import type { RosterBot } from "@workspace/ui/components/roster"
 import { Button } from "@workspace/ui/components/ui/button"
 
 const DRAFT = "Summarise the release notes for v0.1"
@@ -20,7 +25,27 @@ const JOINING_BOTS = CONVERSATION_BOTS.slice(0, 2)
 
 const JOINING_AVATAR_SIZE = 16
 
-const JOINING_AVATAR_OVERLAP = 6
+const JOINING_TEXT_GAP = 6
+
+const PickingComposer = (props: PromptInputProps) => {
+	const [joining, setJoining] = useState<RosterBot[]>([])
+
+	return (
+		<PromptInput
+			{...props}
+			joining={joining}
+			trailing={
+				<Button
+					type="button"
+					variant="ghost"
+					onClick={() => setJoining([JOINING_BOTS[0]])}
+				>
+					Pick Atlas
+				</Button>
+			}
+		/>
+	)
+}
 
 const FILLING_DRAFT =
 	"Summarise the release notes and flag every public export that moved"
@@ -327,7 +352,7 @@ export const WithOneJoining = meta.story({
 
 		await expect(lines).toHaveLength(1)
 		await expect(lines[0]).toHaveTextContent(
-			"Atlas joins this conversation when you send the message",
+			"Atlas joins this conversation when you send",
 		)
 		const avatars = slotsIn(lines[0], "bot-identity-avatar")
 		await expect(avatars).toHaveLength(1)
@@ -352,7 +377,7 @@ export const WithTwoJoining = meta.story({
 		docs: {
 			description: {
 				story:
-					"The draft mentions two companions who are not in the conversation yet. Check that they share one line rather than one line each, that the second avatar overlaps the first by 6px, and that the sentence turns plural with the names closed by *and*.",
+					"The draft mentions two companions who are not in the conversation yet. Check that they share one line rather than one line each, that the two avatars sit edge to edge with no overlap, that the text starts 6px after the second one, and that the sentence turns plural with the names closed by *and*.",
 			},
 		},
 	},
@@ -361,12 +386,12 @@ export const WithTwoJoining = meta.story({
 
 		await expect(lines).toHaveLength(1)
 		await expect(lines[0]).toHaveTextContent(
-			"Atlas and Basile join this conversation when you send the message",
+			"Atlas and Basile join this conversation when you send",
 		)
 		const [first, second] = slotsIn(lines[0], "bot-identity-avatar")
-		await expect(box(second).left - box(first).left).toBe(
-			JOINING_AVATAR_SIZE - JOINING_AVATAR_OVERLAP,
-		)
+		const text = lines[0].lastElementChild as HTMLElement
+		await expect(box(second).left).toBe(box(first).right)
+		await expect(box(text).left - box(second).right).toBe(JOINING_TEXT_GAP)
 	},
 })
 
@@ -385,6 +410,32 @@ export const NobodyJoining = meta.story({
 		await expect(
 			isExpanded(canvas.getByRole("textbox", { name: "Message" })),
 		).toBe(false)
+	},
+})
+
+export const WithCompanionPicked = meta.story({
+	args: { defaultValue: "@Atlas look at the notes" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A companion outside the conversation is picked while the draft is open. Check that the polite status region is already in the composer before the pick, so assistive technology announces the joining sentence the moment it appears rather than missing a region born with its text.",
+			},
+		},
+	},
+	render: (args) => <PickingComposer {...args} />,
+	play: async ({ canvas, userEvent }) => {
+		const status = canvas.getByRole("status")
+
+		await expect(status).toBeEmptyDOMElement()
+		await expect(status).not.toHaveAttribute("aria-live")
+
+		await userEvent.click(canvas.getByRole("button", { name: "Pick Atlas" }))
+
+		await expect(canvas.getByRole("status")).toBe(status)
+		await expect(status).toHaveTextContent(
+			"Atlas joins this conversation when you send",
+		)
 	},
 })
 

@@ -44,6 +44,7 @@ interface PromptMentionMenuProps {
 	bots: MentionBot[]
 	counts?: Record<string, number>
 	leadId?: string
+	spaceName?: string
 	open: boolean
 	query: string
 	onSelect: (id: string, isOutside: boolean) => void
@@ -68,6 +69,7 @@ const PromptMentionMenu = ({
 	bots,
 	counts,
 	leadId,
+	spaceName,
 	open,
 	query,
 	onSelect,
@@ -126,6 +128,7 @@ const PromptMentionMenu = ({
 
 	const renderRow = (bot: MentionBot, index: number) => {
 		const count = counts?.[bot.id] ?? 0
+		const isLead = bot.id === leadId
 
 		return (
 			<button
@@ -187,33 +190,35 @@ const PromptMentionMenu = ({
 					</span>
 					<BotTitleBadge title={bot.title} />
 				</span>
-				<span
-					className="flex w-14 shrink-0 items-center justify-end gap-1"
-					data-slot="prompt-mention-trailing"
-				>
-					{bot.id === leadId ? (
-						<>
-							<Icons.Crown
-								aria-hidden="true"
-								className="size-4 shrink-0 text-bot-badge-attention"
-								data-slot="prompt-mention-lead"
-							/>
-							<span className="sr-only">
-								{t("newConversation.picked.lead")}
-							</span>
-						</>
-					) : null}
-					{bot.isOutside ? (
-						<>
-							<Icons.Add
-								aria-hidden="true"
-								className="size-3.5 shrink-0 text-muted-foreground"
-								data-slot="prompt-mention-invite"
-							/>
-							<span className="sr-only">{t("composer.invite")}</span>
-						</>
-					) : null}
-				</span>
+				{isLead || bot.isOutside ? (
+					<span
+						className="flex w-14 shrink-0 items-center justify-end gap-1"
+						data-slot="prompt-mention-trailing"
+					>
+						{isLead ? (
+							<>
+								<Icons.Crown
+									aria-hidden="true"
+									className="size-4 shrink-0 text-bot-badge-attention"
+									data-slot="prompt-mention-lead"
+								/>
+								<span className="sr-only">
+									{t("newConversation.picked.lead")}
+								</span>
+							</>
+						) : null}
+						{bot.isOutside ? (
+							<>
+								<Icons.Add
+									aria-hidden="true"
+									className="size-3.5 shrink-0 text-muted-foreground"
+									data-slot="prompt-mention-invite"
+								/>
+								<span className="sr-only">{t("composer.invite")}</span>
+							</>
+						) : null}
+					</span>
+				) : null}
 			</button>
 		)
 	}
@@ -268,7 +273,7 @@ const PromptMentionMenu = ({
 								</div>
 							) : null}
 						</div>
-						{further > 0 ? (
+						{further > 0 && spaceName ? (
 							<div
 								className="mt-1.5 flex items-center gap-1.5 border-border border-t p-2 text-muted-foreground text-xs"
 								data-slot="prompt-mention-footer"
@@ -277,7 +282,9 @@ const PromptMentionMenu = ({
 									aria-hidden="true"
 									className="size-3.5 shrink-0"
 								/>
-								<span>{t("composer.further", { count: further })}</span>
+								<span>
+									{t("composer.further", { count: further, space: spaceName })}
+								</span>
 							</div>
 						) : null}
 					</motion.div>
