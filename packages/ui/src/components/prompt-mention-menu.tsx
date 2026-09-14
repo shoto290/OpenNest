@@ -202,9 +202,7 @@ const PromptMentionMenu = ({
 									className="size-4 shrink-0 text-bot-badge-attention"
 									data-slot="prompt-mention-lead"
 								/>
-								<span className="sr-only">
-									{t("newConversation.picked.lead")}
-								</span>
+								<span className="sr-only">{t("composer.lead")}</span>
 							</>
 						) : null}
 						{bot.isOutside ? (

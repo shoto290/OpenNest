@@ -147,6 +147,7 @@ const chat = {
 		send: "Send",
 		commands: "Commands",
 		mentions: "Companions",
+		lead: "Lead",
 		mentioned_one: "{{count}} mention in the draft",
 		mentioned_other: "{{count}} mentions in the draft",
 		outside: "Not in this conversation",
@@ -288,23 +289,9 @@ const chat = {
 	namelessConversation: {
 		separator: ", ",
 	},
-	newConversation: {
-		title: "New conversation",
-		description: "Pick who joins. The first companion you pick leads.",
-		name: {
-			label: "Name",
-			placeholder: "Leave empty to name it from your first message",
-		},
-		search: {
-			label: "Companions",
-			placeholder: "Search companions",
-		},
-		picked: {
-			lead: "Lead",
-			dismiss: "Remove {{name}}",
-		},
-		empty: "No companion matches that search.",
-		create: "Create conversation",
+	conversationSeating: {
+		failed: "Couldn't change who is in this conversation. Retry.",
+		unavailable: "Couldn't load the companions to suggest. Retry.",
 	},
 	conversationSettings: {
 		breadcrumb: "Settings",
@@ -330,7 +317,6 @@ const chat = {
 			promote: "Give the lead to {{name}}",
 			dismiss: "Dismiss {{name}}",
 			last: "A conversation needs at least one companion.",
-			all: "Every companion in this space is already in this conversation.",
 		},
 		danger: {
 			delete: "Delete conversation",

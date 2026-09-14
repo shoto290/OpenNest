@@ -41,7 +41,7 @@ import { type TurnCauseKind, TurnGroup } from "@workspace/ui/components/turn"
 import { type ChatCopy, useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
 import { FaceAvatar } from "@/components/face-avatar"
-import { ThreadComposer } from "@/components/thread-composer"
+import { type PromptHandle, ThreadComposer } from "@/components/thread-composer"
 import { botThreadMenu, conversationThreadMenu } from "@/components/thread-menu"
 import { PinsNotice, ThreadNotice } from "@/components/thread-notice"
 import {
@@ -121,10 +121,17 @@ import {
 import type { WorkingState } from "@/lib/chat/working-kind"
 import type { SpeakingBot } from "@/lib/conversations/conversation-controller"
 import type { ConversationRuntimes } from "@/lib/conversations/conversation-runtimes"
-import { leadOf } from "@/lib/conversations/roster-conversations"
-import type { Bot } from "@/lib/conversations/store-contract"
+import {
+	leadOf,
+	mentionableBots,
+} from "@/lib/conversations/roster-conversations"
+import type { Bot, Conversation } from "@/lib/conversations/store-contract"
 import type { TranscriptMessage } from "@/lib/conversations/transcript-contract"
 import { useConversation } from "@/lib/conversations/use-conversation"
+import {
+	useBotsByPresence,
+	useSeatInConversation,
+} from "@/lib/conversations/use-conversation-seating"
 import type { Mission } from "@/lib/missions/mission-contract"
 import type { SummonedMissionState } from "@/lib/missions/mission-summons"
 import { toMissionFace } from "@/lib/missions/mission-thread-model"
@@ -329,10 +336,12 @@ const ThreadHeader = ({
 type ThreadComposerSlotProps = {
 	thread: LoadedThread
 	composerRef: RefObject<HTMLTextAreaElement | null>
+	promptRef: RefObject<PromptHandle | null>
 	staged: StagedFiles
 	canAttach: boolean
 	isDisabled: boolean
 	placeholder: string
+	bots: Bot[]
 	present: RosterBot[]
 	readDraft: () => string
 	onPromptChange: (draft: string) => void
@@ -342,15 +351,21 @@ type ThreadComposerSlotProps = {
 const ThreadComposerSlot = ({
 	thread,
 	composerRef,
+	promptRef,
 	staged,
 	canAttach,
 	isDisabled,
 	placeholder,
+	bots,
 	present,
 	readDraft,
 	onPromptChange,
 	onSubmitPrompt,
 }: ThreadComposerSlotProps) => {
+	const seat = useSeatInConversation(
+		thread.kind === "conversation" ? thread.conversation.id : null,
+	)
+
 	const wiring =
 		thread.kind === "bot"
 			? botThreadMenu({
@@ -358,8 +373,9 @@ const ThreadComposerSlot = ({
 					isOverlayOpen: thread.isOverlayOpen,
 				})
 			: conversationThreadMenu({
-					bots: present,
+					bots: seat ? mentionableBots(bots, thread.conversation) : present,
 					leadId: leadOf(thread.conversation),
+					onSeat: seat,
 				})
 
 	return (
@@ -376,6 +392,7 @@ const ThreadComposerSlot = ({
 			onRemoveAttachment={staged.remove}
 			onSubmitPrompt={onSubmitPrompt}
 			placeholder={placeholder}
+			promptRef={promptRef}
 			readDraft={readDraft}
 		/>
 	)
@@ -440,10 +457,48 @@ const ThreadPending = ({
 	)
 }
 
+type ConversationEmptySlotProps = {
+	conversation: Conversation
+	present: RosterBot[]
+	promptRef: RefObject<PromptHandle | null>
+}
+
+const ConversationEmptySlot = ({
+	conversation,
+	present,
+	promptRef,
+}: ConversationEmptySlotProps) => {
+	const seatlessId = present.length === 0 ? conversation.id : null
+	const seat = useSeatInConversation(seatlessId)
+	const suggestedBots = useBotsByPresence(seatlessId)
+
+	if (!seat) {
+		return <ConversationEmptyState bots={present} title={conversation.title} />
+	}
+
+	const seatAndMention = (bot: RosterBot) => {
+		void seat(bot.id).then((isSeated) => {
+			if (isSeated) {
+				promptRef.current?.mention(bot.name)
+			}
+		})
+	}
+
+	return (
+		<ConversationEmptyState
+			bots={present}
+			onSuggestedBotPress={seatAndMention}
+			suggestedBots={suggestedBots}
+			title={conversation.title}
+		/>
+	)
+}
+
 type ThreadEmptyStateProps = {
 	thread: LoadedThread
 	botImage?: string
 	present: RosterBot[]
+	promptRef: RefObject<PromptHandle | null>
 	latestError?: ChatError
 	onRestart: () => void
 	onSignIn?: () => void
@@ -453,15 +508,17 @@ const ThreadEmptyState = ({
 	thread,
 	botImage,
 	present,
+	promptRef,
 	latestError,
 	onRestart,
 	onSignIn,
 }: ThreadEmptyStateProps) => {
 	if (thread.kind === "conversation") {
 		return thread.state.refusedMessage ? null : (
-			<ConversationEmptyState
-				bots={present}
-				title={thread.conversation.title}
+			<ConversationEmptySlot
+				conversation={thread.conversation}
+				present={present}
+				promptRef={promptRef}
 			/>
 		)
 	}
@@ -965,6 +1022,7 @@ function ThreadView({
 	const { state, controller } = thread
 	const facts = factsOf(thread)
 	const composerRef = useRef<HTMLTextAreaElement>(null)
+	const promptRef = useRef<PromptHandle>(null)
 	const rootRef = useRef<HTMLDivElement>(null)
 	const scrollerRef = useRef<TranscriptHandle>(null)
 	const promptResponder = usePromptResponder(controller, scrollerRef)
@@ -1153,6 +1211,7 @@ function ThreadView({
 			busy={facts.isBusy}
 			composer={
 				<ThreadComposerSlot
+					bots={known}
 					canAttach={facts.canAttach && !isMissionClosed}
 					composerRef={composerRef}
 					isDisabled={isMissionClosed}
@@ -1160,6 +1219,7 @@ function ThreadView({
 					onSubmitPrompt={submitPrompt}
 					placeholder={composerPlaceholder}
 					present={present}
+					promptRef={promptRef}
 					readDraft={readDraft}
 					staged={staged}
 					thread={thread}
@@ -1224,6 +1284,7 @@ function ThreadView({
 					onRestart={restart}
 					onSignIn={offerSignIn}
 					present={present}
+					promptRef={promptRef}
 					thread={thread}
 				/>
 			) : null}

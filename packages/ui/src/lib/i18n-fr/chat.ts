@@ -153,6 +153,7 @@ const chat = {
 		send: "Envoyer",
 		commands: "Commandes",
 		mentions: "Compagnons",
+		lead: "Meneur",
 		mentioned_one: "{{count}} mention dans le brouillon",
 		mentioned_many: "{{count}} mentions dans le brouillon",
 		mentioned_other: "{{count}} mentions dans le brouillon",
@@ -306,24 +307,9 @@ const chat = {
 	namelessConversation: {
 		separator: ", ",
 	},
-	newConversation: {
-		title: "Nouvelle conversation",
-		description:
-			"Choisissez les participants. Le premier compagnon choisi mène.",
-		name: {
-			label: "Nom",
-			placeholder: "Laissez vide pour la nommer d'après votre premier message",
-		},
-		search: {
-			label: "Compagnons",
-			placeholder: "Rechercher un compagnon",
-		},
-		picked: {
-			lead: "Meneur",
-			dismiss: "Retirer {{name}}",
-		},
-		empty: "Aucun compagnon ne correspond à cette recherche.",
-		create: "Créer la conversation",
+	conversationSeating: {
+		failed: "Impossible de changer qui est dans cette conversation. Réessayez.",
+		unavailable: "Impossible de charger les compagnons à suggérer. Réessayez.",
 	},
 	conversationSettings: {
 		breadcrumb: "Paramètres",
@@ -349,7 +335,6 @@ const chat = {
 			promote: "Confier la conduite à {{name}}",
 			dismiss: "Retirer {{name}}",
 			last: "Une conversation a besoin d'au moins un compagnon.",
-			all: "Tous les compagnons de l'espace sont déjà dans cette conversation.",
 		},
 		danger: {
 			delete: "Supprimer la conversation",

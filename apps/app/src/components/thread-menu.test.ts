@@ -1,11 +1,18 @@
 // @vitest-environment happy-dom
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react"
+import {
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+} from "@testing-library/react"
 import { createElement, type ReactNode } from "react"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import "@workspace/ui/lib/i18n"
 
+import type { MentionBot } from "@workspace/ui/components/prompt-mention-menu"
 import type { RosterBot } from "@workspace/ui/components/roster"
 
 import { ThreadComposer } from "@/components/thread-composer"
@@ -28,6 +35,10 @@ const BOTS: RosterBot[] = [
 	{ id: "nyx", name: "Nyx" },
 	{ id: "orb", name: "Orb" },
 ]
+
+const OUTSIDE_BOT: MentionBot = { id: "vela", name: "Vela", isOutside: true }
+
+const WITH_OUTSIDE: MentionBot[] = [...BOTS, OUTSIDE_BOT]
 
 const composerWith = (wiring: ThreadMenuWiring): ReactNode =>
 	createElement(ThreadComposer, {
@@ -114,5 +125,50 @@ describe("conversationThreadMenu", () => {
 
 	it("leaves the prompt untouched when no present companion carries the picked id", () => {
 		expect(promptWithPickedMention("hey @n", BOTS, "ghost")).toBe("hey @n")
+	})
+
+	it("seats nobody when a companion already seated is picked", () => {
+		const onSeat = vi.fn(() => Promise.resolve(true))
+		render(
+			composerWith(
+				conversationThreadMenu({ bots: WITH_OUTSIDE, leadId: "orb", onSeat }),
+			),
+		)
+
+		type("hey @n")
+		pick("Nyx")
+
+		expect(onSeat).not.toHaveBeenCalled()
+		expect(field().value).toBe("hey @Nyx ")
+	})
+
+	it("seats a companion marked outside before writing its mention", async () => {
+		const onSeat = vi.fn(() => Promise.resolve(true))
+		render(
+			composerWith(
+				conversationThreadMenu({ bots: WITH_OUTSIDE, leadId: "orb", onSeat }),
+			),
+		)
+
+		type("hey @ve")
+		pick(/Vela/)
+
+		expect(onSeat).toHaveBeenCalledWith("vela")
+		await waitFor(() => expect(field().value).toBe("hey @Vela "))
+	})
+
+	it("leaves the prompt alone when seating the companion fails", async () => {
+		const onSeat = vi.fn(() => Promise.resolve(false))
+		render(
+			composerWith(
+				conversationThreadMenu({ bots: WITH_OUTSIDE, leadId: "orb", onSeat }),
+			),
+		)
+
+		type("hey @ve")
+		pick(/Vela/)
+
+		await waitFor(() => expect(onSeat).toHaveBeenCalledWith("vela"))
+		expect(field().value).toBe("hey @ve")
 	})
 })

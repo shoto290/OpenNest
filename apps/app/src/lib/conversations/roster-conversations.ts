@@ -5,6 +5,7 @@ import type {
 } from "@workspace/ui/components/app-sidebar"
 import type { ConversationSettingsValue } from "@workspace/ui/components/conversation-settings-dialog"
 import type { MessageAuthor } from "@workspace/ui/components/message"
+import type { MentionBot as PromptMentionBot } from "@workspace/ui/components/prompt-mention-menu"
 import type { RosterBot } from "@workspace/ui/components/roster"
 import { i18n } from "@workspace/ui/lib/i18n"
 
@@ -51,6 +52,9 @@ const toAuthor = (
 export const toConversationBots = (participants: Participant[]): RosterBot[] =>
 	participants.map(toParticipantRow)
 
+export const toBotRows = (bots: Bot[]): RosterBot[] =>
+	bots.map((bot) => toBotRow(bot.id, bot))
+
 export const authorsOf = (
 	conversation: Conversation,
 	bots: Bot[],
@@ -84,10 +88,19 @@ export const unseatedBots = (
 	const seated = new Set(
 		presentParticipants(conversation).map((participant) => participant.botId),
 	)
-	return bots
-		.filter((bot) => !seated.has(bot.id))
-		.map((bot) => toBotRow(bot.id, bot))
+	return toBotRows(bots.filter((bot) => !seated.has(bot.id)))
 }
+
+export const mentionableBots = (
+	bots: Bot[],
+	conversation: Conversation,
+): PromptMentionBot[] => [
+	...toConversationBots(presentParticipants(conversation)),
+	...unseatedBots(bots, conversation).map((bot) => ({
+		...bot,
+		isOutside: true,
+	})),
+]
 
 export const isNameless = (conversation: Conversation): boolean =>
 	conversation.title.trim().length === 0

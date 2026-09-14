@@ -10,7 +10,7 @@ import {
 import {
 	CONVERSATION_BOTS,
 	LONG_NAMED_BOTS,
-} from "@workspace/ui/components/new-conversation-dialog/bots.fixtures"
+} from "@workspace/ui/components/bots.fixtures"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
 import {
 	type MentionBot,

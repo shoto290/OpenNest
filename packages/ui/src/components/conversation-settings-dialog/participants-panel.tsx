@@ -1,11 +1,9 @@
 "use client"
 
-import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
 import { Icons } from "@workspace/ui/components/icons"
-import { BotPicker } from "@workspace/ui/components/new-conversation-dialog/bot-picker"
 import type { RosterBot } from "@workspace/ui/components/roster"
 import {
 	FIELD_LABEL_CLASS,
@@ -15,8 +13,6 @@ import { Button } from "@workspace/ui/components/ui/button"
 import { cn } from "@workspace/ui/lib/utils"
 
 const ROW_AVATAR_SIZE = 28
-
-const NONE_PICKED: string[] = []
 
 const ROW_CLASS =
 	"flex items-center gap-2.5 rounded-xl px-2 py-1.5 text-foreground text-sm transition-colors duration-100 ease-out hover:bg-muted motion-reduce:transition-none"
@@ -94,70 +90,47 @@ const ParticipantRow = ({
 type ParticipantsPanelProps = {
 	participants: RosterBot[]
 	leadId: string
-	bots: RosterBot[]
 	onLeadChange: (id: string) => void
 	onDismiss: (id: string) => void
-	onRecruit: (id: string) => void
 }
 
 const ParticipantsPanel = ({
 	participants,
 	leadId,
-	bots,
 	onLeadChange,
 	onDismiss,
-	onRecruit,
 }: ParticipantsPanelProps) => {
 	const { t } = useTranslation("chat")
-	const [search, setSearch] = useState("")
-	const seatedIds = participants.map((bot) => bot.id)
-	const offered = bots.filter((bot) => !seatedIds.includes(bot.id))
 	const isAlone = participants.length === 1
 
 	return (
-		<div className="flex min-h-0 flex-col gap-4" data-slot="participants-panel">
-			<div className="flex flex-col gap-1.5">
-				<span className={FIELD_LABEL_CLASS}>
-					{t("conversationSettings.participants.label")}
-				</span>
-				<ul className="-mx-2 flex flex-col">
-					{participants.map((bot) => (
-						<ParticipantRow
-							bot={bot}
-							isAlone={isAlone}
-							isLead={bot.id === leadId}
-							key={bot.id}
-							onDismiss={onDismiss}
-							onLeadChange={onLeadChange}
-						/>
-					))}
-				</ul>
-				{isAlone ? (
-					<p
-						className="text-muted-foreground text-xs"
-						data-slot="participants-last"
-					>
-						{t("conversationSettings.participants.last")}
-					</p>
-				) : null}
-			</div>
-
-			{offered.length === 0 ? (
+		<div
+			className="flex min-h-0 flex-col gap-1.5"
+			data-slot="participants-panel"
+		>
+			<span className={FIELD_LABEL_CLASS}>
+				{t("conversationSettings.participants.label")}
+			</span>
+			<ul className="-mx-2 flex flex-col">
+				{participants.map((bot) => (
+					<ParticipantRow
+						bot={bot}
+						isAlone={isAlone}
+						isLead={bot.id === leadId}
+						key={bot.id}
+						onDismiss={onDismiss}
+						onLeadChange={onLeadChange}
+					/>
+				))}
+			</ul>
+			{isAlone ? (
 				<p
-					className="py-8 text-center text-muted-foreground text-sm"
-					data-slot="participants-all-seated"
+					className="text-muted-foreground text-xs"
+					data-slot="participants-last"
 				>
-					{t("conversationSettings.participants.all")}
+					{t("conversationSettings.participants.last")}
 				</p>
-			) : (
-				<BotPicker
-					bots={offered}
-					onPick={onRecruit}
-					onSearchChange={setSearch}
-					pickedIds={NONE_PICKED}
-					search={search}
-				/>
-			)}
+			) : null}
 		</div>
 	)
 }

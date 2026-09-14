@@ -2,6 +2,7 @@ import {
 	type ReactNode,
 	type RefObject,
 	useCallback,
+	useImperativeHandle,
 	useRef,
 	useState,
 } from "react"
@@ -12,6 +13,11 @@ import { PromptInput } from "@workspace/ui/components/prompt-input"
 
 import type { StagedAttachment } from "@/lib/chat/attachments"
 import { holdsDismissal } from "@/lib/chat/prompt-commands"
+import { promptWithMentionAdded } from "@/lib/conversations/mentions"
+
+export type PromptHandle = {
+	mention: (name: string) => void
+}
 
 export type ThreadMenuSlot = {
 	prompt: string
@@ -30,6 +36,7 @@ type ThreadComposerProps = {
 	onAttach: (files: File[]) => void
 	onRemoveAttachment: (id: string) => void
 	composerRef: RefObject<HTMLTextAreaElement | null>
+	promptRef?: RefObject<PromptHandle | null>
 	readDraft: () => string
 	onPromptChange: (draft: string) => void
 	onSubmitPrompt: (text: string) => Promise<boolean>
@@ -46,6 +53,7 @@ export const ThreadComposer = ({
 	onAttach,
 	onRemoveAttachment,
 	composerRef,
+	promptRef,
 	readDraft,
 	onPromptChange,
 	onSubmitPrompt,
@@ -88,6 +96,15 @@ export const ThreadComposer = ({
 			composerRef.current?.focus({ preventScroll: true })
 		},
 		[changePrompt, composerRef],
+	)
+
+	useImperativeHandle(
+		promptRef,
+		() => ({
+			mention: (name: string) =>
+				pick(promptWithMentionAdded(latestPrompt.current, name)),
+		}),
+		[pick],
 	)
 
 	return menu({
