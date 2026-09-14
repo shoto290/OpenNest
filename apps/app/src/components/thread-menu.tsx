@@ -25,13 +25,16 @@ export type ThreadMenuWiring = {
 	menu: (slot: ThreadMenuSlot) => ReactNode
 }
 
+const nameOf = (bots: RosterBot[], botId: string) =>
+	bots.find((bot) => bot.id === botId)?.name
+
 export const promptWithPickedMention = (
 	prompt: string,
 	bots: RosterBot[],
 	botId: string,
 ): string => {
-	const picked = bots.find((bot) => bot.id === botId)
-	return picked ? promptWithMention(prompt, picked.name) : prompt
+	const name = nameOf(bots, botId)
+	return name ? promptWithMention(prompt, name) : prompt
 }
 
 type BotThreadMenuInput = {
@@ -78,7 +81,7 @@ export const conversationThreadMenu = ({
 				onPick(promptWithPickedMention(prompt, bots, botId))
 				return
 			}
-			const name = bots.find((bot) => bot.id === botId)?.name
+			const name = nameOf(bots, botId)
 			void onSeat?.(botId).then((isSeated) => {
 				if (isSeated && name) {
 					promptRef.current?.mention(name)

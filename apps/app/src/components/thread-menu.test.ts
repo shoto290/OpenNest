@@ -165,7 +165,7 @@ describe("conversationThreadMenu", () => {
 	})
 
 	it("writes the mention against the prompt as the seating lands", async () => {
-		let landSeating = (_isSeated: boolean) => undefined as void
+		let landSeating: (isSeated: boolean) => void = () => undefined
 		const onSeat = vi.fn(
 			() =>
 				new Promise<boolean>((resolve) => {
