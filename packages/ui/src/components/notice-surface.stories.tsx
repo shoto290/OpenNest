@@ -219,11 +219,13 @@ export const Default = meta.story({
 	},
 })
 
+const closedFailure = fn()
+
 export const Error = meta.story({
 	render: () => (
 		<NoticeDemo
 			label="Run the routine"
-			raise={() => raiseFailureNotice(FAILURE)}
+			raise={() => raiseFailureNotice({ ...FAILURE, onClose: closedFailure })}
 			transientDelay={SHORT_DELAY}
 		/>
 	),
@@ -231,7 +233,7 @@ export const Error = meta.story({
 		docs: {
 			description: {
 				story:
-					"The failure a background job raises when nobody opened anything. The story raises it from the trigger and a transient notice straight from the module, outside any component, then waits for the transient to leave: the failure is still there after a delay that already emptied its neighbour, because it holds until the reader closes it. Check that the error mark alone carries the destructive colour role, on a notice surface drawn no louder than any other. While nobody has focused the surface, the urgent announcement is the library's hidden mirror and the drawn notice stays out of the accessibility tree, so the title is announced once rather than twice; a Tab to the close control puts the notice back in the tree, with a visible ring, and Enter takes it off screen. Pick `Default` for the notice that leaves on its own, `Dismissing` for the gesture, `LongContent` for a failure whose strings run past the notice width.",
+					"The failure a background job raises when nobody opened anything. The story raises it from the trigger and a transient notice straight from the module, outside any component, then waits for the transient to leave: the failure is still there after a delay that already emptied its neighbour, because it holds until the reader closes it. Check that the error mark alone carries the destructive colour role, on a notice surface drawn no louder than any other. While nobody has focused the surface, the urgent announcement is the library's hidden mirror and the drawn notice stays out of the accessibility tree, so the title is announced once rather than twice; a Tab to the close control puts the notice back in the tree, with a visible ring, and Enter takes it off screen and runs the `onClose` the raise was handed. Pick `Default` for the notice that leaves on its own, `Dismissing` for the gesture, `LongContent` for a failure whose strings run past the notice width.",
 			},
 		},
 	},
@@ -283,6 +285,7 @@ export const Error = meta.story({
 		await waitFor(() =>
 			expect(within(viewport()).queryByText(FAILURE.title)).toBe(null),
 		)
+		await expect(closedFailure).toHaveBeenCalled()
 	},
 })
 

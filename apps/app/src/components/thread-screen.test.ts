@@ -8,7 +8,7 @@ import {
 	screen,
 	within,
 } from "@testing-library/react"
-import { createElement, useState, useSyncExternalStore } from "react"
+import { createElement, Fragment, useState, useSyncExternalStore } from "react"
 import {
 	afterEach,
 	beforeEach,
@@ -406,6 +406,34 @@ const settle = () =>
 		for (let round = 0; round < 20; round += 1) {
 			await Promise.resolve()
 		}
+	})
+
+const raisedNotices = (title: string) =>
+	[
+		...document.querySelectorAll<HTMLElement>(
+			'[data-slot="toast"]:not([data-ending-style])',
+		),
+	].filter(
+		(notice) =>
+			notice.querySelector('[data-slot="toast-title"]')?.textContent === title,
+	)
+
+const raisedNotice = (title: string) => {
+	const [notice] = raisedNotices(title)
+	if (!notice) throw new Error(`no notice titled ${title} was raised`)
+	return notice
+}
+
+const pressInNotice = (title: string, name: string) =>
+	act(() => {
+		fireEvent.click(
+			within(raisedNotice(title)).getByRole("button", { name, hidden: true }),
+		)
+	})
+
+const closeNotice = (title: string) =>
+	act(() => {
+		fireEvent.click(within(raisedNotice(title)).getByLabelText("Close notice"))
 	})
 
 const WRITING_STARTED: AgentEvent = {
@@ -1251,6 +1279,7 @@ describe("ThreadScreen", () => {
 			id: "crashed-1",
 			error: { kind: "crashed", code: 1, detail: refusal },
 		}
+		render(createElement(NoticeSurface))
 
 		const { unmount } = render(
 			screenOf(
@@ -1260,7 +1289,7 @@ describe("ThreadScreen", () => {
 		await settle()
 
 		expect(
-			screen.getByText(
+			within(raisedNotice(CRASH_TITLE)).getByText(
 				`The agent exited (code 1): ${refusal}. Restart the session.`,
 			),
 		).toBeTruthy()
@@ -1283,7 +1312,7 @@ describe("ThreadScreen", () => {
 		await settle()
 
 		expect(
-			screen.getByText(
+			within(raisedNotice(CRASH_TITLE)).getByText(
 				`The agent exited (code unknown): ${refusal}. Restart the session.`,
 			),
 		).toBeTruthy()
@@ -1297,7 +1326,9 @@ describe("ThreadScreen", () => {
 		await settle()
 
 		expect(
-			screen.getByText("The agent exited (code 1). Restart the session."),
+			within(raisedNotice(CRASH_TITLE)).getByText(
+				"The agent exited (code 1). Restart the session.",
+			),
 		).toBeTruthy()
 	})
 
@@ -1315,17 +1346,116 @@ describe("ThreadScreen", () => {
 			},
 		})
 		const shown = (): BotThread => ({ ...opened, chat: { state, controller } })
+		render(createElement(NoticeSurface))
 		const { unmount } = render(screenOf(shown()))
 		await settle()
 
-		expect(screen.getByText(CRASH_TITLE)).toBeTruthy()
+		expect(raisedNotices(CRASH_TITLE)).toHaveLength(1)
 
-		fireEvent.click(screen.getByRole("button", { name: "Dismiss notice" }))
+		await closeNotice(CRASH_TITLE)
 		unmount()
 		render(screenOf(shown()))
 		await settle()
 
-		expect(screen.queryByText(CRASH_TITLE)).toBeNull()
+		expect(raisedNotices(CRASH_TITLE)).toHaveLength(0)
+	})
+
+	it("raises one notice for one failure however often the thread renders, and none above the composer", async () => {
+		const thread = threadOf({
+			id: "bot-1",
+			name: "Nyx",
+			said: "the first answer",
+			errors: [CRASH],
+		})
+		render(createElement(NoticeSurface))
+		const { rerender } = render(screenOf(thread))
+		await settle()
+		rerender(screenOf({ ...thread }))
+		await settle()
+
+		expect(raisedNotices(CRASH_TITLE)).toHaveLength(1)
+		expect(screen.queryByRole("button", { name: "Dismiss notice" })).toBeNull()
+	})
+
+	it("dismisses the failure whose notice the reader closes", async () => {
+		const dismissed: string[] = []
+		const thread = threadOf({
+			id: "bot-1",
+			name: "Nyx",
+			said: "the first answer",
+			errors: [CRASH],
+			controller: stubController({
+				dismissError: (id) => {
+					dismissed.push(id)
+				},
+			}),
+		})
+		render(createElement(NoticeSurface))
+		render(screenOf(thread))
+		await settle()
+
+		await closeNotice(CRASH_TITLE)
+
+		expect(dismissed).toEqual([CRASH.id])
+		expect(raisedNotices(CRASH_TITLE)).toHaveLength(0)
+	})
+
+	it("restarts the companion and closes the notice of the failure it answers", async () => {
+		const opened = threadOf({
+			id: "bot-1",
+			name: "Nyx",
+			said: "the first answer",
+			errors: [CRASH],
+		})
+		let state = opened.chat.state
+		const restart = vi.fn(async () => null)
+		const controller = stubController({
+			restart,
+			dismissError: (id) => {
+				state = chatReducer(state, { type: "errorDismissed", id }, 0)
+			},
+		})
+		const shown = (): BotThread => ({ ...opened, chat: { state, controller } })
+		render(createElement(NoticeSurface))
+		const { rerender } = render(screenOf(shown()))
+		await settle()
+
+		await pressInNotice(CRASH_TITLE, "Restart session")
+		rerender(screenOf(shown()))
+		await settle()
+
+		expect(restart).toHaveBeenCalledOnce()
+		expect(state.errors).toEqual([])
+		expect(raisedNotices(CRASH_TITLE)).toHaveLength(0)
+	})
+
+	it("closes the notice once its failure leaves the thread, and when the thread closes", async () => {
+		const failing = threadOf({
+			id: "bot-1",
+			name: "Nyx",
+			said: "the first answer",
+			errors: [CRASH],
+		})
+		const recovered = threadOf({
+			id: "bot-1",
+			name: "Nyx",
+			said: "the first answer",
+		})
+		render(createElement(NoticeSurface))
+		const { rerender, unmount } = render(screenOf(failing))
+		await settle()
+		rerender(screenOf(recovered))
+		await settle()
+
+		expect(raisedNotices(CRASH_TITLE)).toHaveLength(0)
+
+		rerender(screenOf(failing))
+		await settle()
+		expect(raisedNotices(CRASH_TITLE)).toHaveLength(1)
+		unmount()
+		await settle()
+
+		expect(raisedNotices(CRASH_TITLE)).toHaveLength(0)
 	})
 
 	it("shows the failure that came after the one the reader dismissed", async () => {
@@ -1341,6 +1471,7 @@ describe("ThreadScreen", () => {
 			0,
 		)
 
+		render(createElement(NoticeSurface))
 		render(
 			screenOf({
 				...dismissed,
@@ -1352,7 +1483,7 @@ describe("ThreadScreen", () => {
 		)
 		await settle()
 
-		expect(screen.getByText(SPAWN_TITLE)).toBeTruthy()
+		expect(raisedNotices(SPAWN_TITLE)).toHaveLength(1)
 	})
 
 	it("leaves a dismissed conversation failure dismissed when the reader returns", async () => {
@@ -1371,21 +1502,22 @@ describe("ThreadScreen", () => {
 			isSettingsOpen: false,
 			onOpenSettings: () => undefined,
 		}
+		render(createElement(NoticeSurface))
 		const { unmount } = render(screenOf(thread))
 		await settle()
 
 		fireEvent.click(screen.getByRole("button", { name: "Load older messages" }))
 		await settle()
-		expect(screen.getByText(READ_TITLE)).toBeTruthy()
+		expect(raisedNotices(READ_TITLE)).toHaveLength(1)
 
-		fireEvent.click(screen.getByRole("button", { name: "Dismiss notice" }))
-		expect(screen.queryByText(READ_TITLE)).toBeNull()
+		await closeNotice(READ_TITLE)
+		expect(raisedNotices(READ_TITLE)).toHaveLength(0)
 
 		unmount()
 		render(screenOf(thread))
 		await settle()
 
-		expect(screen.queryByText(READ_TITLE)).toBeNull()
+		expect(raisedNotices(READ_TITLE)).toHaveLength(0)
 	})
 
 	it("tells the reader when the pinned messages could not be read", async () => {
@@ -2044,22 +2176,27 @@ const refusedConnectorScreen = (
 	refusal: ChatError = CONNECTOR_REFUSED,
 ) =>
 	createElement(
-		SessionConnectorsContext.Provider,
-		{ value: { port, spaceId: SPACE, onOpen } },
-		screenOf(
-			threadOf({
-				id: SPEAKER.id,
-				name: "Nyx",
-				said: "the first answer",
-				errors: [refusal],
-			}),
+		Fragment,
+		null,
+		createElement(NoticeSurface),
+		createElement(
+			SessionConnectorsContext.Provider,
+			{ value: { port, spaceId: SPACE, onOpen } },
+			screenOf(
+				threadOf({
+					id: SPEAKER.id,
+					name: "Nyx",
+					said: "the first answer",
+					errors: [refusal],
+				}),
+			),
 		),
 	)
 
 const expectTransportNoticeAlone = () => {
-	expect(screen.getByText(CONNECTOR_REFUSED_TITLE)).toBeTruthy()
-	expect(screen.queryByText(LEFT_OUT_TITLE)).toBeNull()
-	expect(screen.queryByText("ledger was left out")).toBeNull()
+	expect(raisedNotices(CONNECTOR_REFUSED_TITLE)).toHaveLength(1)
+	expect(raisedNotices(LEFT_OUT_TITLE)).toHaveLength(0)
+	expect(raisedNotices("ledger was left out")).toHaveLength(0)
 }
 
 describe("ThreadScreen connector left out of a session", () => {
@@ -2084,8 +2221,8 @@ describe("ThreadScreen connector left out of a session", () => {
 		render(refusedConnectorScreen(port))
 		await settle()
 
-		expect(screen.getByText(LEFT_OUT_TITLE)).toBeTruthy()
-		expect(screen.queryByText(CONNECTOR_REFUSED_TITLE)).toBeNull()
+		expect(raisedNotices(LEFT_OUT_TITLE)).toHaveLength(1)
+		expect(raisedNotices(CONNECTOR_REFUSED_TITLE)).toHaveLength(0)
 	})
 
 	it("opens the connectors of the owner that declares it", async () => {
@@ -2095,7 +2232,7 @@ describe("ThreadScreen connector left out of a session", () => {
 		render(refusedConnectorScreen(port, onOpen))
 		await settle()
 
-		fireEvent.click(screen.getByRole("button", { name: "Open Connectors" }))
+		await pressInNotice(LEFT_OUT_TITLE, "Open Connectors")
 
 		expect(onOpen).toHaveBeenCalledWith(SPEAKER_SPACE)
 	})
@@ -2118,10 +2255,10 @@ describe("ThreadScreen connector left out of a session", () => {
 		render(refusedConnectorScreen(port, onOpen))
 		await settle()
 
-		expect(screen.getByText(LEFT_OUT_TITLE)).toBeTruthy()
-		expect(screen.queryByText("ledger was left out")).toBeNull()
+		expect(raisedNotices(LEFT_OUT_TITLE)).toHaveLength(1)
+		expect(raisedNotices("ledger was left out")).toHaveLength(0)
 
-		fireEvent.click(screen.getByRole("button", { name: "Open Connectors" }))
+		await pressInNotice(LEFT_OUT_TITLE, "Open Connectors")
 
 		expect(onOpen).toHaveBeenCalledWith(SPEAKER_SPACE)
 	})
@@ -2178,7 +2315,7 @@ describe("ThreadScreen connector left out of a session", () => {
 		render(refusedConnectorScreen(port))
 		await settle()
 
-		expect(screen.getByText(CONNECTOR_REFUSED_TITLE)).toBeTruthy()
+		expect(raisedNotices(CONNECTOR_REFUSED_TITLE)).toHaveLength(1)
 	})
 })
 
@@ -2800,20 +2937,24 @@ describe("signing in from a companion's solo thread", () => {
 
 	it("offers the sign-in in place of the restart on a signed-out notice", async () => {
 		const fixture = await signedOutOf()
+		render(createElement(NoticeSurface))
 		const shown = await renderSignIn(fixture)
-		const notice = screen.getByRole("alert")
+		const notice = raisedNotice(NOT_CONNECTED_TITLE)
 
 		expect(
-			within(notice).queryByRole("button", { name: "Restart session" }),
+			within(notice).queryByRole("button", {
+				name: "Restart session",
+				hidden: true,
+			}),
 		).toBeNull()
-		expect(within(notice).getByText(NOT_CONNECTED_TITLE)).toBeTruthy()
 		expect(
 			within(notice).getByText(
 				"Your Claude account isn't connected. Sign in to keep talking.",
 			),
 		).toBeTruthy()
 		expect(within(notice).queryByText(/restart/i)).toBeNull()
-		await pressWithin(shown, notice, SIGN_IN)
+		await pressInNotice(NOT_CONNECTED_TITLE, SIGN_IN)
+		await shown.refresh()
 		expect(isAsking(ACCESS_QUESTION)).toBe(true)
 	})
 

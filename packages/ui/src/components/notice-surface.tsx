@@ -43,7 +43,11 @@ type TransientNotice = NoticeMessage & {
 	type?: TransientNoticeType
 }
 
-type RaisedNotice = NoticeMessage & {
+type FailureNotice = NoticeMessage & {
+	onClose?: () => void
+}
+
+type RaisedNotice = FailureNotice & {
 	type: NoticeType
 	priority: "high" | "low"
 	timeout?: number
@@ -73,7 +77,7 @@ const raiseTransientNotice = ({
 	...message
 }: TransientNotice) => raiseNotice({ ...message, priority: "low", type })
 
-const raiseFailureNotice = (message: NoticeMessage) =>
+const raiseFailureNotice = (message: FailureNotice) =>
 	raiseNotice({ ...message, priority: "high", timeout: 0, type: "error" })
 
 const endNotice = (id: string) => noticeManager.close(id)
@@ -187,6 +191,7 @@ const NoticeSurface = ({
 
 export {
 	endNotice,
+	type FailureNotice,
 	type NoticeMessage,
 	NoticeSurface,
 	type NoticeSurfaceProps,
