@@ -655,7 +655,7 @@ describe("PRF1 render baseline", () => {
 			  },
 			  "grown": 80,
 			  "reopened": {
-			    "commits": 7,
+			    "commits": 6,
 			    "markdownProcessors": 20,
 			    "tasksToLastMessage": 0,
 			  },

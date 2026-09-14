@@ -115,6 +115,7 @@ import {
 	NO_QUOTED_IDS,
 	useQuotedMessages,
 } from "@/lib/chat/use-quoted-messages"
+import { type SentInMount, useSentInMount } from "@/lib/chat/use-sent-in-mount"
 import { useThreadJump } from "@/lib/chat/use-thread-jump"
 import { useComposerFocus, useThreadReply } from "@/lib/chat/use-thread-reply"
 import {
@@ -652,6 +653,7 @@ const readRuns = ({
 type RunRowsProps = Omit<ThreadRunProps, "run" | "presentation"> & {
 	runs: TranscriptRow[][]
 	presentations: RunPresentation[]
+	isSentInMount: SentInMount["isSentInMount"]
 }
 
 const isSentByReader = (row: TranscriptRow) =>
@@ -660,12 +662,15 @@ const isSentByReader = (row: TranscriptRow) =>
 const toRunRows = ({
 	runs,
 	presentations,
+	isSentInMount,
 	...shared
 }: RunRowsProps): TranscriptItem[] =>
 	runs.map((run, runIndex) => ({
 		key: bubbleIdOf(run[0].messageId, run[0].blockIndex),
 		messageIds: run.map((row) => bubbleIdOf(row.messageId, row.blockIndex)),
-		isAnchor: run.some(isSentByReader),
+		isAnchor: run.some(
+			(row) => isSentByReader(row) && isSentInMount(row.messageId),
+		),
 		render: () => (
 			<ThreadRun {...shared} presentation={presentations[runIndex]} run={run} />
 		),
@@ -1072,8 +1077,13 @@ function ThreadView({
 		[pins.bubbles, faceOf, reader, toExcerpt],
 	)
 
+	const { send, isSentInMount } = useSentInMount({
+		threadId: facts.id,
+		messages: state.messages,
+		send: staged.submit,
+	})
 	const { replyTarget, focusComposer, holdReply, releaseReply, submitPrompt } =
-		useThreadReply({ composerRef, scrollerRef, send: staged.submit })
+		useThreadReply({ composerRef, scrollerRef, send })
 
 	useComposerFocus({
 		botId: facts.bot?.id ?? null,
@@ -1148,6 +1158,7 @@ function ThreadView({
 		authors,
 		botFace,
 		causes,
+		isSentInMount,
 		onReply: holdReply,
 		onRetry: botController ? retry : undefined,
 		pins,
