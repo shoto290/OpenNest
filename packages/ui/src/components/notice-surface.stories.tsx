@@ -1,5 +1,6 @@
 import {
 	expect,
+	fn,
 	isInaccessible,
 	screen,
 	type UserEventObject,
@@ -14,12 +15,14 @@ import {
 } from "@workspace/storybook/story-utils"
 import { DialogSurface } from "@workspace/ui/components/dialog-surface"
 import {
+	endNotice,
 	type NoticeMessage,
 	NoticeSurface,
 	type NoticeSurfaceProps,
 	raiseFailureNotice,
 	raiseTransientNotice,
 	TRANSIENT_NOTICE_DELAY,
+	type TransientNoticeType,
 } from "@workspace/ui/components/notice-surface"
 import { Button, buttonVariants } from "@workspace/ui/components/ui/button"
 import {
@@ -53,9 +56,15 @@ const STACK: NoticeMessage[] = [
 	{ title: "Fourth notice", description: "The newest of the four." },
 ]
 
+const MARKED_TYPES: TransientNoticeType[] = ["info", "warning", "loading"]
+
+const WORKING = "Indexing the watched folder"
+
 const SHORT_DELAY = 700
 
 const SWIPE_DISTANCE = 80
+
+const RETRY_LABEL = "Try again"
 
 type NoticeDemoProps = NoticeSurfaceProps & {
 	label: string
@@ -119,13 +128,43 @@ const failureNotice = async () => {
 	return opaque(notice)
 }
 
-const closeControl = () =>
-	within(viewport()).getByRole("button", { hidden: true })
+const closeControl = () => {
+	const close = viewport().querySelector<HTMLElement>("[data-slot=toast-close]")
+	if (!close) throw new window.Error("The notice carries no close control")
+
+	return close
+}
+
+const actionControl = () =>
+	viewport().querySelector<HTMLElement>("[data-slot=toast-action]")
+
+const destructiveRole = () =>
+	getComputedStyle(document.documentElement)
+		.getPropertyValue("--destructive")
+		.trim()
+
+const markOf = (notice: HTMLElement) => {
+	const mark = notice.querySelector<SVGElement>("svg")
+	if (!mark) throw new window.Error("The notice carries no status mark")
+
+	return mark
+}
 
 const noticesOnScreen = () =>
 	Array.from(
 		viewport().querySelectorAll<HTMLElement>("[data-slot=toast]"),
 	).filter((notice) => !notice.hasAttribute("data-limited"))
+
+const atTopCentre = async (notice: HTMLElement) => {
+	await waitFor(async () => {
+		const box = notice.getBoundingClientRect()
+
+		await expect(box.top).toBeLessThanOrEqual(24)
+		await expect(
+			Math.abs(box.left - (window.innerWidth - box.right)),
+		).toBeLessThanOrEqual(1)
+	})
+}
 
 const meta = preview.meta({
 	title: "Overlays/NoticeSurface",
@@ -135,7 +174,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The window's notice surface: one viewport mounted once in the shell, and two ways to raise something into it. `raiseTransientNotice` reports what went right and leaves on its own once `TRANSIENT_NOTICE_DELAY` has passed; `raiseFailureNotice` reports what went wrong, wears the destructive border and its alert mark, and stays until the reader closes it — a failure that dismisses itself is close to silence. Both are module-level calls, so a controller, a driver or a scheduler raises a notice without a hook and without a component in scope. Notices land against the bottom inline-end edge, newest nearest that edge, three at most, with the ones beyond the limit marked `data-limited` rather than removed. Enter and leave slide over 500ms, and drop to a fade with no movement under `prefers-reduced-motion` - see `ReducedMotion`. `transientDelay` on the viewport overrides the delay for the whole surface; a failure ignores it.",
+					"The window's notice surface: one viewport mounted once in the shell, anchored to the top edge of the window and centred on it, and two ways to raise something into it. `raiseTransientNotice` reports what went right on the `success` mark, or on the `info`, `warning` or `loading` mark when it is handed a type, and leaves on its own once `TRANSIENT_NOTICE_DELAY` has passed - except on `loading`, which holds until its caller ends it, because the work it reports has no deadline; `raiseFailureNotice` reports what went wrong on the `error` mark, the one mark on the destructive colour role, and stays until the reader closes it - a failure that dismisses itself is close to silence. Both are module-level calls, so a controller, a driver or a scheduler raises a notice without a hook and without a component in scope, and both take an optional action drawn between the text and the close control. Both return the identifier of the notice they raised, and `endNotice` takes that identifier and takes the notice off screen; an identifier no notice on screen carries leaves the surface as it was. Notices land against the top edge, newest nearest it, three at most, with the ones beyond the limit marked `data-limited` rather than removed. Enter and leave travel through the top edge over 500ms, and drop to a fade with no movement under `prefers-reduced-motion` - see `ReducedMotion`. `transientDelay` on the viewport overrides the delay for the whole surface; a failure ignores it.",
 			},
 		},
 	},
@@ -152,7 +191,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"The transient tier, the one an action that succeeded reaches for. Check that the notice lands in the bottom inline-end corner on the surface tokens the other floating surfaces use, is announced politely through the viewport's live region rather than interrupting, and leaves on its own once `TRANSIENT_NOTICE_DELAY` has passed without anyone touching it. Pick `Error` for the tier that stays.",
+					"The notice an action that succeeded reaches for, raised with no type and drawn on the success mark. Check that it lands against the top edge, centred on the window, on the surface tokens the other floating surfaces use, is announced politely through the viewport's live region rather than interrupting, carries no action control when the caller passed none, and leaves on its own once `TRANSIENT_NOTICE_DELAY` has passed without anyone touching it. Pick `Error` for the notice that stays.",
 			},
 		},
 	},
@@ -165,12 +204,10 @@ export const Default = meta.story({
 		await expect(notice).toHaveAccessibleName(SAVED.title)
 		await expect(notice).toHaveAccessibleDescription(SAVED.description)
 
-		await waitFor(async () => {
-			const box = notice.getBoundingClientRect()
-
-			await expect(window.innerHeight - box.bottom).toBeLessThanOrEqual(24)
-			await expect(window.innerWidth - box.right).toBeLessThanOrEqual(24)
-		})
+		await opaque(notice)
+		await atTopCentre(notice)
+		await expect(markOf(notice)).toBeVisible()
+		await expect(actionControl()).toBe(null)
 
 		await expect(viewport()).toHaveAttribute("aria-live", "polite")
 		await expect(viewport()).toHaveAccessibleName("Notices")
@@ -194,7 +231,7 @@ export const Error = meta.story({
 		docs: {
 			description: {
 				story:
-					"The failure tier, the one a background job reaches for when nobody opened anything. The story raises the failure from the trigger and a transient notice straight from the module, outside any component, then waits for the transient to leave: the failure is still there after a delay that already emptied its neighbour, because it holds until the reader closes it. While nobody has focused the surface, the urgent announcement is the library's hidden mirror and the drawn notice stays out of the accessibility tree, so the title is announced once rather than twice; a Tab to the close control puts the notice back in the tree, with a visible ring, and Enter takes it off screen. Pick `Default` for the tier that leaves on its own, `Dismissing` for the gesture, `LongContent` for a failure whose strings run past the notice width.",
+					"The failure a background job raises when nobody opened anything. The story raises it from the trigger and a transient notice straight from the module, outside any component, then waits for the transient to leave: the failure is still there after a delay that already emptied its neighbour, because it holds until the reader closes it. Check that the error mark alone carries the destructive colour role, on a notice surface drawn no louder than any other. While nobody has focused the surface, the urgent announcement is the library's hidden mirror and the drawn notice stays out of the accessibility tree, so the title is announced once rather than twice; a Tab to the close control puts the notice back in the tree, with a visible ring, and Enter takes it off screen. Pick `Default` for the notice that leaves on its own, `Dismissing` for the gesture, `LongContent` for a failure whose strings run past the notice width.",
 			},
 		},
 	},
@@ -206,7 +243,14 @@ export const Error = meta.story({
 		const announcement = await screen.findByRole("alert")
 		await expect(announcement).toHaveTextContent(FAILURE.title)
 
-		await failureNotice()
+		const notice = await failureNotice()
+		await atTopCentre(notice)
+
+		const mark = markOf(notice)
+		await expect(getComputedStyle(mark).color).toBe(destructiveRole())
+		await expect(getComputedStyle(mark).color).not.toBe(
+			getComputedStyle(notice).backgroundColor,
+		)
 
 		const announced = screen.getAllByText(FAILURE.title, {
 			ignore: '[aria-hidden="true"], [aria-hidden="true"] *',
@@ -242,13 +286,65 @@ export const Error = meta.story({
 	},
 })
 
+const retry = fn()
+
+export const WithAction = meta.story({
+	render: () => (
+		<NoticeDemo
+			label="Sync the folder"
+			raise={() =>
+				raiseTransientNotice({
+					...SAVED,
+					action: { label: RETRY_LABEL, onPress: retry },
+					type: "warning",
+				})
+			}
+		/>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A notice carrying an action, the one shape a caller adds when the reader can answer the report. Check that the control wears the caller's label, sits between the text and the close control so the close stays the last stop on the way out, and that pressing it runs the caller's handler and takes the notice off screen - the library performs the action and leaves the notice standing on its own. Pick `Default` for the same notice without an action.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		retry.mockClear()
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Sync the folder" }),
+		)
+
+		const notice = await screen.findByRole("dialog")
+		await opaque(notice)
+
+		const action = within(notice).getByRole("button", { name: RETRY_LABEL })
+		const close = closeControl()
+		await expect(
+			action.compareDocumentPosition(close) &
+				window.Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy()
+		await expect(
+			within(notice).getByText(SAVED.title).compareDocumentPosition(action) &
+				window.Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy()
+
+		await userEvent.click(action)
+		await expect(retry).toHaveBeenCalledOnce()
+		await waitFor(() =>
+			expect(within(viewport()).queryByText(SAVED.title)).toBe(null),
+		)
+	},
+})
+
 export const Stacked = meta.story({
 	parameters: {
 		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
 			description: {
 				story:
-					"Four failures raised in a row from the module itself, three kept. Reach for this when several jobs fail at once: check that the surface holds no more than three notices, that the one that no longer fits is the oldest, and that the newest sits nearest the bottom inline-end edge so a reader's eye lands on what just happened rather than on what they already read. The `aria-hidden-focus` audit is left to review here for the same reason as in `LongContent`: three urgent notices sit unfocused, hidden from the accessibility tree by the library while their mirrors do the announcing.",
+					"Four failures raised in a row from the module itself, three drawn. Reach for this when several jobs fail at once: check that the surface draws no more than three notices, that the one that no longer fits is the oldest, and that the newest sits nearest the top edge with the older ones peeking below it, so a reader's eye lands on what just happened rather than on what they already read. The `aria-hidden-focus` audit is left to review here for the same reason as in `LongContent`: three urgent notices sit unfocused, hidden from the accessibility tree by the library while their mirrors do the announcing.",
 			},
 		},
 	},
@@ -270,9 +366,75 @@ export const Stacked = meta.story({
 			.closest("[data-slot=toast]")
 		await expect(dropped).toHaveAttribute("data-limited")
 
+		await atTopCentre(onScreen[0])
+
 		const tops = onScreen.map((notice) => notice.getBoundingClientRect().top)
-		await expect(tops[0]).toBeGreaterThan(tops[1])
-		await expect(tops[1]).toBeGreaterThan(tops[2])
+		await expect(tops[0]).toBeLessThan(tops[1])
+		await expect(tops[1]).toBeLessThan(tops[2])
+	},
+})
+
+export const Marks = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"One notice per remaining type, raised from the module: `info`, `warning` and `loading`. Check that each carries its own mark from the icon registry rather than a shared glyph, and that the loading mark turns while the work it reports is still running, unless the reader asked the system to stop moving things, in which case it stands still. `Default` carries the `success` mark and `Error` the `error` one, which completes the vendored set of five.",
+			},
+		},
+	},
+	play: async () => {
+		for (const type of MARKED_TYPES) {
+			raiseTransientNotice({ title: `A ${type} notice`, type })
+			await within(viewport()).findByText(`A ${type} notice`)
+		}
+
+		await waitFor(() => expect(noticesOnScreen()).toHaveLength(3))
+		await Promise.all(noticesOnScreen().map(opaque))
+
+		const marks = noticesOnScreen().map(markOf)
+		const glyphs = new window.Set(marks.map((mark) => mark.innerHTML))
+		await expect(glyphs.size).toBe(MARKED_TYPES.length)
+
+		const loading = markOf(noticesOnScreen()[0])
+		const asksForStillness = window.matchMedia(
+			"(prefers-reduced-motion: reduce)",
+		).matches
+		await expect(getComputedStyle(loading).animationName).toBe(
+			asksForStillness ? "none" : "spin",
+		)
+	},
+})
+
+export const Loading = meta.story({
+	render: () => <NoticeSurface transientDelay={SHORT_DELAY} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The one transient notice that does not leave on its own: the library never schedules a dismissal for a `loading` type, so the work it reports decides when the notice ends. The story raises it from the module, keeps the identifier the raise handed back, then raises and outlives a second transient to show the delay passing without touching it, calls `endNotice` with an identifier nothing carries to show the surface untouched, and finally ends the notice it owns.",
+			},
+		},
+	},
+	play: async () => {
+		const id = raiseTransientNotice({ title: WORKING, type: "loading" })
+		await within(viewport()).findByText(WORKING)
+
+		raiseTransientNotice(SAVED)
+		await within(viewport()).findByText(SAVED.title)
+		await waitFor(
+			() => expect(within(viewport()).queryByText(SAVED.title)).toBe(null),
+			{ timeout: SHORT_DELAY + 4000 },
+		)
+		await expect(within(viewport()).getByText(WORKING)).toBeVisible()
+
+		endNotice("notice-that-was-never-raised")
+		await expect(within(viewport()).getByText(WORKING)).toBeVisible()
+
+		endNotice(id)
+		await waitFor(() =>
+			expect(within(viewport()).queryByText(WORKING)).toBe(null),
+		)
 	},
 })
 
@@ -280,7 +442,12 @@ export const LongContent = meta.story({
 	render: () => (
 		<NoticeDemo
 			label="Report the long failure"
-			raise={() => raiseFailureNotice(LONG_FAILURE)}
+			raise={() =>
+				raiseFailureNotice({
+					...LONG_FAILURE,
+					action: { label: RETRY_LABEL, onPress: fn() },
+				})
+			}
 		/>
 	),
 	parameters: {
@@ -288,7 +455,7 @@ export const LongContent = meta.story({
 		docs: {
 			description: {
 				story:
-					"A failure whose title is one unbreakable word and whose description runs several sentences. Check that both wrap inside the notice instead of pushing it wider than the window, and that the close control keeps its own column at the inline end, still fully inside the notice and still 24 CSS pixels of hit area. The `aria-hidden-focus` audit is left to review here: the library keeps an urgent notice out of the accessibility tree until the surface is focused, so that its hidden mirror announces it once, and the close control stays in the tab order meanwhile.",
+					"A failure whose title is one unbreakable word and whose description runs several sentences, carrying an action on top. Check that both strings wrap inside the notice instead of pushing it wider than the window, and that the mark, the action control and the close control keep their own columns, still fully inside the notice and still 24 CSS pixels of hit area. The `aria-hidden-focus` audit is left to review here: the library keeps an urgent notice out of the accessibility tree until the surface is focused, so that its hidden mirror announces it once, and the close control stays in the tab order meanwhile.",
 			},
 		},
 	},
@@ -299,6 +466,8 @@ export const LongContent = meta.story({
 
 		const notice = await failureNotice()
 		const close = closeControl()
+		const action = actionControl()
+		const mark = markOf(notice)
 
 		await expect(close).toHaveAttribute("aria-label", "Close notice")
 
@@ -306,9 +475,16 @@ export const LongContent = meta.story({
 		const closeBox = close.getBoundingClientRect()
 
 		await expect(noticeBox.right).toBeLessThanOrEqual(window.innerWidth)
+		await expect(noticeBox.left).toBeGreaterThanOrEqual(0)
 		await expect(closeBox.right).toBeLessThanOrEqual(noticeBox.right)
 		await expect(closeBox.width).toBeGreaterThanOrEqual(24)
 		await expect(closeBox.height).toBeGreaterThanOrEqual(24)
+		await expect(mark.getBoundingClientRect().left).toBeGreaterThanOrEqual(
+			noticeBox.left,
+		)
+		await expect(action?.getBoundingClientRect().right).toBeLessThanOrEqual(
+			closeBox.left,
+		)
 		await expect(
 			within(viewport()).getByText(LONG_FAILURE.title).scrollWidth,
 		).toBeLessThanOrEqual(Math.ceil(noticeBox.width))
@@ -326,7 +502,7 @@ export const Dismissing = meta.story({
 		docs: {
 			description: {
 				story:
-					"The pointer way out. Notices are anchored to the bottom inline-end corner, so they leave through that corner: a drag down or toward the inline end dismisses, a drag toward the middle of the window snaps back and keeps the notice. Reach for this when checking that the gesture points at the nearest edge rather than dragging the notice across the surface.",
+					"The pointer way out. Notices are anchored to the top edge, so they leave through it: a drag toward the top of the window dismisses, a drag back toward the middle snaps the notice into place and keeps it. Reach for this when checking that the gesture points at the nearest edge rather than dragging the notice across the surface.",
 			},
 		},
 	},
@@ -337,10 +513,10 @@ export const Dismissing = meta.story({
 
 		const notice = await failureNotice()
 
-		await swipe(notice, userEvent, { y: -SWIPE_DISTANCE })
+		await swipe(notice, userEvent, { y: SWIPE_DISTANCE })
 		await expect(within(viewport()).getByText(FAILURE.title)).toBeVisible()
 
-		await swipe(notice, userEvent, { y: SWIPE_DISTANCE })
+		await swipe(notice, userEvent, { y: -SWIPE_DISTANCE })
 		await waitFor(() =>
 			expect(within(viewport()).queryByText(FAILURE.title)).toBe(null),
 		)
@@ -368,7 +544,7 @@ export const WithDialog = meta.story({
 		docs: {
 			description: {
 				story:
-					"A background failure raised while a modal dialog holds the window — the moment the surface exists for. The dialog dims the page and takes pointer interaction away from everything behind it, so the notice viewport draws above it and takes its own pointer events back: check that the notice is the topmost element under its own centre, that its close control dismisses it, and that the dialog is still open and untouched afterwards. Focus stays trapped in the dialog while it is open, so the notice is reachable here by pointer, not by Tab. The dialog hides the rest of the document from the accessibility tree and spares only what carries a live region: the viewport carries one and stays in the tree, but the library's hidden urgent announcement is a separate element beside it and does not, so a failure whose announcement was already on screen when the dialog opened is never read to a screen reader while the dialog stays open.",
+					"A background failure raised while a modal dialog holds the window - the moment the surface exists for. The dialog dims the page and takes pointer interaction away from everything behind it, so the notice viewport draws above it and takes its own pointer events back: check that the notice is the topmost element under its own centre, that its close control dismisses it, and that the dialog is still open and untouched afterwards. Focus stays trapped in the dialog while it is open, so the notice is reachable here by pointer, not by Tab. The dialog hides the rest of the document from the accessibility tree and spares only what carries a live region: the viewport carries one and stays in the tree, but the library's hidden urgent announcement is a separate element beside it and does not, so a failure whose announcement was already on screen when the dialog opened is never read to a screen reader while the dialog stays open.",
 			},
 		},
 	},
@@ -401,6 +577,43 @@ export const WithDialog = meta.story({
 	},
 })
 
+export const DarkTheme = meta.story({
+	render: () => (
+		<NoticeDemo
+			label="Run the routine"
+			raise={() =>
+				raiseFailureNotice({
+					...FAILURE,
+					action: { label: RETRY_LABEL, onPress: fn() },
+				})
+			}
+		/>
+	),
+	globals: { theme: "dark" },
+	parameters: {
+		a11y: A11Y_FLOATING_FOCUS_GUARDS,
+		docs: {
+			description: {
+				story:
+					"The same failure under the dark theme, where the notice surface is the lightest thing on screen rather than the darkest. Check that the error mark still resolves to the destructive role and that neither it nor the close control falls back to the notice's own background colour. The `aria-hidden-focus` audit is left to review here for the reason given in `LongContent`.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Run the routine" }),
+		)
+
+		const notice = await failureNotice()
+		const surface = getComputedStyle(notice).backgroundColor
+		const mark = markOf(notice)
+
+		await expect(getComputedStyle(mark).color).toBe(destructiveRole())
+		await expect(getComputedStyle(mark).color).not.toBe(surface)
+		await expect(getComputedStyle(closeControl()).color).not.toBe(surface)
+	},
+})
+
 export const ReducedMotion = meta.story({
 	render: () => (
 		<NoticeDemo
@@ -413,7 +626,7 @@ export const ReducedMotion = meta.story({
 		docs: {
 			description: {
 				story:
-					"The same failure raised for a reader who asked the system to stop moving things. The registry toast slides a notice up from below the fold and scales the ones stacked behind it; the surface drops both under `prefers-reduced-motion` and fades instead, keeping the opacity transition so the library still hears the end event it unmounts on. Check the notice transitions opacity and nothing else, and that it is already at its resting place and its resting height on the frame it appears - a notice that travels is the one thing a reader who asked for stillness cannot look away from.",
+					"The same failure raised for a reader who asked the system to stop moving things. The registry toast travels a notice in through the top edge and scales the ones stacked behind it; the surface drops both under `prefers-reduced-motion` and fades instead, keeping the opacity transition so the library still hears the end event it unmounts on. Check the notice transitions opacity and nothing else, and that it is already at its resting place and its resting height on the frame it appears - a notice that travels is the one thing a reader who asked for stillness cannot look away from.",
 			},
 		},
 	},
