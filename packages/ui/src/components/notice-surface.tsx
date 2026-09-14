@@ -76,9 +76,7 @@ const raiseTransientNotice = ({
 const raiseFailureNotice = (message: NoticeMessage) =>
 	raiseNotice({ ...message, priority: "high", timeout: 0, type: "error" })
 
-const endNotice = (id: string) => {
-	noticeManager.close(id)
-}
+const endNotice = (id: string) => noticeManager.close(id)
 
 const NOTICE_MARKS = {
 	error: Icons.Error,

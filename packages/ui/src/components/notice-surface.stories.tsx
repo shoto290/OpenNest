@@ -60,8 +60,6 @@ const MARKED_TYPES: TransientNoticeType[] = ["info", "warning", "loading"]
 
 const WORKING = "Indexing the watched folder"
 
-const UNKNOWN_NOTICE_ID = "notice-that-was-never-raised"
-
 const SHORT_DELAY = 700
 
 const SWIPE_DISTANCE = 80
@@ -427,7 +425,7 @@ export const Loading = meta.story({
 		)
 		await expect(within(viewport()).getByText(WORKING)).toBeVisible()
 
-		endNotice(UNKNOWN_NOTICE_ID)
+		endNotice("notice-that-was-never-raised")
 		await expect(within(viewport()).getByText(WORKING)).toBeVisible()
 
 		endNotice(id)
