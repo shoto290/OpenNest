@@ -9,9 +9,15 @@ const chat = {
 			title: "Impossible de joindre l'agent",
 			description: "L'agent intégré de Kiroshi n'a pas répondu. Réessayez.",
 		},
+		notConnected: {
+			title: "Vous n'êtes pas connecté",
+			description:
+				"Connectez votre compte Claude pour que vos compagnons puissent répondre.",
+		},
 		settings: "Réglages du compagnon",
 		hint: "Écrivez à un compagnon pour commencer.",
 		setup: "Réessayer",
+		signIn: "Se connecter",
 	},
 	conversationEmptyState: {
 		description_one: "{{count}} compagnon est prêt.",

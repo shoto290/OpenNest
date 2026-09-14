@@ -9,9 +9,14 @@ const chat = {
 			title: "Couldn't reach the agent",
 			description: "Kiroshi's built-in agent didn't answer. Try again.",
 		},
+		notConnected: {
+			title: "You're not signed in",
+			description: "Connect your Claude account so your companions can answer.",
+		},
 		settings: "Companion settings",
 		hint: "Message a companion to start.",
 		setup: "Try again",
+		signIn: "Sign in",
 	},
 	conversationEmptyState: {
 		description_one: "{{count}} companion is ready.",
