@@ -124,8 +124,48 @@ const NOBODY_TITLE = "Nobody is in this conversation yet"
 const NOBODY_DESCRIPTION =
 	"Type @ and pick a name. Whoever you mention joins, and they can bring in anyone else they need."
 
+const TEN_SUGGESTED: RosterBot[] = [
+	...SUGGESTED,
+	{ id: "bot_8d4c73", name: "Fern Guide", animal: "bear", blot: "cyan" },
+	{ id: "bot_3e6a91", name: "Reed Tailor", animal: "rabbit", blot: "green" },
+	{ id: "bot_5b2f07", name: "Cinder Porter", animal: "mouse", blot: "blue" },
+	{ id: "bot_9f1d34", name: "Bramble Scribe", animal: "koala", blot: "orange" },
+	{ id: "bot_4c8e62", name: "Lantern Mender", animal: "owl", blot: "pink" },
+]
+
+const LONG_NAMED_SUGGESTION: RosterBot = {
+	id: "bot_6a0c58",
+	name: "Keeper of the Lighthouse at the Far End of the Northern Harbour Wall",
+	animal: "cat",
+	blot: "purple",
+}
+
+const PRESS_HEIGHT = 32
+
 const suggestedPresses = (canvasElement: HTMLElement) =>
 	slotsIn(canvasElement, "conversation-suggested-bot")
+
+const copyMeasureOf = (canvasElement: HTMLElement) => {
+	const heading = canvasElement.querySelector("h2")
+
+	if (!heading?.parentElement) throw new Error("The surface drew no copy")
+
+	return heading.parentElement.getBoundingClientRect().width
+}
+
+const expectHeldToCopyMeasure = async (canvasElement: HTMLElement) => {
+	const surface = slotIn(canvasElement, "conversation-empty-state")
+	const suggestions = slotIn(canvasElement, "conversation-suggested-bots")
+	const host = surface.parentElement as HTMLElement
+
+	await expect(suggestions.getBoundingClientRect().width).toBeLessThanOrEqual(
+		copyMeasureOf(canvasElement),
+	)
+	await expect(surface.getBoundingClientRect().width).toBe(
+		host.getBoundingClientRect().width,
+	)
+	await expect(surface.scrollWidth).toBeLessThanOrEqual(surface.clientWidth)
+}
 
 export const Empty = meta.story({
 	args: { bots: [] },
@@ -176,6 +216,57 @@ export const EmptyWithSuggestions = meta.story({
 
 		await expect(args.onSuggestedBotPress).toHaveBeenCalledTimes(1)
 		await expect(args.onSuggestedBotPress).toHaveBeenCalledWith(SCOUT)
+		await expectHeldToCopyMeasure(canvasElement)
+	},
+})
+
+export const EmptyWithTenSuggestions = meta.story({
+	args: { ...NOBODY_SEATED_WITH_SUGGESTIONS, suggestedBots: TEN_SUGGESTED },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this when the person talks to ten companions, twice what the artboard draws. Check that the presses wrap into further centered rows inside the measure of the title and description, and that the surface keeps the width it has with five instead of stretching. Pick `EmptyWithSuggestions` for the nominal five.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const presses = suggestedPresses(canvasElement)
+		const rows = new Set(
+			presses.map((press) => press.getBoundingClientRect().top),
+		)
+
+		await expect(presses).toHaveLength(10)
+		await expect(rows.size).toBeGreaterThan(1)
+		await expectHeldToCopyMeasure(canvasElement)
+	},
+})
+
+export const EmptyWithLongSuggestionName = meta.story({
+	args: {
+		...NOBODY_SEATED_WITH_SUGGESTIONS,
+		suggestedBots: [LONG_NAMED_SUGGESTION, KEEPER],
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this when a suggested companion carries a name wider than the copy measure. Check that its press stays inside the measure on one line, that the name is shortened with an ellipsis rather than wrapped or overflowing, and that the full name still names the press for assistive technology. Pick `EmptyWithSuggestions` for nominal names.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const press = canvas.getByRole("button", {
+			name: LONG_NAMED_SUGGESTION.name,
+		})
+		const name = press.lastElementChild as HTMLElement
+
+		await expect(press.getBoundingClientRect().width).toBeLessThanOrEqual(
+			copyMeasureOf(canvasElement),
+		)
+		await expect(press.getBoundingClientRect().height).toBe(PRESS_HEIGHT)
+		await expect(name.scrollWidth).toBeGreaterThan(name.clientWidth)
+		await expectHeldToCopyMeasure(canvasElement)
 	},
 })
 

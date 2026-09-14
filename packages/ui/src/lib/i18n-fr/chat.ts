@@ -150,7 +150,6 @@ const chat = {
 	composer: {
 		label: "Message",
 		placeholder: "Message",
-		mentionPlaceholder: "Écrivez à un compagnon avec @",
 		send: "Envoyer",
 		commands: "Commandes",
 		mentions: "Compagnons",

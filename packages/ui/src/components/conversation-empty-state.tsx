@@ -7,15 +7,20 @@ import type { RosterBot } from "@workspace/ui/components/roster"
 import { Button } from "@workspace/ui/components/ui/button"
 import { cn } from "@workspace/ui/lib/utils"
 
+type SuggestedBotsProps =
+	| { suggestedBots?: never; onSuggestedBotPress?: never }
+	| {
+			suggestedBots: RosterBot[]
+			onSuggestedBotPress: (bot: RosterBot) => void
+	  }
+
 type ConversationEmptyStateProps = Omit<
 	ComponentProps<"div">,
 	"children" | "title"
 > & {
 	title: string
 	bots: RosterBot[]
-	suggestedBots?: RosterBot[]
-	onSuggestedBotPress?: (bot: RosterBot) => void
-}
+} & SuggestedBotsProps
 
 const MARK_SIZE = 56
 
@@ -23,19 +28,19 @@ const SUGGESTED_AVATAR_SIZE = 20
 
 const MENTION_GLYPH = "@"
 
-type SuggestedBotsProps = {
+type SuggestedBotListProps = {
 	bots: RosterBot[]
-	onPress?: (bot: RosterBot) => void
+	onPress: (bot: RosterBot) => void
 }
 
-const SuggestedBots = ({ bots, onPress }: SuggestedBotsProps) => {
+const SuggestedBots = ({ bots, onPress }: SuggestedBotListProps) => {
 	const { t } = useTranslation("chat")
 	const labelId = useId()
 
 	return (
 		<div
 			aria-labelledby={labelId}
-			className="flex w-full flex-col items-center gap-2.5"
+			className="flex w-full max-w-md flex-col items-center gap-2.5"
 			data-slot="conversation-suggested-bots"
 			role="group"
 		>
@@ -48,7 +53,7 @@ const SuggestedBots = ({ bots, onPress }: SuggestedBotsProps) => {
 						className="max-w-full rounded-full ps-1.5 text-foreground"
 						data-slot="conversation-suggested-bot"
 						key={bot.id}
-						onClick={() => onPress?.(bot)}
+						onClick={() => onPress(bot)}
 						variant="outline"
 					>
 						<span aria-hidden="true" className="flex shrink-0">
@@ -72,7 +77,7 @@ const SuggestedBots = ({ bots, onPress }: SuggestedBotsProps) => {
 const ConversationEmptyState = ({
 	title,
 	bots,
-	suggestedBots = [],
+	suggestedBots,
 	onSuggestedBotPress,
 	className,
 	...props
@@ -83,7 +88,7 @@ const ConversationEmptyState = ({
 		return (
 			<EmptyStateShell
 				action={
-					suggestedBots.length > 0 ? (
+					suggestedBots && suggestedBots.length > 0 ? (
 						<SuggestedBots bots={suggestedBots} onPress={onSuggestedBotPress} />
 					) : undefined
 				}
