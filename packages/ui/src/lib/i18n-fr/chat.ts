@@ -144,6 +144,17 @@ const chat = {
 		mentioned_one: "{{count}} mention dans le brouillon",
 		mentioned_many: "{{count}} mentions dans le brouillon",
 		mentioned_other: "{{count}} mentions dans le brouillon",
+		outside: "Pas dans cette conversation",
+		invite: "Ajouter à cette conversation",
+		further_one: "Tapez un nom pour atteindre {{count}} autre compagnon",
+		further_many: "Tapez un nom pour atteindre {{count}} autres compagnons",
+		further_other: "Tapez un nom pour atteindre {{count}} autres compagnons",
+		joining_one: "{{name}} rejoint cette conversation à l'envoi du message",
+		joining_many:
+			"{{names}} et {{last}} rejoignent cette conversation à l'envoi du message",
+		joining_other:
+			"{{names}} et {{last}} rejoignent cette conversation à l'envoi du message",
+		joiningSeparator: ", ",
 	},
 	toolApproval: {
 		title: "Autoriser cet outil à s'exécuter ?",

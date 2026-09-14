@@ -17,11 +17,14 @@ import {
 } from "react"
 import { useTranslation } from "react-i18next"
 
+import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
 import { Icons } from "@workspace/ui/components/icons"
+import type { RosterBot } from "@workspace/ui/components/roster"
 import { Button } from "@workspace/ui/components/ui/button"
 import { cn, mergeRefs } from "@workspace/ui/lib/utils"
 
 const LINE_HEIGHT = 24
+const JOINING_AVATAR_SIZE = 16
 const PADDING_Y = 8
 const MIRROR =
 	"pointer-events-none invisible absolute top-0 left-0 px-2 text-sm leading-6"
@@ -67,6 +70,7 @@ export interface PromptInputProps
 	leading?: ReactNode
 	trailing?: ReactNode
 	attachments?: ReactNode
+	joining?: RosterBot[]
 	onAttach?: (files: File[]) => void
 	dropTarget?: boolean
 	minRows?: number
@@ -82,6 +86,7 @@ export function PromptInput({
 	leading,
 	trailing,
 	attachments,
+	joining = [],
 	onAttach,
 	dropTarget = false,
 	minRows = 1,
@@ -245,6 +250,38 @@ export function PromptInput({
 			>
 				{attachments}
 			</div>
+
+			{joining.length > 0 ? (
+				<div
+					className="flex w-full min-w-0 items-center gap-1.5 py-0.5 text-muted-foreground text-xs"
+					data-slot="prompt-joining"
+				>
+					<span aria-hidden="true" className="flex shrink-0 -space-x-1.5">
+						{joining.map((bot) => (
+							<BotIdentityAvatar
+								key={bot.id}
+								animal={bot.animal}
+								blot={bot.blot}
+								image={bot.image}
+								name={bot.name}
+								seed={bot.id}
+								size={JOINING_AVATAR_SIZE}
+							/>
+						))}
+					</span>
+					<span className="min-w-0 wrap-break-word">
+						{t("composer.joining", {
+							count: joining.length,
+							name: joining[0].name,
+							names: joining
+								.slice(0, -1)
+								.map((bot) => bot.name)
+								.join(t("composer.joiningSeparator")),
+							last: joining[joining.length - 1].name,
+						})}
+					</span>
+				</div>
+			) : null}
 
 			<div
 				ref={promptRef}

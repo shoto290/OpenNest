@@ -138,6 +138,14 @@ const chat = {
 		mentions: "Companions",
 		mentioned_one: "{{count}} mention in the draft",
 		mentioned_other: "{{count}} mentions in the draft",
+		outside: "Not in this conversation",
+		invite: "Add to this conversation",
+		further_one: "Type a name to reach {{count}} more companion",
+		further_other: "Type a name to reach {{count}} more companions",
+		joining_one: "{{name}} joins this conversation when you send the message",
+		joining_other:
+			"{{names}} and {{last}} join this conversation when you send the message",
+		joiningSeparator: ", ",
 	},
 	toolApproval: {
 		title: "Allow this tool to run?",

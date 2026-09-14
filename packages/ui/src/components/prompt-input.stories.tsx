@@ -1,7 +1,9 @@
 import { expect, fn, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
+import { slotsIn } from "@workspace/storybook/story-utils"
 import { Icons } from "@workspace/ui/components/icons"
+import { CONVERSATION_BOTS } from "@workspace/ui/components/new-conversation-dialog/bots.fixtures"
 import { PromptAttachButton } from "@workspace/ui/components/prompt-attach-button"
 import { PromptAttachments } from "@workspace/ui/components/prompt-attachments"
 import {
@@ -13,6 +15,12 @@ import { PromptInput } from "@workspace/ui/components/prompt-input"
 import { Button } from "@workspace/ui/components/ui/button"
 
 const DRAFT = "Summarise the release notes for v0.1"
+
+const JOINING_BOTS = CONVERSATION_BOTS.slice(0, 2)
+
+const JOINING_AVATAR_SIZE = 16
+
+const JOINING_AVATAR_OVERLAP = 6
 
 const FILLING_DRAFT =
 	"Summarise the release notes and flag every public export that moved"
@@ -295,6 +303,80 @@ export const Empty = meta.story({
 		await expect(
 			canvas.queryByRole("button", { name: "Send" }),
 		).not.toBeInTheDocument()
+		await expect(
+			isExpanded(canvas.getByRole("textbox", { name: "Message" })),
+		).toBe(false)
+	},
+})
+
+export const WithOneJoining = meta.story({
+	args: {
+		defaultValue: "@Atlas look at the notes",
+		joining: [JOINING_BOTS[0]],
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The draft mentions one companion who is not in the conversation yet. Check that a single line sits above the controls with one 16px avatar and a singular sentence naming the companion, and that nothing is decided until the message is sent. `WithTwoJoining` covers the plural, `Default` the draft that brings nobody in.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const lines = slotsIn(canvasElement, "prompt-joining")
+
+		await expect(lines).toHaveLength(1)
+		await expect(lines[0]).toHaveTextContent(
+			"Atlas joins this conversation when you send the message",
+		)
+		const avatars = slotsIn(lines[0], "bot-identity-avatar")
+		await expect(avatars).toHaveLength(1)
+		await expect(box(avatars[0]).width).toBe(JOINING_AVATAR_SIZE)
+		await expect(
+			isBelow(canvas.getByRole("button", { name: "Send" }), lines[0]),
+		).toBe(true)
+	},
+})
+
+export const WithTwoJoining = meta.story({
+	args: {
+		defaultValue: "@Atlas @Basile look at the notes",
+		joining: JOINING_BOTS,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The draft mentions two companions who are not in the conversation yet. Check that they share one line rather than one line each, that the second avatar overlaps the first by 6px, and that the sentence turns plural with the names closed by *and*.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const lines = slotsIn(canvasElement, "prompt-joining")
+
+		await expect(lines).toHaveLength(1)
+		await expect(lines[0]).toHaveTextContent(
+			"Atlas and Basile join this conversation when you send the message",
+		)
+		const [first, second] = slotsIn(lines[0], "bot-identity-avatar")
+		await expect(box(second).left - box(first).left).toBe(
+			JOINING_AVATAR_SIZE - JOINING_AVATAR_OVERLAP,
+		)
+	},
+})
+
+export const NobodyJoining = meta.story({
+	args: { defaultValue: DRAFT, joining: [] },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A draft that brings nobody in. Check that the composer draws no join line and keeps no empty row for it, so it renders exactly as `Default`.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		await expect(slotsIn(canvasElement, "prompt-joining")).toHaveLength(0)
 		await expect(
 			isExpanded(canvas.getByRole("textbox", { name: "Message" })),
 		).toBe(false)
