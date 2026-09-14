@@ -433,6 +433,16 @@ export const WithBadgeDot = meta.story({
 		const dot = slotIn(row, "bot-activity-dot")
 
 		await expect(dot).not.toBeNull()
+		if (!dot) return
+		const dotBox = dot.getBoundingClientRect()
+		const column = (dot.offsetParent as HTMLElement).getBoundingClientRect()
+		const preview = slotIn(row, "roster-row-preview") as HTMLElement
+		const previewText =
+			preview.getBoundingClientRect().right -
+			Number.parseFloat(getComputedStyle(preview).paddingInlineEnd)
+
+		await expect(dotBox.right).toBeCloseTo(column.right, 0)
+		await expect(dotBox.left).toBeGreaterThanOrEqual(previewText)
 		await expect(dot?.getBoundingClientRect().right).toBeLessThanOrEqual(
 			row.getBoundingClientRect().right,
 		)
