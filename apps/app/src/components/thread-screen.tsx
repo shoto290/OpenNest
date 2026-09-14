@@ -45,7 +45,6 @@ import { ThreadComposer } from "@/components/thread-composer"
 import { botThreadMenu, conversationThreadMenu } from "@/components/thread-menu"
 import {
 	ConnectorSessionNotice,
-	HandoverNotice,
 	PinsNotice,
 	ThreadNotice,
 	TransportNotice,
@@ -914,32 +913,23 @@ const ThreadTail = ({
 type ThreadNoticesProps = {
 	staged: StagedFiles
 	pins: PinnedBubbles
-	bots: RosterBot[]
-	loopingPair: [string, string] | null
 	error?: ChatError
 	speakerId?: string
 	onDismissError: (id: string) => void
 	onRestart?: (id: string) => void
 	onSignIn?: () => void
-	onStop: () => void
 }
 
 const ThreadNotices = ({
 	staged,
 	pins,
-	bots,
-	loopingPair,
 	error,
 	speakerId,
 	onDismissError,
 	onRestart,
 	onSignIn,
-	onStop,
 }: ThreadNoticesProps) => {
 	const leftOut = useSessionConnector(error, speakerId)
-	const looping = loopingPair?.map((botId) =>
-		bots.find((seated) => seated.id === botId),
-	)
 
 	return (
 		<ThreadNotice
@@ -962,9 +952,6 @@ const ThreadNotices = ({
 				/>
 			) : null}
 			{pins.hasFailed ? <PinsNotice onDismiss={pins.dismissFailure} /> : null}
-			{looping?.[0] && looping[1] ? (
-				<HandoverNotice onStop={onStop} pair={[looping[0], looping[1]]} />
-			) : null}
 		</ThreadNotice>
 	)
 }
@@ -1232,14 +1219,11 @@ function ThreadView({
 			label={missionSeat ? t("missions.feed.label") : t("screen.label")}
 			notice={
 				<ThreadNotices
-					bots={bots}
 					error={facts.latestError}
 					speakerId={speakerIdOf(thread, facts.latestError)}
-					loopingPair={facts.loopingPair}
 					onDismissError={controller.dismissError}
 					onRestart={botController ? restartAfterError : undefined}
 					onSignIn={offerSignIn}
-					onStop={stop}
 					pins={pins}
 					staged={staged}
 				/>

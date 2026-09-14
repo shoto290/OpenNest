@@ -74,7 +74,6 @@ const conversationState = (
 	isLoadingNewer: false,
 	speakers: [],
 	waitingBotIds: [],
-	loopingPair: null,
 	refusedMessage: null,
 	pendingPrompt,
 	latestError: null,

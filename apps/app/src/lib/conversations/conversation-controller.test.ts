@@ -733,7 +733,7 @@ describe("createConversationController", () => {
 		expect(runningIn(harness.controller)).toEqual([ada])
 	})
 
-	it("shows a notice naming the two companions that keep handing the turn over", async () => {
+	it("keeps relaying however many times two companions hand the turn over", async () => {
 		const ada = idOf(harness.conversation, "Ada")
 		const nyx = idOf(harness.conversation, "Nyx")
 		await harness.controller.send("and now?")
@@ -743,12 +743,10 @@ describe("createConversationController", () => {
 		await harness.settled()
 		harness.driver.pushTo(nyx, spoke(nyx, `two <@${ada}>`))
 		await harness.settled()
-		expect(harness.controller.getState().loopingPair).toBeNull()
-
 		harness.driver.pushTo(ada, spoke(ada, `three <@${nyx}>`))
 		await harness.settled()
 
-		expect(harness.controller.getState().loopingPair).toEqual([ada, nyx])
+		expect(runningIn(harness.controller)).toEqual([nyx])
 	})
 
 	it("leaves what the companion in flight wrote in place when the turn is stopped", async () => {
