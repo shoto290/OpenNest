@@ -267,7 +267,7 @@ export function PromptInput({
 				{joiningSentence}
 			</span>
 
-			{joining.length > 0 ? (
+			{joiningSentence ? (
 				<div
 					aria-hidden="true"
 					className="flex w-full min-w-0 items-center gap-1.5 px-2 py-0.5 text-muted-foreground text-xs"
