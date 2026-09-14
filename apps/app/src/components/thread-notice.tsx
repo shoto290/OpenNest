@@ -1,7 +1,6 @@
 import type { ReactNode } from "react"
 
 import { Notice } from "@workspace/ui/components/notice"
-import type { RosterBot } from "@workspace/ui/components/roster"
 import { useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
 import { describeTransportError } from "@/lib/agent/messages"
@@ -121,25 +120,6 @@ export const ConnectorSessionNotice = ({
 			})}
 			onDismiss={onDismiss}
 			title={t("connectors.connection.session.title", { ns: "bots", name })}
-			tone="warning"
-		/>
-	)
-}
-
-type HandoverNoticeProps = {
-	pair: [RosterBot, RosterBot]
-	onStop: () => void
-}
-
-export const HandoverNotice = ({ pair, onStop }: HandoverNoticeProps) => {
-	const t = useChatCopy()
-	const named = { first: pair[0].name, second: pair[1].name }
-
-	return (
-		<Notice
-			action={{ label: t("screen.handoff.stop"), onClick: onStop }}
-			description={t("screen.handoff.description")}
-			title={t("screen.handoff.title", named)}
 			tone="warning"
 		/>
 	)

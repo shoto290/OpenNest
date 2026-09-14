@@ -19,7 +19,6 @@ import {
 	droppedWaiting,
 	emptyQueue,
 	handedOver,
-	loopingPairIn,
 	openedWave,
 	reopenedFor,
 	type Summons,
@@ -104,7 +103,6 @@ export type ConversationState = {
 	isLoadingNewer: boolean
 	speakers: SpeakingBot[]
 	waitingBotIds: string[]
-	loopingPair: [string, string] | null
 	refusedMessage: RefusedMessage | null
 	pendingPrompt: PendingPrompt | null
 	latestError: ChatError | null
@@ -177,16 +175,6 @@ const NO_PINS: MessagePin[] = []
 
 const NO_SPEAKERS: SpeakingBot[] = []
 
-const isSamePair = (
-	left: [string, string] | null,
-	right: [string, string] | null,
-) =>
-	left === right ||
-	(left !== null &&
-		right !== null &&
-		left[0] === right[0] &&
-		left[1] === right[1])
-
 const isSameWork = (left: WorkingState | null, right: WorkingState | null) =>
 	left?.kind === right?.kind &&
 	left?.label === right?.label &&
@@ -213,7 +201,6 @@ const isSameState = (left: ConversationState, right: ConversationState) =>
 	left.isLoadingNewer === right.isLoadingNewer &&
 	isSameSpeakers(left.speakers, right.speakers) &&
 	isSameOrder(left.waitingBotIds, right.waitingBotIds) &&
-	isSamePair(left.loopingPair, right.loopingPair) &&
 	left.refusedMessage === right.refusedMessage &&
 	left.pendingPrompt === right.pendingPrompt &&
 	left.latestError === right.latestError &&
@@ -244,7 +231,6 @@ const initialState: ConversationState = {
 	isLoadingNewer: false,
 	speakers: NO_SPEAKERS,
 	waitingBotIds: [],
-	loopingPair: null,
 	refusedMessage: null,
 	pendingPrompt: null,
 	latestError: null,
@@ -357,7 +343,6 @@ export const createConversationController = (
 			conversationId: conversation?.id ?? null,
 			speakers: speakingBots(),
 			waitingBotIds: queue.waiting.map(({ botId }) => botId),
-			loopingPair: loopingPairIn(queue.handovers),
 			refusedMessage: refused,
 			pendingPrompt: oldestPrompt(),
 			latestError,

@@ -3,9 +3,7 @@ import { describe, expect, it } from "vitest"
 import {
 	droppedWaiting,
 	emptyQueue,
-	type Handover,
 	handedOver,
-	loopingPairIn,
 	openedWave,
 	reopenedFor,
 	type Summons,
@@ -29,8 +27,6 @@ const waitingIn = (queue: { waiting: Summons[] }) =>
 
 const waveIn = (queue: { wave: Summons[] }) =>
 	queue.wave.map(({ botId }) => botId)
-
-const handover = (from: string, to: string): Handover => ({ from, to })
 
 describe("openedWave", () => {
 	it("takes every companion held, in the order they were named", () => {
@@ -58,7 +54,6 @@ describe("handedOver", () => {
 	it("leaves a companion already held where it is", () => {
 		const queue = handedOver(opened(["ada", "nyx"]), "ada", summons("nyx"))
 		expect(waitingIn(queue)).toEqual(["ada", "nyx"])
-		expect(queue.handovers).toEqual([])
 	})
 
 	it("holds for the next wave a companion running in the open one", () => {
@@ -68,7 +63,6 @@ describe("handedOver", () => {
 			summons("nyx"),
 		)
 		expect(waitingIn(queue)).toEqual(["nyx"])
-		expect(queue.handovers).toEqual([handover("ada", "nyx")])
 	})
 
 	it("opens a second wave with the companion the first one named", () => {
@@ -103,12 +97,10 @@ describe("droppedWaiting", () => {
 		expect(waveIn(running)).toEqual(["ada", "nyx"])
 	})
 
-	it("keeps the handovers already recorded", () => {
+	it("drops the companion held after a handover", () => {
 		const running = openedWave(opened(["ada"]))
 		const named = handedOver(running, "ada", summons("nyx"))
-		const queue = droppedWaiting(named, "nyx")
-		expect(queue.waiting).toEqual([])
-		expect(queue.handovers).toEqual([handover("ada", "nyx")])
+		expect(droppedWaiting(named, "nyx").waiting).toEqual([])
 	})
 })
 
@@ -125,45 +117,5 @@ describe("reopenedFor", () => {
 		const queue = reopenedFor(running, [summons("iris")])
 		expect(waveIn(queue)).toEqual(["ada", "nyx"])
 		expect(waitingIn(queue)).toEqual(["iris"])
-		expect(queue.handovers).toEqual([])
-	})
-})
-
-describe("loopingPairIn", () => {
-	it("names the two companions that kept handing the turn to each other", () => {
-		expect(
-			loopingPairIn([
-				handover("ada", "nyx"),
-				handover("nyx", "ada"),
-				handover("ada", "nyx"),
-			]),
-		).toEqual(["ada", "nyx"])
-	})
-
-	it("stays quiet below the count", () => {
-		expect(
-			loopingPairIn([handover("ada", "nyx"), handover("nyx", "ada")]),
-		).toBeNull()
-	})
-
-	it("stays quiet when a third companion broke the run", () => {
-		expect(
-			loopingPairIn([
-				handover("ada", "nyx"),
-				handover("nyx", "iris"),
-				handover("iris", "ada"),
-			]),
-		).toBeNull()
-	})
-
-	it("counts only the run that reaches the end", () => {
-		expect(
-			loopingPairIn([
-				handover("ada", "nyx"),
-				handover("nyx", "ada"),
-				handover("ada", "iris"),
-				handover("iris", "ada"),
-			]),
-		).toBeNull()
 	})
 })

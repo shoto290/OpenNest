@@ -208,12 +208,6 @@ const chat = {
 		},
 		attachmentsRefused: "Impossible de joindre les fichiers",
 		restart: "Redémarrer la session",
-		handoff: {
-			title: "{{first}} et {{second}} n'arrêtent pas de se passer le tour",
-			description:
-				"Ils se le sont renvoyé trois fois. Arrêtez le tour pour casser la boucle.",
-			stop: "Arrêter le tour",
-		},
 		notice: {
 			crashed: "L'agent s'est arrêté",
 			resumeFailed: "Impossible de reprendre la conversation",

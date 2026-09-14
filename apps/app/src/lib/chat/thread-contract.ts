@@ -100,7 +100,6 @@ export type ThreadFacts = {
 	refused: RefusedMessage | null
 	rejectedPromptId: string | null
 	workingBotIds: (string | null)[]
-	loopingPair: [string, string] | null
 	causes: ReportedRunsByTurnId
 	mission: ThreadMission | null
 }
@@ -141,7 +140,6 @@ const botFactsOf = (thread: LoadedBotThread): ThreadFacts => {
 		refused: null,
 		rejectedPromptId: thread.state.rejectedPromptId,
 		workingBotIds: NO_WORKING_BOT_IDS,
-		loopingPair: null,
 		causes: thread.state.reportedCauses,
 		mission: null,
 	}
@@ -171,7 +169,6 @@ const conversationFactsOf = (
 		...thread.state.speakers.map(({ botId }) => botId),
 		...thread.state.waitingBotIds,
 	],
-	loopingPair: thread.state.loopingPair,
 	causes: thread.state.reportedCauses,
 	mission: thread.mission ?? null,
 })

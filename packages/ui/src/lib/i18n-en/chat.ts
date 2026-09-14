@@ -201,12 +201,6 @@ const chat = {
 		},
 		attachmentsRefused: "Couldn't attach files",
 		restart: "Restart session",
-		handoff: {
-			title: "{{first}} and {{second}} keep handing the turn to each other",
-			description:
-				"They've passed it back and forth three times. Stop the turn to break the loop.",
-			stop: "Stop the turn",
-		},
 		notice: {
 			crashed: "The agent stopped",
 			resumeFailed: "Couldn't resume the conversation",
