@@ -7,11 +7,19 @@ pub const CREATED_EVENT: &str = "companion://created";
 
 pub const FIRST_RUN_DONE_EVENT: &str = "user://first-run-done";
 
+pub const SEED_REFUSED_EVENT: &str = "companion://seed-refused";
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CompanionCreated {
 	pub id: String,
 	pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompanionSeedRefused {
+	pub reason: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

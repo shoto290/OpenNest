@@ -35,7 +35,7 @@ pub fn readable(dir: &Path, recorded: &str) -> Option<PathBuf> {
 	if resolved.parent() != Some(inside.as_path()) || !resolved.is_file() {
 		return None;
 	}
-	Some(resolved)
+	Some(dir.join(resolved.file_name()?))
 }
 
 pub async fn sweep_referenced(database: &crate::db::Database, dir: Option<&Path>) {
@@ -105,10 +105,7 @@ mod tests {
 
 		let recorded = a_stored_avatar(&dir);
 
-		assert_eq!(
-			readable(&dir, &recorded),
-			Some(PathBuf::from(&recorded).canonicalize().unwrap())
-		);
+		assert_eq!(readable(&dir, &recorded), Some(PathBuf::from(&recorded)));
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -260,10 +257,7 @@ mod tests {
 		let recorded = a_stored_avatar(&dir);
 
 		assert!(dir.is_dir(), "the first picture did not make the place it goes");
-		assert_eq!(
-			readable(&dir, &recorded),
-			Some(PathBuf::from(&recorded).canonicalize().unwrap())
-		);
+		assert_eq!(readable(&dir, &recorded), Some(PathBuf::from(&recorded)));
 		fs::remove_dir_all(dir.parent().expect("a parent")).expect("cleanup");
 	}
 }

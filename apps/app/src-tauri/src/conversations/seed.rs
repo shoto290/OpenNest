@@ -1,12 +1,18 @@
+use std::fs;
+use std::io::ErrorKind;
 use std::path::Path;
 
-use tauri::{AppHandle, Runtime};
+use serde::Serialize;
+use tauri::{AppHandle, Emitter, Runtime};
 
 use super::commands::create_bundled_bot;
 use super::contract::{AvatarAnimal, BotIdentity, TranscriptStoreError};
 use crate::avatars;
 use crate::bundles;
 use crate::bundles::shoto;
+use crate::companions::contract::{
+	CompanionCreated, CompanionSeedRefused, CREATED_EVENT, SEED_REFUSED_EVENT,
+};
 use crate::db;
 use crate::db::repositories::conversations::DEFAULT_BOT_MODEL;
 use crate::db::DatabaseError;
@@ -21,6 +27,7 @@ enum Refusal {
 	Bundle(std::io::Error),
 	Store(TranscriptStoreError),
 	Database(DatabaseError),
+	LeftBehind { cause: Box<Refusal>, leftovers: String },
 }
 
 impl Refusal {
@@ -32,6 +39,9 @@ impl Refusal {
 			Refusal::Bundle(failure) => format!("its bundle was not written: {failure}"),
 			Refusal::Store(failure) => format!("the store refused: {failure:?}"),
 			Refusal::Database(failure) => format!("the database refused: {failure:?}"),
+			Refusal::LeftBehind { cause, leftovers } => {
+				format!("{}, and {leftovers} stayed behind", cause.reason())
+			}
 		}
 	}
 }
@@ -61,19 +71,27 @@ impl From<DatabaseError> for Refusal {
 }
 
 pub(super) async fn plant_first_companion<R: Runtime>(app: &AppHandle<R>, database: &db::Database) {
-	if let Err(refusal) = seed(app, database).await {
-		report(&refusal);
+	match seed(app, database).await {
+		Ok(Some(created)) => announce(app, CREATED_EVENT, created),
+		Ok(None) => {}
+		Err(refusal) => {
+			announce(app, SEED_REFUSED_EVENT, CompanionSeedRefused { reason: refusal.reason() })
+		}
 	}
 }
 
-async fn seed<R: Runtime>(app: &AppHandle<R>, database: &db::Database) -> Result<(), Refusal> {
+async fn seed<R: Runtime>(
+	app: &AppHandle<R>,
+	database: &db::Database,
+) -> Result<Option<CompanionCreated>, Refusal> {
 	if database.user().is_first_companion_seeded().await? {
-		return Ok(());
+		return Ok(None);
 	}
 	if database.conversations().holds_a_bot().await? {
-		return adopt(database).await;
+		adopt(database).await?;
+		return Ok(None);
 	}
-	plant(app, database).await
+	plant(app, database).await.map(Some)
 }
 
 async fn adopt(database: &db::Database) -> Result<(), Refusal> {
@@ -81,7 +99,10 @@ async fn adopt(database: &db::Database) -> Result<(), Refusal> {
 	Ok(database.user().mark_first_companion_seeded().await?)
 }
 
-async fn plant<R: Runtime>(app: &AppHandle<R>, database: &db::Database) -> Result<(), Refusal> {
+async fn plant<R: Runtime>(
+	app: &AppHandle<R>,
+	database: &db::Database,
+) -> Result<CompanionCreated, Refusal> {
 	let dir = avatars::dir(app).ok_or(Refusal::NoDataDir)?;
 	let root = bundles::root(app).ok_or(Refusal::NoDataDir)?;
 	if !holds_personal_space(database).await? {
@@ -89,17 +110,19 @@ async fn plant<R: Runtime>(app: &AppHandle<R>, database: &db::Database) -> Resul
 	}
 	let picture = avatars::picture::normalised(shoto::AVATAR)?;
 	let path = avatars::minted_path(&dir);
-	avatars::write(&path, &picture)?;
-
-	let created = create_bundled_bot(app, database, identity(&path), personal_space()).await?;
-	match furnished(&root, database, &created.id).await {
-		Ok(()) => Ok(()),
-		Err(refusal) => {
-			let _ = database.conversations().delete_bot(created.id).await;
-			avatars::sweep_referenced(database, Some(dir.as_path())).await;
-			Err(refusal)
-		}
+	if let Err(rejection) = avatars::write(&path, &picture) {
+		return Err(withdrawn(database, rejection.into(), None, &path).await);
 	}
+
+	let created = match create_bundled_bot(app, database, identity(&path), personal_space()).await
+	{
+		Ok(created) => created,
+		Err(failure) => return Err(withdrawn(database, failure.into(), None, &path).await),
+	};
+	if let Err(refusal) = furnished(&root, database, &created.id).await {
+		return Err(withdrawn(database, refusal, Some(created.id), &path).await);
+	}
+	Ok(CompanionCreated { id: created.id, name: created.name })
 }
 
 async fn furnished(root: &Path, database: &db::Database, bot_id: &str) -> Result<(), Refusal> {
@@ -113,6 +136,36 @@ async fn furnished(root: &Path, database: &db::Database, bot_id: &str) -> Result
 		})?;
 	bundles::write_skills(root, &stored, &shoto::SKILLS)?;
 	Ok(database.user().mark_first_companion_seeded().await?)
+}
+
+async fn withdrawn(
+	database: &db::Database,
+	cause: Refusal,
+	bot_id: Option<String>,
+	picture: &Path,
+) -> Refusal {
+	let row = match bot_id {
+		Some(id) => database.conversations().delete_bot(id).await.err(),
+		None => None,
+	};
+	let leftovers: Vec<String> = row
+		.map(|failure| format!("its row ({failure:?})"))
+		.into_iter()
+		.chain(discarded(picture).err().map(|failure| format!("its picture ({failure})")))
+		.collect();
+	if leftovers.is_empty() {
+		return cause;
+	}
+	Refusal::LeftBehind { cause: Box::new(cause), leftovers: leftovers.join(" and ") }
+}
+
+fn discarded(picture: &Path) -> std::io::Result<()> {
+	match fs::remove_file(picture) {
+		Err(failure) if matches!(failure.kind(), ErrorKind::NotFound | ErrorKind::NotADirectory) => {
+			Ok(())
+		}
+		removed => removed,
+	}
 }
 
 async fn holds_personal_space(database: &db::Database) -> Result<bool, DatabaseError> {
@@ -139,17 +192,25 @@ fn identity(picture: &Path) -> BotIdentity {
 	}
 }
 
-fn report(refusal: &Refusal) {
-	eprintln!("{} was not planted at first launch: {}", shoto::NAME, refusal.reason());
+fn announce<R: Runtime, T: Serialize + Clone + std::fmt::Debug>(
+	app: &AppHandle<R>,
+	event: &str,
+	payload: T,
+) {
+	if let Err(failure) = app.emit(event, payload.clone()) {
+		eprintln!("{event} was not announced for {payload:?}: {failure}");
+	}
 }
 
 #[cfg(test)]
 mod tests {
 	use std::fs;
 	use std::path::PathBuf;
+	use std::sync::mpsc::{channel, Receiver};
 
+	use serde::de::DeserializeOwned;
 	use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
-	use tauri::{App, Manager};
+	use tauri::{App, Listener, Manager};
 
 	use super::*;
 	use crate::db::repositories::conversations::{Bot as StoredBot, ConversationDraft};
@@ -168,6 +229,21 @@ mod tests {
 
 	fn database_of(app: &App<MockRuntime>) -> &db::Database {
 		app.state::<db::DatabaseState>().inner().as_ref().expect("the database opens")
+	}
+
+	fn heard(app: &App<MockRuntime>, event: &'static str) -> Receiver<String> {
+		let (sender, received) = channel();
+		app.handle().listen(event, move |heard| {
+			sender.send(heard.payload().to_owned()).expect("the test still listens");
+		});
+		received
+	}
+
+	fn payloads<T: DeserializeOwned>(received: &Receiver<String>) -> Vec<T> {
+		received
+			.try_iter()
+			.map(|payload| serde_json::from_str(&payload).expect("the payload reads"))
+			.collect()
 	}
 
 	async fn planted(app: &App<MockRuntime>, database: &db::Database) -> Vec<StoredBot> {
@@ -225,6 +301,22 @@ mod tests {
 	}
 
 	#[tokio::test]
+	async fn a_planted_shoto_is_announced_by_his_id_and_his_name() {
+		let app = a_host("announced");
+		let database = database_of(&app);
+		let created = heard(&app, CREATED_EVENT);
+		let refused = heard(&app, SEED_REFUSED_EVENT);
+
+		let roster = planted(&app, database).await;
+
+		assert_eq!(
+			payloads::<CompanionCreated>(&created),
+			vec![CompanionCreated { id: roster[0].id.clone(), name: shoto::NAME.to_owned() }]
+		);
+		assert_eq!(payloads::<CompanionSeedRefused>(&refused), Vec::new());
+	}
+
+	#[tokio::test]
 	async fn the_picture_shoto_wears_is_the_embedded_one_the_pipeline_answered() {
 		let app = a_host("picture");
 		let database = database_of(&app);
@@ -234,6 +326,7 @@ mod tests {
 
 		let recorded = roster[0].avatar_image_path.as_deref().expect("a picture is recorded");
 		let path = avatars::readable(&dir, recorded).expect("the picture sits in the directory");
+		assert_eq!(path, dir.join(Path::new(recorded).file_name().expect("a file name")));
 		assert_eq!(
 			fs::read(path).expect("the picture reads"),
 			avatars::picture::normalised(shoto::AVATAR).expect("the picture is accepted")
@@ -262,24 +355,31 @@ mod tests {
 		let app = a_host("again");
 		let database = database_of(&app);
 		let roster = planted(&app, database).await;
+		let created = heard(&app, CREATED_EVENT);
 
 		assert_eq!(planted(&app, database).await.len(), 1, "a second Shoto was planted");
 
 		database.conversations().delete_bot(roster[0].id.clone()).await.expect("the deletion");
 		assert_eq!(planted(&app, database).await.len(), 0, "a deleted Shoto came back");
+		assert_eq!(payloads::<CompanionCreated>(&created), Vec::new());
 	}
 
 	#[tokio::test]
-	async fn without_the_personal_space_nothing_is_planted_and_the_marker_stays_absent() {
+	async fn without_the_personal_space_nothing_is_planted_and_the_refusal_is_announced() {
 		let app = a_host("spaceless");
 		let database = database_of(&app);
 		database.spaces().create("Work".to_owned()).await.expect("the second space");
 		database.spaces().delete(PERSONAL_SPACE_ID.to_owned()).await.expect("the deletion");
+		let refused = heard(&app, SEED_REFUSED_EVENT);
 
 		plant_first_companion(app.handle(), database).await;
 
 		assert_eq!(database.conversations().bots(None).await.expect("the roster").len(), 0);
 		assert!(!database.user().is_first_companion_seeded().await.expect("the marker"));
+		assert_eq!(
+			payloads::<CompanionSeedRefused>(&refused),
+			vec![CompanionSeedRefused { reason: Refusal::NoPersonalSpace.reason() }]
+		);
 	}
 
 	#[tokio::test]
@@ -289,6 +389,7 @@ mod tests {
 		let root = bundles::root(app.handle()).expect("the bundle root");
 		fs::create_dir_all(root.parent().expect("a parent")).expect("the data directory stands");
 		fs::write(&root, b"not a directory").expect("the file stands where the bundles go");
+		let refused = heard(&app, SEED_REFUSED_EVENT);
 
 		plant_first_companion(app.handle(), database).await;
 
@@ -296,6 +397,29 @@ mod tests {
 		assert!(!database.user().is_first_companion_seeded().await.expect("the marker"));
 		let dir = avatars::dir(app.handle()).expect("the avatars directory");
 		assert_eq!(fs::read_dir(&dir).expect("the directory reads").count(), 0);
+		let reasons = payloads::<CompanionSeedRefused>(&refused);
+		assert_eq!(reasons.len(), 1, "got {reasons:?}");
+		assert!(!reasons[0].reason.contains("stayed behind"), "got {reasons:?}");
+	}
+
+	#[tokio::test]
+	async fn a_picture_that_cannot_be_written_leaves_no_row_and_no_marker_and_is_announced() {
+		let app = a_host("pictureless");
+		let database = database_of(&app);
+		let dir = avatars::dir(app.handle()).expect("the avatars directory");
+		fs::create_dir_all(dir.parent().expect("a parent")).expect("the data directory stands");
+		fs::write(&dir, b"not a directory").expect("the file stands where the pictures go");
+		let refused = heard(&app, SEED_REFUSED_EVENT);
+
+		plant_first_companion(app.handle(), database).await;
+
+		assert_eq!(database.conversations().bots(None).await.expect("the roster").len(), 0);
+		assert!(!database.user().is_first_companion_seeded().await.expect("the marker"));
+		assert_eq!(fs::read(&dir).expect("the file still stands"), b"not a directory");
+		let reasons = payloads::<CompanionSeedRefused>(&refused);
+		assert_eq!(reasons.len(), 1, "got {reasons:?}");
+		assert!(reasons[0].reason.starts_with("its picture was refused"), "got {reasons:?}");
+		assert!(!reasons[0].reason.contains("stayed behind"), "got {reasons:?}");
 	}
 
 	#[tokio::test]
@@ -303,6 +427,7 @@ mod tests {
 		let app = a_host("adopted");
 		let database = database_of(&app);
 		a_companion(database).await;
+		let created = heard(&app, CREATED_EVENT);
 
 		let roster = planted(&app, database).await;
 
@@ -311,6 +436,7 @@ mod tests {
 		assert!(!bundle_of(&app, &roster[0]).exists(), "a bundle was written");
 		assert!(database.user().is_first_companion_seeded().await.expect("the marker"));
 		assert!(database.user().preferences().await.expect("the preferences").first_run_done);
+		assert_eq!(payloads::<CompanionCreated>(&created), Vec::new());
 	}
 
 	#[tokio::test]

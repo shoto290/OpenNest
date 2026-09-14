@@ -1,5 +1,8 @@
 import { useEffect, useRef } from "react"
 
+import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
+import { i18n } from "@workspace/ui/lib/i18n"
+
 import {
 	type CompanionCreated,
 	companionsTransport,
@@ -26,6 +29,12 @@ export const useCompanionAnnouncements = (
 			),
 			companionsTransport.onFirstRunDone(() =>
 				announce.current.onFirstRunDone(),
+			),
+			companionsTransport.onSeedRefused(({ reason }) =>
+				raiseFailureNotice({
+					title: i18n.t("bots:roster.seedRefused"),
+					description: reason,
+				}),
 			),
 		]).catch((reason) => {
 			console.error(

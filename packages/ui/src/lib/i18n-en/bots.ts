@@ -70,6 +70,7 @@ const bots = {
 			delete: "Delete",
 			empty: "Drop a companion here",
 		},
+		seedRefused: "Your first companion couldn't be set up",
 	},
 	spaces: {
 		label: "Spaces",
