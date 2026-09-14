@@ -58,10 +58,10 @@ const runsFor = (bots: MentionBot[], query: string) => {
 		bot.name.toLocaleLowerCase().includes(needle),
 	)
 	const inside = named.filter((bot) => !bot.isOutside)
+	const outside = needle ? named.filter((bot) => bot.isOutside) : []
+	const shown = needle ? inside : inside.slice(0, OPENING_ROWS)
 
-	if (!needle) return { inside: inside.slice(0, OPENING_ROWS), outside: [] }
-
-	return { inside, outside: named.filter((bot) => bot.isOutside) }
+	return { inside: shown, outside, matches: [...shown, ...outside] }
 }
 
 const PromptMentionMenu = ({
@@ -82,10 +82,10 @@ const PromptMentionMenu = ({
 	const reduce = useReducedMotion() ?? false
 	const [activeIndex, setActiveIndex] = useState(0)
 
-	const { inside, outside, matches } = useMemo(() => {
-		const runs = runsFor(bots, query)
-		return { ...runs, matches: [...runs.inside, ...runs.outside] }
-	}, [bots, query])
+	const { inside, outside, matches } = useMemo(
+		() => runsFor(bots, query),
+		[bots, query],
+	)
 
 	const further = query ? 0 : bots.length - matches.length
 

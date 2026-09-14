@@ -458,12 +458,11 @@ export const SpaceQueried = meta.story({
 	},
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
 		const options = canvas.getAllByRole("option")
-		const [boundary] = slotsIn(canvasElement, "prompt-mention-boundary")
+		const boundaries = slotsIn(canvasElement, "prompt-mention-boundary")
+		const [boundary] = boundaries
 
 		await expect(namesOf(options)).toEqual(["Gaspard", "Margaux"])
-		await expect(
-			slotsIn(canvasElement, "prompt-mention-boundary"),
-		).toHaveLength(1)
+		await expect(boundaries).toHaveLength(1)
 		await expect(boundary).toHaveTextContent("Not in this conversation")
 		await expect(
 			canvas.getByRole("group", { name: "Not in this conversation" }),
