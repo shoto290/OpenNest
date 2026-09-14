@@ -42,8 +42,8 @@ export const useSentInMount = ({
 
 	const isSentInMount = useCallback(
 		(messageId: string) =>
-			mark?.threadId === threadId && !mark.priorMessageIds.has(messageId),
-		[mark, threadId],
+			mark !== null && !mark.priorMessageIds.has(messageId),
+		[mark],
 	)
 
 	return { send: markedSend, isSentInMount }
