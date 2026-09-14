@@ -17,7 +17,7 @@ export const reopenedFor = (
 	queue: TurnQueue,
 	summoned: Summons[],
 ): TurnQueue => ({
-	wave: queue.wave,
+	...queue,
 	waiting: [...summoned],
 })
 
