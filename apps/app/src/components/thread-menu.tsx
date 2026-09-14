@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import type { ReactNode, RefObject } from "react"
 
 import { PromptCommandMenu } from "@workspace/ui/components/prompt-command-menu"
 import {
@@ -7,7 +7,7 @@ import {
 } from "@workspace/ui/components/prompt-mention-menu"
 import type { RosterBot } from "@workspace/ui/components/roster"
 
-import type { ThreadMenuSlot } from "@/components/thread-composer"
+import type { PromptHandle, ThreadMenuSlot } from "@/components/thread-composer"
 import type { AgentCommand } from "@/lib/agent/contract"
 import {
 	commandOptionsFor,
@@ -61,27 +61,27 @@ export const botThreadMenu = ({
 type ConversationThreadMenuInput = {
 	bots: MentionBot[]
 	leadId?: string
+	promptRef: RefObject<PromptHandle | null>
 	onSeat?: (botId: string) => Promise<boolean>
 }
 
 export const conversationThreadMenu = ({
 	bots,
 	leadId,
+	promptRef,
 	onSeat,
 }: ConversationThreadMenuInput): ThreadMenuWiring => ({
 	queryIn: mentionQueryIn,
 	menu: ({ prompt, query, isOpen, onDismiss, onPick, children }) => {
-		const mention = (botId: string) =>
-			onPick(promptWithPickedMention(prompt, bots, botId))
-
 		const select = (botId: string, isOutside: boolean) => {
 			if (!isOutside) {
-				mention(botId)
+				onPick(promptWithPickedMention(prompt, bots, botId))
 				return
 			}
+			const name = bots.find((bot) => bot.id === botId)?.name
 			void onSeat?.(botId).then((isSeated) => {
-				if (isSeated) {
-					mention(botId)
+				if (isSeated && name) {
+					promptRef.current?.mention(name)
 				}
 			})
 		}

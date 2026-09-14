@@ -17,6 +17,8 @@ export const ConversationSeatingContext =
 
 const NO_BOTS: RosterBot[] = []
 
+const SUGGESTED_BOTS_SHOWN = 5
+
 export const useSeatInConversation = (conversationId: string | null) => {
 	const seating = useContext(ConversationSeatingContext)
 
@@ -25,7 +27,7 @@ export const useSeatInConversation = (conversationId: string | null) => {
 		: undefined
 }
 
-export const useBotsByPresence = (conversationId: string | null) => {
+export const useSuggestedBots = (conversationId: string | null) => {
 	const seating = useContext(ConversationSeatingContext)
 	const [read, setRead] = useState<{
 		conversationId: string
@@ -43,7 +45,7 @@ export const useBotsByPresence = (conversationId: string | null) => {
 			}
 		}
 		seating.botsByPresence(conversationId).then(
-			(bots) => land(toBotRows(bots)),
+			(bots) => land(toBotRows(bots).slice(0, SUGGESTED_BOTS_SHOWN)),
 			() => {
 				land(NO_BOTS)
 				raiseFailureNotice({

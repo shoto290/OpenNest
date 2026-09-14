@@ -3029,12 +3029,18 @@ describe("ThreadScreen on a conversation nobody is in", () => {
 		layout.restore()
 	})
 
-	it("offers the companions the presence ranking answers for the space", async () => {
+	it("offers the first five companions the presence ranking answers", async () => {
 		const seat = vi.fn(() => Promise.resolve(true))
-		await seatlessRoomWith([botOf("vela", "Vela"), botOf("orb", "Orb")], seat)
+		const ranked = ["Vela", "Orb", "Nyx", "Ada", "Sol", "Wren"]
+		await seatlessRoomWith(
+			ranked.map((name) => botOf(name.toLowerCase(), name)),
+			seat,
+		)
 
-		expect(screen.getByRole("button", { name: "Vela" })).toBeTruthy()
-		expect(screen.getByRole("button", { name: "Orb" })).toBeTruthy()
+		for (const name of ranked.slice(0, 5)) {
+			expect(screen.getByRole("button", { name })).toBeTruthy()
+		}
+		expect(screen.queryByRole("button", { name: "Wren" })).toBeNull()
 	})
 
 	it("seats the pressed companion then writes its mention in the prompt", async () => {

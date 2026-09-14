@@ -129,8 +129,8 @@ import type { Bot, Conversation } from "@/lib/conversations/store-contract"
 import type { TranscriptMessage } from "@/lib/conversations/transcript-contract"
 import { useConversation } from "@/lib/conversations/use-conversation"
 import {
-	useBotsByPresence,
 	useSeatInConversation,
+	useSuggestedBots,
 } from "@/lib/conversations/use-conversation-seating"
 import type { Mission } from "@/lib/missions/mission-contract"
 import type { SummonedMissionState } from "@/lib/missions/mission-summons"
@@ -376,6 +376,7 @@ const ThreadComposerSlot = ({
 					bots: seat ? mentionableBots(bots, thread.conversation) : present,
 					leadId: leadOf(thread.conversation),
 					onSeat: seat,
+					promptRef,
 				})
 
 	return (
@@ -470,7 +471,7 @@ const ConversationEmptySlot = ({
 }: ConversationEmptySlotProps) => {
 	const seatlessId = present.length === 0 ? conversation.id : null
 	const seat = useSeatInConversation(seatlessId)
-	const suggestedBots = useBotsByPresence(seatlessId)
+	const suggestedBots = useSuggestedBots(seatlessId)
 
 	if (!seat) {
 		return <ConversationEmptyState bots={present} title={conversation.title} />

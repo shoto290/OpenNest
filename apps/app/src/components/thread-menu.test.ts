@@ -7,7 +7,7 @@ import {
 	screen,
 	waitFor,
 } from "@testing-library/react"
-import { createElement, type ReactNode } from "react"
+import { createElement, createRef, type ReactNode, type RefObject } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import "@workspace/ui/lib/i18n"
@@ -15,7 +15,7 @@ import "@workspace/ui/lib/i18n"
 import type { MentionBot } from "@workspace/ui/components/prompt-mention-menu"
 import type { RosterBot } from "@workspace/ui/components/roster"
 
-import { ThreadComposer } from "@/components/thread-composer"
+import { type PromptHandle, ThreadComposer } from "@/components/thread-composer"
 import {
 	botThreadMenu,
 	conversationThreadMenu,
@@ -40,8 +40,12 @@ const OUTSIDE_BOT: MentionBot = { id: "vela", name: "Vela", isOutside: true }
 
 const WITH_OUTSIDE: MentionBot[] = [...BOTS, OUTSIDE_BOT]
 
-const composerWith = (wiring: ThreadMenuWiring): ReactNode =>
+const composerWith = (
+	wiring: ThreadMenuWiring,
+	promptRef: RefObject<PromptHandle | null> = createRef<PromptHandle>(),
+): ReactNode =>
 	createElement(ThreadComposer, {
+		promptRef,
 		attachments: NO_ATTACHMENTS,
 		canAttach: true,
 		composerRef: { current: null },
@@ -56,6 +60,17 @@ const composerWith = (wiring: ThreadMenuWiring): ReactNode =>
 		queryIn: wiring.queryIn,
 		readDraft: () => "",
 	})
+
+const mentionMenuWith = (
+	bots: MentionBot[],
+	onSeat?: (botId: string) => Promise<boolean>,
+) => {
+	const promptRef = createRef<PromptHandle>()
+	return composerWith(
+		conversationThreadMenu({ bots, leadId: "orb", onSeat, promptRef }),
+		promptRef,
+	)
+}
 
 const field = () => screen.getByRole("textbox") as HTMLTextAreaElement
 
@@ -106,7 +121,7 @@ describe("conversationThreadMenu", () => {
 	afterEach(cleanup)
 
 	it("offers the present companions and marks the lead", () => {
-		render(composerWith(conversationThreadMenu({ bots: BOTS, leadId: "orb" })))
+		render(mentionMenuWith(BOTS))
 
 		type("@")
 
@@ -115,7 +130,7 @@ describe("conversationThreadMenu", () => {
 	})
 
 	it("writes the picked companion name into the prompt", () => {
-		render(composerWith(conversationThreadMenu({ bots: BOTS, leadId: "orb" })))
+		render(mentionMenuWith(BOTS))
 
 		type("hey @n")
 		pick("Nyx")
@@ -129,11 +144,7 @@ describe("conversationThreadMenu", () => {
 
 	it("seats nobody when a companion already seated is picked", () => {
 		const onSeat = vi.fn(() => Promise.resolve(true))
-		render(
-			composerWith(
-				conversationThreadMenu({ bots: WITH_OUTSIDE, leadId: "orb", onSeat }),
-			),
-		)
+		render(mentionMenuWith(WITH_OUTSIDE, onSeat))
 
 		type("hey @n")
 		pick("Nyx")
@@ -144,11 +155,7 @@ describe("conversationThreadMenu", () => {
 
 	it("seats a companion marked outside before writing its mention", async () => {
 		const onSeat = vi.fn(() => Promise.resolve(true))
-		render(
-			composerWith(
-				conversationThreadMenu({ bots: WITH_OUTSIDE, leadId: "orb", onSeat }),
-			),
-		)
+		render(mentionMenuWith(WITH_OUTSIDE, onSeat))
 
 		type("hey @ve")
 		pick(/Vela/)
@@ -157,13 +164,27 @@ describe("conversationThreadMenu", () => {
 		await waitFor(() => expect(field().value).toBe("hey @Vela "))
 	})
 
+	it("writes the mention against the prompt as the seating lands", async () => {
+		let landSeating = (_isSeated: boolean) => undefined as void
+		const onSeat = vi.fn(
+			() =>
+				new Promise<boolean>((resolve) => {
+					landSeating = resolve
+				}),
+		)
+		render(mentionMenuWith(WITH_OUTSIDE, onSeat))
+
+		type("hey @ve")
+		pick(/Vela/)
+		type("hey there @ve")
+		landSeating(true)
+
+		await waitFor(() => expect(field().value).toBe("hey there @Vela "))
+	})
+
 	it("leaves the prompt alone when seating the companion fails", async () => {
 		const onSeat = vi.fn(() => Promise.resolve(false))
-		render(
-			composerWith(
-				conversationThreadMenu({ bots: WITH_OUTSIDE, leadId: "orb", onSeat }),
-			),
-		)
+		render(mentionMenuWith(WITH_OUTSIDE, onSeat))
 
 		type("hey @ve")
 		pick(/Vela/)
