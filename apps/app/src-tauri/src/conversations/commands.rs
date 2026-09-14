@@ -19,7 +19,7 @@ use crate::bundles;
 use crate::db;
 use crate::db::repositories::conversations::{
 	Bot as StoredBot, Conversation as StoredConversation, ConversationDraft, ConversationEdit,
-	DEFAULT_BOT_MODEL,
+	Joined, DEFAULT_BOT_MODEL,
 };
 use crate::db::repositories::messages::{MessagePageQuery, MessagesAroundQuery};
 use crate::db::repositories::runtime_context::{Handover, ParticipantKey};
@@ -887,14 +887,24 @@ pub async fn conversation_add_participant<R: Runtime>(
 	bot_id: String,
 	invited_by_bot_id: Option<String>,
 ) -> Result<Conversation, TranscriptStoreError> {
-	let joined = ready(&state)?
-		.conversations()
-		.add_participant(conversation_id, bot_id, invited_by_bot_id)
-		.await?;
-	if let Some(arrival) = joined.arrival {
-		launch::announce(&app, COMPANION_ARRIVED_EVENT, CompanionArrival::from(arrival));
-	}
+	let joined =
+		seat_participant(&app, ready(&state)?, conversation_id, bot_id, invited_by_bot_id).await?;
 	Ok(drawn(&app, joined.conversation))
+}
+
+pub(crate) async fn seat_participant<R: Runtime>(
+	app: &AppHandle<R>,
+	database: &db::Database,
+	conversation_id: String,
+	bot_id: String,
+	invited_by_bot_id: Option<String>,
+) -> Result<Joined, TranscriptStoreError> {
+	let joined =
+		database.conversations().add_participant(conversation_id, bot_id, invited_by_bot_id).await?;
+	if let Some(arrival) = &joined.arrival {
+		launch::announce(app, COMPANION_ARRIVED_EVENT, CompanionArrival::from(arrival.clone()));
+	}
+	Ok(joined)
 }
 
 #[tauri::command]

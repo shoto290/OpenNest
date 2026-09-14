@@ -36,6 +36,7 @@ describe("kiroshiServer", () => {
 			"companion_suggestions",
 			"companion_create",
 			"companion_first_run_done",
+			"companion_invite",
 		])
 	})
 })

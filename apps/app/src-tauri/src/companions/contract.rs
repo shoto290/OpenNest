@@ -18,6 +18,14 @@ pub struct CompanionCreated {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CompanionInvited {
+	pub id: String,
+	pub name: String,
+	pub already_seated: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CompanionSeedRefused {
 	pub reason: String,
 }
@@ -37,6 +45,13 @@ pub enum CompanionError {
 	#[serde(rename_all = "camelCase")]
 	Storage { failure: StorageFailure },
 	NamelessCompanion,
+	EmptyCompanionField,
+	#[serde(rename_all = "camelCase")]
+	AmbiguousCompanion { companion: String, ids: Vec<String> },
+	#[serde(rename_all = "camelCase")]
+	UnknownCompanion { companion: String },
+	#[serde(rename_all = "camelCase")]
+	ConversationWithoutSeats { conversation_id: String, conversation_kind: String },
 	#[serde(rename_all = "camelCase")]
 	ConversationWithoutSpace { conversation_id: String },
 	#[serde(rename_all = "camelCase")]

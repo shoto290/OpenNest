@@ -23,9 +23,18 @@ const CREATE =
 const FIRST_RUN_DONE =
 	"Record the first run of the app as finished, once the person has answered the hand-off question, so the app stops opening on it."
 
+const INVITE =
+	"Bring a companion of this space into this conversation before you mention it."
+
+const INVITEE = "The id or the name of the companion to bring in."
+
 type ToolInput = Record<string, z.ZodType>
 
 const NOTHING: ToolInput = {}
+
+const NAMED: ToolInput = {
+	companion: z.string().describe(INVITEE),
+}
 
 const DRAFTED: ToolInput = {
 	name: z.string().describe(NAME),
@@ -48,5 +57,8 @@ export const companionTools = (
 	),
 	tool("companion_first_run_done", FIRST_RUN_DONE, NOTHING, () =>
 		asked(session, "firstRunDone", {}),
+	),
+	tool("companion_invite", INVITE, NAMED, (input) =>
+		asked(session, "invite", input),
 	),
 ]
