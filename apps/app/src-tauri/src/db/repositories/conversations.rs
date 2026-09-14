@@ -2667,4 +2667,46 @@ mod tests {
 		drop(database);
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
+
+	#[tokio::test]
+	async fn a_deleted_bot_still_seated_is_absent_from_the_bots_by_presence() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let repository = database.conversations();
+		let zed = repository.create_bot(an_identity("Zed"), None, None).await.expect("the bot");
+		let ada = repository.create_bot(an_identity("Ada"), None, None).await.expect("the bot");
+		let mia = repository.create_bot(an_identity("Mia"), None, None).await.expect("the bot");
+		let space_id = home_of(repository, &zed).await;
+		for seated in [vec![&zed, &mia], vec![&zed, &mia], vec![&zed, &ada]] {
+			let room = repository
+				.create_conversation(a_draft(&space_id, &seated))
+				.await
+				.expect("the room");
+			spoke_in(&database, &room.id, &zed.id).await;
+		}
+		assert_eq!(
+			named_by_presence(repository, &space_id, None).await,
+			vec!["Zed".to_owned(), "Mia".to_owned(), "Ada".to_owned()]
+		);
+
+		repository.delete_bot(zed.id.clone()).await.expect("the bot is deleted");
+
+		let still_seated = repository
+			.conversations(space_id.clone())
+			.await
+			.expect("the rooms")
+			.iter()
+			.flat_map(|room| room.seats.iter())
+			.filter(|seat| seat.bot_id == zed.id && seat.left_at.is_none())
+			.count();
+		assert_eq!(still_seated, 3, "the deleted bot no longer holds its seats");
+		assert_eq!(
+			named_by_presence(repository, &space_id, None).await,
+			vec!["Mia".to_owned(), "Ada".to_owned()],
+			"the deleted bot was ranked or its seats still counted"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
 }
