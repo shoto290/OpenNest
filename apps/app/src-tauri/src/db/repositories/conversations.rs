@@ -2933,13 +2933,15 @@ mod tests {
 		let database = open(&dir);
 		let repository = database.conversations();
 		let (room, bots) = a_room_of(&database, &["Nyx", "Ada"]).await;
+		arrived(repository, &room, &bots[1]).await;
 		let mut inside = Vec::new();
 		for seq in 1..=6 {
 			spoke_in(&database, &room.id, &bots[0].id).await;
 			match seq {
-				1 => drop(arrived(repository, &room, &bots[1]).await),
 				3 => inside.push(arrived_again(repository, &room, &bots[1]).await),
-				5 => drop(arrived_again(repository, &room, &bots[1]).await),
+				5 => {
+					arrived_again(repository, &room, &bots[1]).await;
+				}
 				_ => {}
 			}
 		}
