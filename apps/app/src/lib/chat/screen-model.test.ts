@@ -429,7 +429,13 @@ describe("emptyStateStatusFor", () => {
 		const signedOut = { kind: "notAuthenticated" } as const
 
 		expect(emptyStateStatusFor("unavailable", signedOut)).toBe("notConnected")
-		expect(emptyStateStatusFor("ready", signedOut)).toBe("notConnected")
+		expect(emptyStateStatusFor("crashed", signedOut)).toBe("notConnected")
+	})
+
+	it("keeps the ready empty state while the connection is ready, even signed out", () => {
+		expect(emptyStateStatusFor("ready", { kind: "notAuthenticated" })).toBe(
+			"ready",
+		)
 	})
 
 	it("keeps today's state when the latest error is anything else", () => {
@@ -457,6 +463,12 @@ describe("notices", () => {
 		)
 		expect(noticeTitleFor(t, { kind: "noActiveTurn" })).toBe(
 			"Couldn't send that request",
+		)
+	})
+
+	it("titles a signed-out notice on the missing sign-in", () => {
+		expect(noticeTitleFor(t, { kind: "notAuthenticated" })).toBe(
+			"You're not signed in",
 		)
 	})
 

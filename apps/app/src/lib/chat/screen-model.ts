@@ -274,13 +274,13 @@ export function emptyStateStatusFor(
 	connection: ConnectionState,
 	latestError: TransportError | undefined,
 ): ChatEmptyStateStatus | null {
+	if (connection === "ready") {
+		return "ready"
+	}
 	if (latestError && isSignedOut(latestError)) {
 		return "notConnected"
 	}
-	if (connection === "checking") {
-		return null
-	}
-	return connection === "ready" ? "ready" : "unavailable"
+	return connection === "checking" ? null : "unavailable"
 }
 
 export function needsFreshSession(error: TransportError): boolean {
@@ -288,6 +288,9 @@ export function needsFreshSession(error: TransportError): boolean {
 }
 
 export function noticeTitleFor(t: ChatCopy, error: TransportError): string {
+	if (isSignedOut(error)) {
+		return t("screen.notice.notAuthenticated")
+	}
 	if (error.kind === "crashed") {
 		return t("screen.notice.crashed")
 	}

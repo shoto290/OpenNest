@@ -84,7 +84,11 @@ export const TransportNotice = ({
 
 	return (
 		<Notice
-			description={describeTransportError(t, error.error)}
+			description={
+				signIn
+					? t("screen.transport.notConnected")
+					: describeTransportError(t, error.error)
+			}
 			onDismiss={() => onDismiss(error.id)}
 			retry={signIn ?? restart}
 			title={noticeTitleFor(t, error.error)}

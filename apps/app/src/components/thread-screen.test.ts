@@ -2777,6 +2777,13 @@ describe("signing in from a companion's solo thread", () => {
 		expect(
 			within(notice).queryByRole("button", { name: "Restart session" }),
 		).toBeNull()
+		expect(within(notice).getByText(NOT_CONNECTED_TITLE)).toBeTruthy()
+		expect(
+			within(notice).getByText(
+				"Your Claude account isn't connected. Sign in to keep talking.",
+			),
+		).toBeTruthy()
+		expect(within(notice).queryByText(/restart/i)).toBeNull()
 		await pressWithin(shown, notice, SIGN_IN)
 		expect(isAsking(ACCESS_QUESTION)).toBe(true)
 	})
