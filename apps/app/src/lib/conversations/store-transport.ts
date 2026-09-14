@@ -105,6 +105,12 @@ export const conversationStore: TranscriptStore = {
 	bots: (spaceId?: string | null) =>
 		invoke<Bot[]>("conversation_bots", { spaceId: spaceId ?? null }),
 
+	botsByPresence: (spaceId: string, excludedConversationId?: string | null) =>
+		invoke<Bot[]>("conversation_bots_by_presence", {
+			spaceId,
+			excludedConversationId: excludedConversationId ?? null,
+		}),
+
 	createBot: (identity: BotIdentity, spaceId?: string | null) =>
 		invoke<Bot>("conversation_create_bot", {
 			identity,

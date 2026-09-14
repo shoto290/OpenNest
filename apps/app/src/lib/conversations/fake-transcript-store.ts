@@ -123,6 +123,19 @@ type Seat = {
 	leftAt: number | null
 }
 
+type RankedBot = {
+	bot: Bot
+	presence: number
+}
+
+const ascending = (one: string, other: string) =>
+	one < other ? -1 : one > other ? 1 : 0
+
+const byPresence = (one: RankedBot, other: RankedBot) =>
+	other.presence - one.presence ||
+	ascending(one.bot.name, other.bot.name) ||
+	ascending(one.bot.id, other.bot.id)
+
 const refuse = (error: TranscriptStoreError | SpaceError | SectionError) =>
 	Promise.reject(error)
 
@@ -997,6 +1010,28 @@ export const createFakeTranscriptStore = (
 			Promise.resolve(
 				[...bots.values()].filter((bot) => !spaceId || isIn(bot.id, spaceId)),
 			),
+
+		botsByPresence: (
+			spaceId: string,
+			excludedConversationId?: string | null,
+		) => {
+			const presenceOf = (botId: string) =>
+				[...conversations.values()].filter(
+					(stored) =>
+						stored.spaceId === spaceId &&
+						stored.id !== excludedConversationId &&
+						(seats.get(stored.id) ?? []).some(
+							(seat) => seat.botId === botId && isSeated(seat),
+						),
+				).length
+			return Promise.resolve(
+				[...bots.values()]
+					.filter((bot) => isIn(bot.id, spaceId))
+					.map((bot) => ({ bot, presence: presenceOf(bot.id) }))
+					.sort(byPresence)
+					.map(({ bot }) => bot),
+			)
+		},
 
 		createBot: (identity: BotIdentity, spaceId?: string | null) =>
 			mint(
