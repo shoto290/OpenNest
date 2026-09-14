@@ -149,9 +149,11 @@ import { withoutOnboardingSummons } from "@/lib/onboarding/onboarding-summons"
 import {
 	type OnboardingTail,
 	onboardingTailOf,
+	signInTailOf,
 } from "@/lib/onboarding/onboarding-tail"
 import type { Onboarding } from "@/lib/onboarding/use-onboarding"
 import { usePostedOnboardingStep } from "@/lib/onboarding/use-posted-onboarding-step"
+import type { SignIn } from "@/lib/onboarding/use-sign-in"
 import type { ReportedRun } from "@/lib/routines/routine-contract"
 import type { MessageLandingController } from "@/lib/search/message-landing-controller"
 
@@ -447,14 +449,18 @@ type ThreadEmptyStateProps = {
 	thread: LoadedThread
 	botImage?: string
 	present: RosterBot[]
+	latestError?: ChatError
 	onRestart: () => void
+	onSignIn?: () => void
 }
 
 const ThreadEmptyState = ({
 	thread,
 	botImage,
 	present,
+	latestError,
 	onRestart,
+	onSignIn,
 }: ThreadEmptyStateProps) => {
 	if (thread.kind === "conversation") {
 		return thread.state.refusedMessage ? null : (
@@ -465,7 +471,10 @@ const ThreadEmptyState = ({
 		)
 	}
 
-	const status = emptyStateStatusFor(thread.state.connection)
+	const status = emptyStateStatusFor(
+		thread.state.connection,
+		latestError?.error,
+	)
 
 	return status ? (
 		<ChatEmptyState
@@ -476,6 +485,7 @@ const ThreadEmptyState = ({
 			name={thread.bot.name}
 			onOpenSettings={thread.onToggleSettings}
 			onSetup={onRestart}
+			onSignIn={onSignIn}
 			seed={thread.bot.id}
 			status={status}
 		/>
@@ -846,10 +856,17 @@ const ConversationThreadTail = ({
 const onboardingTailFor = (
 	thread: LoadedThread,
 	onboarding: Onboarding | undefined,
+	signIn: SignIn | undefined,
 ): OnboardingTail | null =>
 	thread.kind === "bot"
-		? onboardingTailOf(onboarding, thread.state, thread.bot.id)
+		? (onboardingTailOf(onboarding, thread.state, thread.bot.id) ??
+			signInTailOf(signIn, thread.bot.id))
 		: null
+
+const signInOfferOf = (
+	signIn: SignIn | undefined,
+	botId: string | undefined,
+) => (signIn && botId ? () => signIn.controller.offer(botId) : undefined)
 
 const showsEmptyState = (
 	rows: TranscriptItem[],
@@ -898,6 +915,7 @@ type ThreadNoticesProps = {
 	speakerId?: string
 	onDismissError: (id: string) => void
 	onRestart?: (id: string) => void
+	onSignIn?: () => void
 	onStop: () => void
 }
 
@@ -910,6 +928,7 @@ const ThreadNotices = ({
 	speakerId,
 	onDismissError,
 	onRestart,
+	onSignIn,
 	onStop,
 }: ThreadNoticesProps) => {
 	const leftOut = useSessionConnector(error, speakerId)
@@ -934,6 +953,7 @@ const ThreadNotices = ({
 					error={error}
 					onDismiss={onDismissError}
 					onRestart={onRestart}
+					onSignIn={onSignIn}
 				/>
 			) : null}
 			{pins.hasFailed ? <PinsNotice onDismiss={pins.dismissFailure} /> : null}
@@ -969,6 +989,7 @@ type ThreadViewProps = {
 	landings: MessageLandingController
 	readerName: string
 	onboarding?: Onboarding
+	signIn?: SignIn
 	onOpenMission: (missionId: string) => void
 }
 
@@ -982,6 +1003,7 @@ function ThreadView({
 	landings,
 	readerName,
 	onboarding,
+	signIn,
 	onOpenMission,
 }: ThreadViewProps) {
 	const t = useChatCopy()
@@ -1083,6 +1105,7 @@ function ThreadView({
 		},
 		[botController, controller],
 	)
+	const offerSignIn = signInOfferOf(signIn, facts.bot?.id)
 	const stop = useCallback(() => {
 		void controller.stop()
 	}, [controller])
@@ -1161,7 +1184,7 @@ function ThreadView({
 	const refusedTarget = repliedToRefusal
 		? quotes.get(repliedToRefusal)
 		: undefined
-	const onboardingTail = onboardingTailFor(thread, onboarding)
+	const onboardingTail = onboardingTailFor(thread, onboarding, signIn)
 
 	const layout = (
 		<ThreadLayout
@@ -1204,6 +1227,7 @@ function ThreadView({
 					loopingPair={facts.loopingPair}
 					onDismissError={controller.dismissError}
 					onRestart={botController ? restartAfterError : undefined}
+					onSignIn={offerSignIn}
 					onStop={stop}
 					pins={pins}
 					staged={staged}
@@ -1248,7 +1272,9 @@ function ThreadView({
 			{showsEmptyState(transcriptRows, onboardingTail) ? (
 				<ThreadEmptyState
 					botImage={botImage}
+					latestError={facts.latestError}
 					onRestart={restart}
+					onSignIn={offerSignIn}
 					present={present}
 					thread={thread}
 				/>
@@ -1291,6 +1317,7 @@ type ThreadScreenProps = {
 	landings: MessageLandingController
 	readerName: string
 	onboarding?: Onboarding
+	signIn?: SignIn
 	onOpenMission: (missionId: string) => void
 }
 
@@ -1345,6 +1372,7 @@ function BotThreadView({
 	landings,
 	readerName,
 	onboarding,
+	signIn,
 	onOpenMission,
 }: BotThreadViewProps) {
 	const { controller } = thread.chat
@@ -1366,6 +1394,7 @@ function BotThreadView({
 			onOpenMission={onOpenMission}
 			readerName={readerName}
 			runtimes={runtimes}
+			signIn={signIn}
 			thread={{ ...thread, state: thread.chat.state, controller }}
 		/>
 	)
@@ -1381,6 +1410,7 @@ export function ThreadScreen({
 	landings,
 	readerName,
 	onboarding,
+	signIn,
 	onOpenMission,
 }: ThreadScreenProps) {
 	if (thread.kind === "conversation") {
@@ -1412,6 +1442,7 @@ export function ThreadScreen({
 			onOpenMission={onOpenMission}
 			readerName={readerName}
 			runtimes={runtimes}
+			signIn={signIn}
 			thread={thread}
 		/>
 	)

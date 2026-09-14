@@ -8,7 +8,11 @@ import { describeTransportError } from "@/lib/agent/messages"
 import { describeAttachmentError } from "@/lib/chat/attachments"
 import type { AttachmentStoreError } from "@/lib/chat/attachments-contract"
 import type { ChatError } from "@/lib/chat/chat-state"
-import { needsFreshSession, noticeTitleFor } from "@/lib/chat/screen-model"
+import {
+	isSignedOut,
+	needsFreshSession,
+	noticeTitleFor,
+} from "@/lib/chat/screen-model"
 
 type ThreadNoticeProps = {
 	refusal: AttachmentStoreError | null
@@ -58,25 +62,31 @@ type TransportNoticeProps = {
 	error: ChatError
 	onDismiss: (id: string) => void
 	onRestart?: (id: string) => void
+	onSignIn?: () => void
 }
 
 export const TransportNotice = ({
 	error,
 	onDismiss,
 	onRestart,
+	onSignIn,
 }: TransportNoticeProps) => {
 	const t = useChatCopy()
 	const stale = needsFreshSession(error.error)
+	const signIn =
+		isSignedOut(error.error) && onSignIn
+			? { label: t("emptyState.signIn"), onRetry: onSignIn }
+			: undefined
+	const restart =
+		stale && onRestart
+			? { label: t("screen.restart"), onRetry: () => onRestart(error.id) }
+			: undefined
 
 	return (
 		<Notice
 			description={describeTransportError(t, error.error)}
 			onDismiss={() => onDismiss(error.id)}
-			retry={
-				stale && onRestart
-					? { label: t("screen.restart"), onRetry: () => onRestart(error.id) }
-					: undefined
-			}
+			retry={signIn ?? restart}
 			title={noticeTitleFor(t, error.error)}
 			tone={stale ? "error" : "warning"}
 		/>

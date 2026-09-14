@@ -41,6 +41,8 @@ import {
 	createOpenedMissionController,
 	type SelectedRow,
 } from "@/lib/missions/opened-mission-controller"
+import { createFakeOnboardingPort } from "@/lib/onboarding/fake-onboarding-port"
+import { createSignInController } from "@/lib/onboarding/sign-in-controller"
 import { type FakeLayout, fakeLayout } from "@/lib/perf/fake-layout"
 import { createOpenedRoutineController } from "@/lib/routines/opened-routine-controller"
 import { routinesTransport } from "@/lib/routines/routines-transport"
@@ -218,6 +220,9 @@ const workspaceOf = async (store = createFakeTranscriptStore()) => {
 	)
 	const roster = createFakeRoster()
 	const missions = createOpenedMissionController(roster)
+	const signIn = createSignInController(createFakeOnboardingPort(), {
+		reopen: async () => undefined,
+	})
 
 	const bodyProps = (selected: Conversation) => {
 		roster.select(selected.id)
@@ -239,6 +244,7 @@ const workspaceOf = async (store = createFakeTranscriptStore()) => {
 			onRetrySpaces: () => undefined,
 			onToggleSettings: () => undefined,
 			readerName: "Reader",
+			signIn: { state: signIn.getState(), controller: signIn },
 		}
 	}
 

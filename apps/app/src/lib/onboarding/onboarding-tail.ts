@@ -1,10 +1,12 @@
 import type { OnboardingState } from "./onboarding-controller"
 import {
+	connectionStepOf,
 	type OnboardingStepQuestion,
 	onboardingStepOf,
 } from "./onboarding-steps"
 import { type SummonOutcome, summonOutcomeOf } from "./onboarding-summons"
 import type { Onboarding } from "./use-onboarding"
+import type { SignIn } from "./use-sign-in"
 
 import type { ChatState } from "../chat/chat-state"
 
@@ -38,4 +40,17 @@ export const onboardingTailOf = (
 	return {
 		step: onboardingStepOf(state, outcomeOf(state, chat), controller),
 	}
+}
+
+export const signInTailOf = (
+	signIn: SignIn | undefined,
+	botId: string,
+): OnboardingTail | null => {
+	const connection = signIn?.state.connection
+	if (!signIn || !connection || signIn.state.botId !== botId) {
+		return null
+	}
+	const id = `sign-in-${connection.state}-${signIn.state.round}`
+
+	return { step: connectionStepOf(connection, id, signIn.controller) }
 }

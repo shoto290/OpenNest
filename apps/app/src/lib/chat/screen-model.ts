@@ -266,9 +266,17 @@ export function sidebarActivityFor(state: ChatState): SidebarActivity {
 	return { isWorking: true, kind: working.kind }
 }
 
+export function isSignedOut(error: TransportError): boolean {
+	return error.kind === "notAuthenticated"
+}
+
 export function emptyStateStatusFor(
 	connection: ConnectionState,
+	latestError: TransportError | undefined,
 ): ChatEmptyStateStatus | null {
+	if (latestError && isSignedOut(latestError)) {
+		return "notConnected"
+	}
 	if (connection === "checking") {
 		return null
 	}
