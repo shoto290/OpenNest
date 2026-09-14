@@ -1,9 +1,11 @@
-import { expect } from "storybook/test"
+import { expect, fn, userEvent } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
 	botIdentityAvatars,
 	pictureOf,
+	slotIn,
+	slotsIn,
 	UPLOADED_AVATAR_IMAGE,
 } from "@workspace/storybook/story-utils"
 import { ConversationEmptyState } from "@workspace/ui/components/conversation-empty-state"
@@ -100,6 +102,125 @@ export const WithPicture = meta.story({
 			"src",
 			UPLOADED_AVATAR_IMAGE,
 		)
+	},
+})
+
+const SUGGESTED: RosterBot[] = [
+	KEEPER,
+	SCOUT,
+	WARDEN,
+	{ id: "bot_7e3f18", name: "Moss Reader", animal: "owl", blot: "purple" },
+	{ id: "bot_2b9a06", name: "Pebble Clerk", animal: "cat", blot: "pink" },
+]
+
+const NOBODY_TITLE = "Nobody is in this conversation yet"
+
+const NOBODY_DESCRIPTION =
+	"Type @ and pick a name. Whoever you mention joins, and they can bring in anyone else they need."
+
+const suggestedPresses = (canvasElement: HTMLElement) =>
+	slotsIn(canvasElement, "conversation-suggested-bot")
+
+export const Empty = meta.story({
+	args: { bots: [] },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this on a conversation nobody is seated in and with nobody to suggest. Check that the @ mark, the title and the description replace the faces, the conversation name and the ready count, that no arrow hint is drawn, and that nothing follows the description. Pick `EmptyWithSuggestions` when companions can be pressed.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		await expect(
+			canvas.getByRole("heading", { name: NOBODY_TITLE }),
+		).toBeVisible()
+		await expect(canvas.getByText(NOBODY_DESCRIPTION)).toBeVisible()
+		await expect(botIdentityAvatars(canvasElement)).toHaveLength(0)
+		await expect(
+			canvas.queryByText("Message a companion to start."),
+		).not.toBeInTheDocument()
+		await expect(canvas.queryByText("Ship the December release")).toBeNull()
+		await expect(canvas.queryByRole("button")).toBeNull()
+		await expect(canvas.getByText(NOBODY_DESCRIPTION).parentElement).toBe(
+			slotIn(canvasElement, "conversation-empty-state").lastElementChild,
+		)
+	},
+})
+
+export const EmptyWithSuggestions = meta.story({
+	args: { bots: [], suggestedBots: SUGGESTED, onSuggestedBotPress: fn() },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this on a conversation nobody is seated in, with the companions the person talks to most offered below the copy. Check that the label sits above one outline press per companion, that each press carries a face and a name, and that pressing one hands exactly that companion back once: the press writes a mention into the draft, it never invites. Pick `Empty` when there is nobody to suggest.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement }) => {
+		await expect(canvas.getByText("The ones you talk to most")).toBeVisible()
+		await expect(suggestedPresses(canvasElement)).toHaveLength(5)
+		await expect(botIdentityAvatars(canvasElement)).toHaveLength(5)
+		await expect(
+			canvas.queryByText("Message a companion to start."),
+		).not.toBeInTheDocument()
+
+		await userEvent.click(canvas.getByRole("button", { name: "Twig Scout" }))
+
+		await expect(args.onSuggestedBotPress).toHaveBeenCalledTimes(1)
+		await expect(args.onSuggestedBotPress).toHaveBeenCalledWith(SCOUT)
+	},
+})
+
+export const EmptyWithSuggestionsFocused = meta.story({
+	args: { bots: [], suggestedBots: SUGGESTED, onSuggestedBotPress: fn() },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this to check a suggested companion reached from the keyboard. Check that the first press takes focus on the first tab and draws a visible ring around its pill. Pick `EmptyWithSuggestions` for the pointer path.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const press = canvas.getByRole("button", { name: "Nest Keeper" })
+
+		await userEvent.tab()
+
+		await expect(press).toHaveFocus()
+		await expect(press.matches(":focus-visible")).toBe(true)
+		await expect(getComputedStyle(press).boxShadow).not.toBe("none")
+	},
+})
+
+export const EmptyWithSuggestionsNarrow = meta.story({
+	args: { bots: [], suggestedBots: SUGGESTED, onSuggestedBotPress: fn() },
+	decorators: [
+		(Story) => (
+			<div className="w-80" data-testid="narrow-frame">
+				<Story />
+			</div>
+		),
+	],
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this on a narrow window, 320 pixels wide, where the five suggested companions cannot share one line. Check that the presses wrap onto further centered rows and that nothing scrolls sideways. Pick `EmptyWithSuggestions` for the nominal width.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const frame = canvas.getByTestId("narrow-frame")
+		const rows = new Set(
+			suggestedPresses(canvasElement).map(
+				(press) => press.getBoundingClientRect().top,
+			),
+		)
+
+		await expect(rows.size).toBeGreaterThan(1)
+		await expect(frame.scrollWidth).toBeLessThanOrEqual(frame.clientWidth)
 	},
 })
 

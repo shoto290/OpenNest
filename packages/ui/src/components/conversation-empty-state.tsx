@@ -1,9 +1,10 @@
-import type { ComponentProps } from "react"
+import { type ComponentProps, useId } from "react"
 import { useTranslation } from "react-i18next"
 
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
 import { EmptyStateShell } from "@workspace/ui/components/empty-state-shell"
 import type { RosterBot } from "@workspace/ui/components/roster"
+import { Button } from "@workspace/ui/components/ui/button"
 import { cn } from "@workspace/ui/lib/utils"
 
 type ConversationEmptyStateProps = Omit<
@@ -12,17 +13,97 @@ type ConversationEmptyStateProps = Omit<
 > & {
 	title: string
 	bots: RosterBot[]
+	suggestedBots?: RosterBot[]
+	onSuggestedBotPress?: (bot: RosterBot) => void
 }
 
 const MARK_SIZE = 56
 
+const SUGGESTED_AVATAR_SIZE = 20
+
+const MENTION_GLYPH = "@"
+
+type SuggestedBotsProps = {
+	bots: RosterBot[]
+	onPress?: (bot: RosterBot) => void
+}
+
+const SuggestedBots = ({ bots, onPress }: SuggestedBotsProps) => {
+	const { t } = useTranslation("chat")
+	const labelId = useId()
+
+	return (
+		<div
+			aria-labelledby={labelId}
+			className="flex w-full flex-col items-center gap-2.5"
+			data-slot="conversation-suggested-bots"
+			role="group"
+		>
+			<p className="text-muted-foreground text-xs" id={labelId}>
+				{t("conversationEmptyState.nobody.suggested")}
+			</p>
+			<div className="flex max-w-full flex-wrap justify-center gap-2">
+				{bots.map((bot) => (
+					<Button
+						className="max-w-full rounded-full ps-1.5 text-foreground"
+						data-slot="conversation-suggested-bot"
+						key={bot.id}
+						onClick={() => onPress?.(bot)}
+						variant="outline"
+					>
+						<span aria-hidden="true" className="flex shrink-0">
+							<BotIdentityAvatar
+								animal={bot.animal}
+								blot={bot.blot}
+								image={bot.image}
+								name={bot.name}
+								seed={bot.id}
+								size={SUGGESTED_AVATAR_SIZE}
+							/>
+						</span>
+						<span className="min-w-0 truncate">{bot.name}</span>
+					</Button>
+				))}
+			</div>
+		</div>
+	)
+}
+
 const ConversationEmptyState = ({
 	title,
 	bots,
+	suggestedBots = [],
+	onSuggestedBotPress,
 	className,
 	...props
 }: ConversationEmptyStateProps) => {
 	const { t } = useTranslation("chat")
+
+	if (bots.length === 0) {
+		return (
+			<EmptyStateShell
+				action={
+					suggestedBots.length > 0 ? (
+						<SuggestedBots bots={suggestedBots} onPress={onSuggestedBotPress} />
+					) : undefined
+				}
+				className={cn("m-auto", className)}
+				data-slot="conversation-empty-state"
+				description={t("conversationEmptyState.nobody.description")}
+				mark={
+					<span
+						aria-hidden="true"
+						className="grid size-14 place-items-center rounded-[1rem] border border-border text-2xl text-muted-foreground leading-7"
+						data-slot="conversation-empty-mark"
+					>
+						{MENTION_GLYPH}
+					</span>
+				}
+				title={t("conversationEmptyState.nobody.title")}
+				{...props}
+			/>
+		)
+	}
 
 	return (
 		<EmptyStateShell

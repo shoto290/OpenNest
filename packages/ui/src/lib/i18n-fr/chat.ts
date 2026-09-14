@@ -24,6 +24,18 @@ const chat = {
 		description_many: "{{count}} compagnons sont prêts.",
 		description_other: "{{count}} compagnons sont prêts.",
 		hint: "Écrivez à un compagnon pour commencer.",
+		nobody: {
+			title: "Personne n'est encore dans cette conversation",
+			description:
+				"Tapez @ et choisissez un nom. Qui vous mentionnez rejoint la conversation, et peut à son tour faire venir qui il lui faut.",
+			suggested: "Ceux à qui vous parlez le plus",
+		},
+	},
+	conversationArrival: {
+		invitedByPerson:
+			"{{name}} a rejoint cette conversation, sur votre invitation",
+		invitedByCompanion:
+			"{{name}} a rejoint cette conversation, à l'invitation de {{inviter}}",
 	},
 	connection: {
 		checking: "Vérification de l'agent…",
@@ -138,6 +150,7 @@ const chat = {
 	composer: {
 		label: "Message",
 		placeholder: "Message",
+		mentionPlaceholder: "Écrivez à un compagnon avec @",
 		send: "Envoyer",
 		commands: "Commandes",
 		mentions: "Compagnons",
