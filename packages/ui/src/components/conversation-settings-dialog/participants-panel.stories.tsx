@@ -4,13 +4,13 @@ import { expect, fn } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import { slotsIn } from "@workspace/storybook/story-utils"
 import {
+	CONVERSATION_BOTS,
+	LONG_NAMED_BOTS,
+} from "@workspace/ui/components/bots.fixtures"
+import {
 	ParticipantsPanel,
 	type ParticipantsPanelProps,
 } from "@workspace/ui/components/conversation-settings-dialog/participants-panel"
-import {
-	CONVERSATION_BOTS,
-	LONG_NAMED_BOTS,
-} from "@workspace/ui/components/new-conversation-dialog/bots.fixtures"
 
 const SEATED = CONVERSATION_BOTS.slice(0, 3)
 
@@ -27,14 +27,6 @@ const PanelHost = (props: ParticipantsPanelProps) => {
 		props.onDismiss(id)
 	}
 
-	const recruit = (id: string) => {
-		const recruited = props.bots.find((bot) => bot.id === id)
-		if (recruited) {
-			setParticipants([...participants, recruited])
-		}
-		props.onRecruit(id)
-	}
-
 	return (
 		<ParticipantsPanel
 			{...props}
@@ -44,7 +36,6 @@ const PanelHost = (props: ParticipantsPanelProps) => {
 				setLeadId(id)
 				props.onLeadChange(id)
 			}}
-			onRecruit={recruit}
 			participants={participants}
 		/>
 	)
@@ -58,17 +49,15 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Who takes part in a conversation, and who leads it. The seated companions are listed in the order they joined — the list never reorders itself, because that order is the conversation's history — and exactly one of them wears the crown. Moving the crown is a press on another row's crown; dismissing is the cross beside it. The panel owns nothing but the search string: every press is reported up, so the screen decides what a dismissal or a handover means. Two rules are enforced here rather than upstream — the last companion seated cannot be dismissed, and a companion already seated is never offered again, so the roster below only ever shows companions that can actually be recruited. Reach for `BotPicker` for that roster on its own, and for `ConversationSettingsDialog` for the panel in its rail.",
+					"Who takes part in a conversation, and who leads it. The seated companions are listed in the order they joined — the list never reorders itself, because that order is the conversation's history — and exactly one of them wears the crown. Moving the crown is a press on another row's crown; dismissing is the cross beside it. The panel holds no state of its own: every press is reported up, so the screen decides what a dismissal or a handover means. One rule is enforced here rather than upstream: the last companion seated cannot be dismissed, because a conversation with nobody in it cannot answer. Joining happens in the composer, by mention, never here. Reach for `ConversationSettingsDialog` for the panel in its rail.",
 			},
 		},
 	},
 	args: {
 		participants: SEATED,
 		leadId: SEATED[0]?.id ?? "",
-		bots: CONVERSATION_BOTS,
 		onLeadChange: fn(),
 		onDismiss: fn(),
-		onRecruit: fn(),
 	},
 	render: (args) => <PanelHost {...args} />,
 })
@@ -78,7 +67,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"Three companions seated, the first leading. Check that the crown sits on exactly one row, that pressing another row's crown reports that companion and leaves a single crown behind, and that the leading row offers no crown button of its own — it is already the lead, there is nothing to press. Pick `LastParticipant` for the row that cannot be dismissed, `Empty` for a conversation nobody else can join.",
+					"Three companions seated, the first leading. Check that the crown sits on exactly one row, that pressing another row's crown reports that companion and leaves a single crown behind, and that the leading row offers no crown button of its own — it is already the lead, there is nothing to press. Pick `LastParticipant` for the row that cannot be dismissed.",
 			},
 		},
 	},
@@ -103,7 +92,7 @@ export const Dismissed = meta.story({
 		docs: {
 			description: {
 				story:
-					"A companion is sent out of the conversation. Check that the dismissed companion is the one reported and the one that leaves the list, that the rows left keep their joining order, and that the roster below now offers that companion back — dismissing returns it to the space, it does not delete it.",
+					"A companion is sent out of the conversation. Check that the dismissed companion is the one reported and the one that leaves the list, and that the rows left keep their joining order — dismissing returns that companion to the space, it does not delete it.",
 			},
 		},
 	},
@@ -118,29 +107,6 @@ export const Dismissed = meta.story({
 		await expect(rows).toHaveLength(2)
 		await expect(rows[0]).toHaveTextContent("Atlas")
 		await expect(rows[1]).toHaveTextContent("Clémence")
-		await expect(canvas.getByRole("button", { name: "Basile" })).toBeVisible()
-	},
-})
-
-export const Recruited = meta.story({
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"A companion from the space joins. Check that the recruit is reported and lands at the bottom of the list, never at the top — joining does not take the crown — and that its row disappears from the roster once it is seated, so it cannot be recruited twice.",
-			},
-		},
-	},
-	play: async ({ args, canvas, canvasElement, userEvent }) => {
-		await userEvent.click(canvas.getByRole("button", { name: "Elia" }))
-
-		await expect(args.onRecruit).toHaveBeenCalledWith("bot-elia")
-
-		const rows = slotsIn(canvasElement, "participant")
-		await expect(rows).toHaveLength(4)
-		await expect(rows[3]).toHaveTextContent("Elia")
-		await expect(rows[3]).not.toHaveTextContent("Lead")
-		await expect(canvas.queryByRole("button", { name: "Elia" })).toBe(null)
 	},
 })
 
@@ -153,42 +119,17 @@ export const LastParticipant = meta.story({
 		docs: {
 			description: {
 				story:
-					"One companion left. A conversation with nobody in it cannot answer, so the last seat is held: the dismiss control is disabled and a line under the list says why, rather than letting the press fail silently. Check that the crown stays on that row and that recruiting anyone from the roster below frees the dismissal again.",
+					"One companion left. A conversation with nobody in it cannot answer, so the last seat is held: the dismiss control is disabled and a line under the list says why, rather than letting the press fail silently. Check that the crown stays on that row.",
 			},
 		},
 	},
-	play: async ({ args, canvas, canvasElement, userEvent }) => {
+	play: async ({ args, canvas, canvasElement }) => {
 		await expect(
 			canvas.getByRole("button", { name: "Dismiss Atlas" }),
 		).toBeDisabled()
 		await expect(slotsIn(canvasElement, "participants-last")).toHaveLength(1)
+		await expect(slotsIn(canvasElement, "participant-lead")).toHaveLength(1)
 		await expect(args.onDismiss).not.toHaveBeenCalled()
-
-		await userEvent.click(canvas.getByRole("button", { name: "Faust" }))
-		await expect(
-			canvas.getByRole("button", { name: "Dismiss Atlas" }),
-		).toBeEnabled()
-	},
-})
-
-export const Empty = meta.story({
-	args: {
-		participants: CONVERSATION_BOTS,
-		bots: CONVERSATION_BOTS,
-	},
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"Every companion of the space is already seated, so there is nobody left to recruit. Check that the search field goes with the roster instead of standing over an empty list — searching a set with nothing in it is a dead end — and that a sentence says why rather than leaving a gap. This is not the same as `BotPicker`'s empty state, which covers a search matching nothing.",
-			},
-		},
-	},
-	play: async ({ canvas, canvasElement }) => {
-		await expect(
-			slotsIn(canvasElement, "participants-all-seated"),
-		).toHaveLength(1)
-		await expect(canvas.queryByLabelText("Companions")).toBe(null)
 	},
 })
 
@@ -196,7 +137,6 @@ export const LongContent = meta.story({
 	args: {
 		participants: LONG_NAMED_BOTS,
 		leadId: "bot-release",
-		bots: [...LONG_NAMED_BOTS, ...CONVERSATION_BOTS],
 	},
 	parameters: {
 		docs: {

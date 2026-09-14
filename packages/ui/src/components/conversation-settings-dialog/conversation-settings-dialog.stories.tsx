@@ -7,13 +7,13 @@ import {
 	slotsIn,
 } from "@workspace/storybook/story-utils"
 import {
+	CONVERSATION_BOTS,
+	LONG_NAMED_BOTS,
+} from "@workspace/ui/components/bots.fixtures"
+import {
 	ConversationSettingsDialog,
 	type ConversationSettingsDialogProps,
 } from "@workspace/ui/components/conversation-settings-dialog"
-import {
-	CONVERSATION_BOTS,
-	LONG_NAMED_BOTS,
-} from "@workspace/ui/components/new-conversation-dialog/bots.fixtures"
 
 const SEATED = CONVERSATION_BOTS.slice(0, 3)
 
@@ -32,14 +32,6 @@ const DialogHost = (props: ConversationSettingsDialogProps) => {
 		props.onDismiss(id)
 	}
 
-	const recruit = (id: string) => {
-		const recruited = props.bots.find((bot) => bot.id === id)
-		if (recruited) {
-			setParticipants([...participants, recruited])
-		}
-		props.onRecruit(id)
-	}
-
 	return (
 		<ConversationSettingsDialog
 			{...props}
@@ -53,7 +45,6 @@ const DialogHost = (props: ConversationSettingsDialogProps) => {
 				setLeadId(id)
 				props.onLeadChange(id)
 			}}
-			onRecruit={recruit}
 			onValueChange={(next) => {
 				setValue(next)
 				props.onValueChange(next)
@@ -88,7 +79,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Everything a conversation is, behind one rail: its name, who takes part, the instructions every companion in it shares, and the one way to end it. The panes are split the way a reader changes their mind — renaming is a keystroke, changing who leads is a decision, deleting is a question — so the destructive pane sits below a separator and never next to the name field. The dialog holds no draft: every keystroke and every press is reported as it happens, which is what lets the screen persist a rename without a save button. The instructions pane is the conversation's own brief, shared by every companion seated — a companion's own instructions live in `BotSettingsDialog` instead. Reach for `ParticipantsPanel` for the seating on its own, `NewConversationDialog` for the conversation that does not exist yet.",
+					"Everything a conversation is, behind one rail: its name, who takes part, the instructions every companion in it shares, and the one way to end it. The panes are split the way a reader changes their mind — renaming is a keystroke, changing who leads is a decision, deleting is a question — so the destructive pane sits below a separator and never next to the name field. The dialog holds no draft: every keystroke and every press is reported as it happens, which is what lets the screen persist a rename without a save button. The instructions pane is the conversation's own brief, shared by every companion seated — a companion's own instructions live in `BotSettingsDialog` instead. Reach for `ParticipantsPanel` for the seating on its own.",
 			},
 		},
 	},
@@ -101,12 +92,10 @@ const meta = preview.meta({
 		},
 		participants: SEATED,
 		leadId: SEATED[0]?.id ?? "",
-		bots: CONVERSATION_BOTS,
 		onClose: fn(),
 		onValueChange: fn(),
 		onLeadChange: fn(),
 		onDismiss: fn(),
-		onRecruit: fn(),
 		onDelete: fn(),
 	},
 	render: (args) => <DialogHost {...args} />,
@@ -141,7 +130,7 @@ export const Participants = meta.story({
 		docs: {
 			description: {
 				story:
-					"The seating pane. Check that the companions are listed in joining order with one crown on the lead, that moving the crown reports that companion and leaves a single crown behind, and that the roster below never offers a companion already seated. `ParticipantsPanel` covers dismissal and the last-seat rule on its own.",
+					"The seating pane. Check that the companions are listed in joining order with one crown on the lead, that moving the crown reports that companion and leaves a single crown behind, and that nothing here offers to seat anyone — joining a conversation happens in the composer, by mention. `ParticipantsPanel` covers dismissal and the last-seat rule on its own.",
 			},
 		},
 	},
@@ -158,10 +147,7 @@ export const Participants = meta.story({
 
 		await expect(args.onLeadChange).toHaveBeenCalledWith("bot-clemence")
 		await expect(slotsIn(dialog, "participant-lead")).toHaveLength(1)
-
-		await userEvent.click(inside.getByRole("button", { name: "Dorian" }))
-		await expect(args.onRecruit).toHaveBeenCalledWith("bot-dorian")
-		await expect(slotsIn(dialog, "participant")[3]).toHaveTextContent("Dorian")
+		await expect(inside.queryByRole("button", { name: "Dorian" })).toBe(null)
 	},
 })
 
@@ -251,7 +237,6 @@ export const LongContent = meta.story({
 		},
 		participants: LONG_NAMED_BOTS,
 		leadId: "bot-release",
-		bots: [...LONG_NAMED_BOTS, ...CONVERSATION_BOTS],
 	},
 	parameters: {
 		docs: {

@@ -66,6 +66,10 @@ import {
 	message,
 	seatBots,
 } from "@/lib/conversations/transcript-fixtures"
+import {
+	type ConversationSeating,
+	ConversationSeatingContext,
+} from "@/lib/conversations/use-conversation-seating"
 import type { Mission, MissionChanged } from "@/lib/missions/mission-contract"
 import { missionSummonsFor } from "@/lib/missions/mission-summons"
 import { missionsTransport } from "@/lib/missions/missions-transport"
@@ -2976,5 +2980,87 @@ describe("signing in from a companion's solo thread", () => {
 		expect(world.sent).toEqual([])
 		expect(world.greetings).toEqual([])
 		expect(fixture.driver.submissions).toEqual([])
+	})
+})
+
+const seatingOf = (
+	bots: Bot[],
+	seat: (conversationId: string, botId: string) => Promise<boolean>,
+): ConversationSeating => ({
+	seat,
+	botsByPresence: () => Promise.resolve(bots),
+})
+
+const seatlessRoomWith = async (
+	bots: Bot[],
+	seat: (conversationId: string, botId: string) => Promise<boolean>,
+) => {
+	const room = await roomOf({ names: [] })
+	render(
+		createElement(
+			ConversationSeatingContext.Provider,
+			{ value: seatingOf(bots, seat) },
+			screenOf(room.thread, bots),
+		),
+	)
+	await settle()
+	return room
+}
+
+const composerValue = () =>
+	(screen.getByRole("textbox", { name: "Message" }) as HTMLTextAreaElement)
+		.value
+
+describe("ThreadScreen on a conversation nobody is in", () => {
+	let layout: FakeLayout
+
+	beforeEach(() => {
+		layout = fakeLayout()
+		vi.clearAllMocks()
+		listRoutines.mockResolvedValue([])
+		listRuns.mockResolvedValue([])
+		listSources.mockResolvedValue([SCHEDULE_SOURCE])
+		listMissions.mockResolvedValue({ open: [], done: [] })
+		listenToMissions.mockResolvedValue(() => undefined)
+	})
+
+	afterEach(() => {
+		cleanup()
+		layout.restore()
+	})
+
+	it("offers the first five companions the presence ranking answers", async () => {
+		const seat = vi.fn(() => Promise.resolve(true))
+		const ranked = ["Vela", "Orb", "Nyx", "Ada", "Sol", "Wren"]
+		await seatlessRoomWith(
+			ranked.map((name) => botOf(name.toLowerCase(), name)),
+			seat,
+		)
+
+		for (const name of ranked.slice(0, 5)) {
+			expect(screen.getByRole("button", { name })).toBeTruthy()
+		}
+		expect(screen.queryByRole("button", { name: "Wren" })).toBeNull()
+	})
+
+	it("seats the pressed companion then writes its mention in the prompt", async () => {
+		const seat = vi.fn(() => Promise.resolve(true))
+		const room = await seatlessRoomWith([botOf("vela", "Vela")], seat)
+
+		fireEvent.click(screen.getByRole("button", { name: "Vela" }))
+		await settle()
+
+		expect(seat).toHaveBeenCalledWith(room.thread.conversation.id, "vela")
+		expect(composerValue()).toBe("@Vela ")
+	})
+
+	it("leaves the prompt alone when seating the pressed companion fails", async () => {
+		const seat = vi.fn(() => Promise.resolve(false))
+		await seatlessRoomWith([botOf("vela", "Vela")], seat)
+
+		fireEvent.click(screen.getByRole("button", { name: "Vela" }))
+		await settle()
+
+		expect(composerValue()).toBe("")
 	})
 })

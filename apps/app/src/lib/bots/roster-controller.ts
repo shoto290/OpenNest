@@ -22,7 +22,6 @@ import type {
 	Bot,
 	BotDraft,
 	Conversation,
-	ConversationDraft,
 	Participant,
 	RosterPin,
 	SpaceError,
@@ -67,8 +66,6 @@ export type RosterEntry = {
 	lastRowId: string | null
 }
 
-export type NewConversation = Pick<ConversationDraft, "title" | "botIds">
-
 export type RosterController = {
 	getState: () => RosterState
 	subscribe: (listener: () => void) => () => void
@@ -81,7 +78,7 @@ export type RosterController = {
 	selectConversation: (id: string) => void
 	create: () => Promise<void>
 	createFromDraft: (draft: BotDraft) => Promise<Bot>
-	createConversation: (draft: NewConversation) => Promise<Conversation | null>
+	createConversation: () => Promise<Conversation | null>
 	duplicate: (id: string, spaceId?: string) => Promise<Bot | null>
 	edit: (id: string) => void
 	setEditing: (isEditing: boolean) => void
@@ -105,15 +102,19 @@ export type RosterController = {
 	setConversationEditing: (isEditing: boolean) => void
 	describeConversation: (id: string, value: ConversationSettingsValue) => void
 	nameConversation: (id: string, title: string) => void
-	setConversationLead: (conversationId: string, botId: string) => Promise<void>
+	setConversationLead: (
+		conversationId: string,
+		botId: string,
+	) => Promise<boolean>
 	recruitToConversation: (
 		conversationId: string,
 		botId: string,
-	) => Promise<void>
+	) => Promise<boolean>
 	dismissFromConversation: (
 		conversationId: string,
 		botId: string,
-	) => Promise<void>
+	) => Promise<boolean>
+	botsByPresence: (conversationId: string) => Promise<Bot[]>
 	removeConversation: (id: string) => Promise<void>
 }
 
@@ -257,6 +258,12 @@ const withoutThreadsOf = (
 	)
 
 const NO_SPACE = { kind: "unknownSpace", id: "" } satisfies SpaceError
+
+const NO_TITLE = ""
+
+const NOBODY_SEATED: string[] = []
+
+const NO_BOTS: Bot[] = []
 
 const namesTheLastSpace = (reason: unknown): boolean =>
 	typeof reason === "object" &&
@@ -562,12 +569,19 @@ export const createRosterController = (
 		onRefused: reload,
 	})
 
+	const refuseSeatMove = async () => {
+		reportFailure({ title: i18n.t("chat:conversationSeating.failed") })
+		await reload()
+		return false
+	}
+
 	const seatMove =
 		(move: (conversationId: string, botId: string) => Promise<Conversation>) =>
 		(conversationId: string, botId: string) =>
 			enqueue(async () => {
 				applyConversation(await move(conversationId, botId))
-			}).catch(reload)
+				return true
+			}).catch(refuseSeatMove)
 
 	const conversationWrites = createWriteLoop<
 		ConversationSettingsValue,
@@ -673,7 +687,7 @@ export const createRosterController = (
 				return written
 			}),
 
-		createConversation: ({ title, botIds }: NewConversation) =>
+		createConversation: () =>
 			enqueue(async () => {
 				const spaceId = state.spaceId
 				if (spaceId === null) {
@@ -682,8 +696,8 @@ export const createRosterController = (
 				const created = await store.createConversation({
 					spaceId,
 					sectionId: null,
-					title,
-					botIds,
+					title: NO_TITLE,
+					botIds: NOBODY_SEATED,
 				})
 				admitConversation(created, spaceId)
 				return created
@@ -928,6 +942,13 @@ export const createRosterController = (
 		setConversationLead: seatMove(store.setConversationLead),
 
 		recruitToConversation: seatMove(store.addConversationParticipant),
+
+		botsByPresence: (conversationId: string) => {
+			const spaceId = state.spaceId
+			return spaceId === null
+				? Promise.resolve(NO_BOTS)
+				: store.botsByPresence(spaceId, conversationId)
+		},
 
 		dismissFromConversation: seatMove(store.removeConversationParticipant),
 

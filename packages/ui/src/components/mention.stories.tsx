@@ -2,12 +2,12 @@ import type { ReactNode } from "react"
 import { expect } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { Markdown } from "@workspace/ui/components/markdown"
-import { Mention } from "@workspace/ui/components/mention"
 import {
 	CONVERSATION_BOTS,
 	LONG_NAMED_BOTS,
-} from "@workspace/ui/components/new-conversation-dialog/bots.fixtures"
+} from "@workspace/ui/components/bots.fixtures"
+import { Markdown } from "@workspace/ui/components/markdown"
+import { Mention } from "@workspace/ui/components/mention"
 import { RosterProvider } from "@workspace/ui/components/roster"
 
 const ROOM = [...CONVERSATION_BOTS.slice(0, 3), ...LONG_NAMED_BOTS]

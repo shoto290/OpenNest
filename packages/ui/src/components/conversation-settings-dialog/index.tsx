@@ -40,10 +40,8 @@ type ConversationSettingsDialogProps = {
 	onValueChange: (value: ConversationSettingsValue) => void
 	participants: RosterBot[]
 	leadId: string
-	bots: RosterBot[]
 	onLeadChange: (id: string) => void
 	onDismiss: (id: string) => void
-	onRecruit: (id: string) => void
 	onDelete: () => void
 	className?: string
 }
@@ -55,10 +53,8 @@ const ConversationSettingsDialog = ({
 	onValueChange,
 	participants,
 	leadId,
-	bots,
 	onLeadChange,
 	onDismiss,
-	onRecruit,
 	onDelete,
 	className,
 }: ConversationSettingsDialogProps) => {
@@ -142,11 +138,9 @@ const ConversationSettingsDialog = ({
 
 					<SettingsScrollingPanel value="participants">
 						<ParticipantsPanel
-							bots={bots}
 							leadId={leadId}
 							onDismiss={onDismiss}
 							onLeadChange={onLeadChange}
-							onRecruit={onRecruit}
 							participants={participants}
 						/>
 					</SettingsScrollingPanel>

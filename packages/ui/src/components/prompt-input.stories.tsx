@@ -3,8 +3,8 @@ import { expect, fn, waitFor, type within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { slotsIn } from "@workspace/storybook/story-utils"
+import { CONVERSATION_BOTS } from "@workspace/ui/components/bots.fixtures"
 import { Icons } from "@workspace/ui/components/icons"
-import { CONVERSATION_BOTS } from "@workspace/ui/components/new-conversation-dialog/bots.fixtures"
 import { PromptAttachButton } from "@workspace/ui/components/prompt-attach-button"
 import { PromptAttachments } from "@workspace/ui/components/prompt-attachments"
 import {

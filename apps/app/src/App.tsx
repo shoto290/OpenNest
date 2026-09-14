@@ -4,7 +4,6 @@ import { AppSidebar } from "@workspace/ui/components/app-sidebar"
 import { readBotOutputStyle } from "@workspace/ui/components/bot-settings"
 import { BotSettingsDialog } from "@workspace/ui/components/bot-settings-dialog"
 import { ConversationSettingsDialog } from "@workspace/ui/components/conversation-settings-dialog"
-import { NewConversationDialog } from "@workspace/ui/components/new-conversation-dialog"
 import { NoticeSurface } from "@workspace/ui/components/notice-surface"
 import { SearchPalette } from "@workspace/ui/components/search-palette"
 import { SpaceSettingsDialog } from "@workspace/ui/components/space-settings-dialog"
@@ -66,7 +65,6 @@ import {
 	toConversationBots,
 	toConversationSettingsValue,
 	toRosterConversations,
-	unseatedBots,
 } from "@/lib/conversations/roster-conversations"
 import type { EnvOwner, EnvScope } from "@/lib/conversations/store-contract"
 import {
@@ -74,6 +72,10 @@ import {
 	useConversationWorkers,
 } from "@/lib/conversations/use-conversation"
 import { useConversationBadges } from "@/lib/conversations/use-conversation-badges"
+import {
+	type ConversationSeating,
+	ConversationSeatingContext,
+} from "@/lib/conversations/use-conversation-seating"
 import { toEnvironmentRows } from "@/lib/environment/environment-rows"
 import { useEnvironment } from "@/lib/environment/use-environment"
 import { hasOverlayWindowControls, isSidebarResizable } from "@/lib/host"
@@ -292,7 +294,6 @@ export function App() {
 		[missionBoard, conversationRosters, soloThreads, waitingMissionIds],
 	)
 
-	const [isCreatingConversation, setIsCreatingConversation] = useState(false)
 	const [openedMcpServer, setOpenedMcpServer] = useState<EnvScope | null>(null)
 	const [settingsTab, setSettingsTab] = useState<string>()
 	const openedServerName =
@@ -474,9 +475,16 @@ export function App() {
 
 	const rosters = roster.state.rosters
 
-	const startConversation = useCallback(
-		() => setIsCreatingConversation(true),
-		[],
+	const startConversation = useCallback(() => {
+		void roster.controller.createConversation()
+	}, [roster.controller])
+
+	const conversationSeating = useMemo<ConversationSeating>(
+		() => ({
+			seat: roster.controller.recruitToConversation,
+			botsByPresence: roster.controller.botsByPresence,
+		}),
+		[roster.controller],
 	)
 
 	const sidebarActions = useSidebarActions({
@@ -654,12 +662,6 @@ export function App() {
 		[settingsConversation],
 	)
 
-	const recruitableBots = useMemo(
-		() =>
-			settingsConversation ? unseatedBots(bots, settingsConversation) : [],
-		[bots, settingsConversation],
-	)
-
 	const rosterConversationsBySpace = useMemo(
 		() =>
 			Object.fromEntries(
@@ -707,7 +709,6 @@ export function App() {
 		isEditingConversation,
 		user.state.isSettingsOpen,
 		isSpaceEditing,
-		isCreatingConversation,
 	].some(Boolean)
 
 	const searchLookups = useSearchLookups({
@@ -834,40 +835,33 @@ export function App() {
 					/>
 				}
 			>
-				<SessionConnectorsContext.Provider value={sessionConnectors}>
-					<WorkspaceBody
-						activityPanel={activityPanel}
-						attachments={attachments}
-						bot={selected}
-						bots={bots}
-						chat={chat}
-						conversation={selectedConversation}
-						conversationRuntimes={conversationRuntimes}
-						drafts={drafts}
-						haveSpacesFailed={spaces.state.hasFailedToLoad}
-						isConversationSettingsOpen={isThreadConversationSettingsOpen}
-						isOverlayOpen={isOverlayOpen}
-						isSettingsOpen={isThreadSettingsOpen}
-						landings={messageLandings}
-						missions={openedMission}
-						onboarding={preferences.firstRunDone ? undefined : onboarding}
-						onOpenConversationSettings={roster.controller.editConversation}
-						onRetrySpaces={loadSpaces}
-						onToggleSettings={toggleSettings}
-						readerName={preferences.displayName}
-						signIn={signIn}
-					/>
-				</SessionConnectorsContext.Provider>
+				<ConversationSeatingContext.Provider value={conversationSeating}>
+					<SessionConnectorsContext.Provider value={sessionConnectors}>
+						<WorkspaceBody
+							activityPanel={activityPanel}
+							attachments={attachments}
+							bot={selected}
+							bots={bots}
+							chat={chat}
+							conversation={selectedConversation}
+							conversationRuntimes={conversationRuntimes}
+							drafts={drafts}
+							haveSpacesFailed={spaces.state.hasFailedToLoad}
+							isConversationSettingsOpen={isThreadConversationSettingsOpen}
+							isOverlayOpen={isOverlayOpen}
+							isSettingsOpen={isThreadSettingsOpen}
+							landings={messageLandings}
+							missions={openedMission}
+							onboarding={preferences.firstRunDone ? undefined : onboarding}
+							onOpenConversationSettings={roster.controller.editConversation}
+							onRetrySpaces={loadSpaces}
+							onToggleSettings={toggleSettings}
+							readerName={preferences.displayName}
+							signIn={signIn}
+						/>
+					</SessionConnectorsContext.Provider>
+				</ConversationSeatingContext.Provider>
 			</WorkspaceShell>
-			<NewConversationDialog
-				bots={rosterBots}
-				onClose={() => setIsCreatingConversation(false)}
-				onCreate={({ name, botIds }) => {
-					setIsCreatingConversation(false)
-					void roster.controller.createConversation({ title: name, botIds })
-				}}
-				open={isCreatingConversation}
-			/>
 			{settingsBot ? (
 				<BotSettingsDialog
 					history={botHistory}
@@ -969,7 +963,6 @@ export function App() {
 			) : null}
 			{settingsConversation ? (
 				<ConversationSettingsDialog
-					bots={recruitableBots}
 					leadId={leadOf(settingsConversation) ?? ""}
 					onClose={() => roster.controller.setConversationEditing(false)}
 					onDelete={() => {
@@ -983,12 +976,6 @@ export function App() {
 					}}
 					onLeadChange={(botId) => {
 						void roster.controller.setConversationLead(
-							settingsConversation.id,
-							botId,
-						)
-					}}
-					onRecruit={(botId) => {
-						void roster.controller.recruitToConversation(
 							settingsConversation.id,
 							botId,
 						)

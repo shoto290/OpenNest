@@ -9,6 +9,8 @@ const MENTION_TOKEN = /<@([\w-]+)>/g
 
 const MENTION_DRAFT = /(?:^|\s)@([^\s@]*)$/
 
+const TRAILING_SPACE = /\s$/
+
 const ARROBASE = "@"
 
 const tokenOf = (botId: string) => `<@${botId}>`
@@ -73,13 +75,28 @@ export const mentionQueryIn = (prompt: string): string | null => {
 	return draft ? draft[1] : null
 }
 
+const mentionOf = (name: string) => `${ARROBASE}${name} `
+
+const spacedEnd = (prompt: string) =>
+	prompt.length === 0 || TRAILING_SPACE.test(prompt) ? prompt : `${prompt} `
+
 export const promptWithMention = (prompt: string, name: string): string => {
 	const draft = MENTION_DRAFT.exec(prompt)
 	if (!draft) {
 		return prompt
 	}
 	const kept = prompt.slice(0, prompt.length - draft[1].length - 1)
-	return `${kept}${ARROBASE}${name} `
+	return `${kept}${mentionOf(name)}`
+}
+
+export const promptWithMentionAdded = (
+	prompt: string,
+	name: string,
+): string => {
+	const draft = MENTION_DRAFT.exec(prompt)
+	return draft
+		? promptWithMention(prompt, name)
+		: `${spacedEnd(prompt)}${mentionOf(name)}`
 }
 
 export const mentionCountsIn = (
