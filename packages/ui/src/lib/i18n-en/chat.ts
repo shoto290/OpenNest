@@ -22,6 +22,17 @@ const chat = {
 		description_one: "{{count}} companion is ready.",
 		description_other: "{{count}} companions are ready.",
 		hint: "Message a companion to start.",
+		nobody: {
+			title: "Nobody is in this conversation yet",
+			description:
+				"Type @ and pick a name. Whoever you mention joins, and they can bring in anyone else they need.",
+			suggested: "The ones you talk to most",
+		},
+	},
+	conversationArrival: {
+		invitedByPerson: "{{name}} joined this conversation, invited by you",
+		invitedByCompanion:
+			"{{name}} joined this conversation, invited by {{inviter}}",
 	},
 	connection: {
 		checking: "Checking the agent…",
