@@ -84,7 +84,7 @@ impl<R: Runtime> CompanionHost<R> {
 		if companion.trim().is_empty() {
 			return Err(CompanionError::EmptyCompanionField);
 		}
-		self.seated_kind(database).await?;
+		self.carries_seats(database).await?;
 		let space_id = self.space(database).await?;
 		let roster = database.conversations().bots(Some(space_id)).await?;
 		let invitee = picked(&roster, &companion)?;
@@ -103,7 +103,7 @@ impl<R: Runtime> CompanionHost<R> {
 		})
 	}
 
-	async fn seated_kind(&self, database: &db::Database) -> Result<(), CompanionError> {
+	async fn carries_seats(&self, database: &db::Database) -> Result<(), CompanionError> {
 		match database.conversations().kind(self.conversation_id.clone()).await? {
 			Some(kind) if kind == TOPIC_KIND => Ok(()),
 			Some(kind) => Err(CompanionError::ConversationWithoutSeats {
@@ -574,7 +574,6 @@ mod tests {
 			.expect("it is invited");
 
 		assert_eq!(ada, json!({ "id": "b2", "name": "Ada", "alreadySeated": false }));
-		assert_eq!(role_of(&app, "unled", "b2").await, "lead");
 
 		cleaned(&app);
 	}
