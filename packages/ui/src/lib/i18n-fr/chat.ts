@@ -220,6 +220,7 @@ const chat = {
 			workingDirectoryRefused: "Impossible de trouver le dossier du compagnon",
 			settingsRejected: "Impossible d'appliquer les réglages du compagnon",
 			serverEnvRejected: "Impossible de démarrer un connecteur",
+			notAuthenticated: "Vous n'êtes pas connecté",
 			unavailable: "Impossible de joindre l'agent",
 			failed: "Impossible d'envoyer cette demande",
 			readFailed: "Impossible de charger les messages précédents",
@@ -228,6 +229,8 @@ const chat = {
 			binaryNotFound: "Impossible de trouver l'agent. Réinstallez Kiroshi.",
 			notAuthenticated:
 				"Vous êtes déconnecté de votre abonnement Claude. Connectez-vous à Claude, puis relancez la conversation.",
+			notConnected:
+				"Votre compte Claude n'est pas connecté. Connectez-vous pour continuer.",
 			authCheckFailed:
 				"Impossible de vérifier votre connexion ({{detail}}). Redémarrez la session.",
 			spawnFailed:
