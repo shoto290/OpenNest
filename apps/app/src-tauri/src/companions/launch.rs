@@ -1,0 +1,127 @@
+use std::fmt::Debug;
+use std::sync::{Mutex, PoisonError};
+
+use serde::Serialize;
+use tauri::{AppHandle, Emitter, Manager, Runtime, State};
+
+use super::contract::{
+	CompanionCreated, CompanionSeedRefused, LaunchOutcome, CREATED_EVENT, SEED_REFUSED_EVENT,
+};
+
+const REASON_SEPARATOR: &str = "; ";
+
+#[derive(Debug, Default)]
+pub struct LaunchOutcomeState(Mutex<LaunchOutcome>);
+
+impl LaunchOutcomeState {
+	pub fn read(&self) -> LaunchOutcome {
+		self.0.lock().unwrap_or_else(PoisonError::into_inner).clone()
+	}
+
+	fn record(&self, outcome: LaunchOutcome) {
+		*self.0.lock().unwrap_or_else(PoisonError::into_inner) = outcome;
+	}
+}
+
+#[tauri::command]
+pub fn companion_launch_outcome(state: State<'_, LaunchOutcomeState>) -> LaunchOutcome {
+	state.read()
+}
+
+pub fn settle<R: Runtime>(
+	app: &AppHandle<R>,
+	created: Option<CompanionCreated>,
+	reasons: Vec<String>,
+) {
+	let outcome = LaunchOutcome {
+		created,
+		refused: (!reasons.is_empty())
+			.then(|| CompanionSeedRefused { reason: reasons.join(REASON_SEPARATOR) }),
+	};
+	match app.try_state::<LaunchOutcomeState>() {
+		Some(state) => state.record(outcome.clone()),
+		None => eprintln!("the launch outcome was not kept for a later read: {outcome:?}"),
+	}
+	if let Some(created) = outcome.created {
+		announce(app, CREATED_EVENT, created);
+	}
+	if let Some(refused) = outcome.refused {
+		announce(app, SEED_REFUSED_EVENT, refused);
+	}
+}
+
+fn announce<R: Runtime, T: Serialize + Clone + Debug>(app: &AppHandle<R>, event: &str, payload: T) {
+	if let Err(failure) = app.emit(event, payload.clone()) {
+		eprintln!("{event} was not announced for {payload:?}: {failure}");
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use tauri::test::{mock_app, MockRuntime};
+	use tauri::App;
+
+	use super::*;
+
+	fn a_host() -> App<MockRuntime> {
+		let app = mock_app();
+		app.manage(LaunchOutcomeState::default());
+		app
+	}
+
+	fn read_of(app: &App<MockRuntime>) -> LaunchOutcome {
+		companion_launch_outcome(app.state::<LaunchOutcomeState>())
+	}
+
+	fn shoto() -> CompanionCreated {
+		CompanionCreated { id: "b1".to_owned(), name: "Shoto".to_owned() }
+	}
+
+	#[test]
+	fn a_launch_that_planted_and_gathered_a_reason_answers_both() {
+		let app = a_host();
+
+		settle(app.handle(), Some(shoto()), vec!["the system plugin was not laid down".to_owned()]);
+
+		assert_eq!(
+			read_of(&app),
+			LaunchOutcome {
+				created: Some(shoto()),
+				refused: Some(CompanionSeedRefused {
+					reason: "the system plugin was not laid down".to_owned()
+				}),
+			}
+		);
+	}
+
+	#[test]
+	fn the_outcome_answers_the_same_to_every_read() {
+		let app = a_host();
+		settle(app.handle(), Some(shoto()), vec!["the personal space is missing".to_owned()]);
+
+		let first = read_of(&app);
+
+		assert_eq!(read_of(&app), first, "a read emptied what the next one needed");
+	}
+
+	#[test]
+	fn a_launch_that_gathered_several_reasons_answers_them_in_one() {
+		let app = a_host();
+
+		settle(app.handle(), None, vec!["the first".to_owned(), "the second".to_owned()]);
+
+		assert_eq!(
+			read_of(&app).refused,
+			Some(CompanionSeedRefused { reason: "the first; the second".to_owned() })
+		);
+	}
+
+	#[test]
+	fn a_launch_that_did_nothing_answers_nothing() {
+		let app = a_host();
+
+		settle(app.handle(), None, Vec::new());
+
+		assert_eq!(read_of(&app), LaunchOutcome::default());
+	}
+}

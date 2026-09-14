@@ -62,6 +62,7 @@ const bots = {
 			delete: "Supprimer",
 			empty: "Déposez un compagnon ici",
 		},
+		seedRefused: "Votre premier compagnon n'a pas pu être créé",
 	},
 	spaces: {
 		label: "Espaces",
