@@ -21,13 +21,13 @@ export type SignInActions = {
 	pasteKeyInstead: () => Promise<void>
 }
 
-export type SignInHost = {
+type SignInHost = {
 	showConnection: (connection: ConnectionStep) => void
 	setBusy: (isBusy: boolean) => void
 	settle: () => Promise<void>
 }
 
-export type SignInFlow = {
+type SignInFlow = {
 	readAccount: () => Promise<void>
 	actions: SignInActions
 }

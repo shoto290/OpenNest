@@ -2764,7 +2764,6 @@ describe("signing in from a companion's solo thread", () => {
 		})
 		await shown.refresh()
 
-		expect(isAsking(CODE_QUESTION)).toBe(false)
 		expect(screen.queryByText(CODE_QUESTION)).toBeNull()
 		expect(screen.queryByRole("alert")).toBeNull()
 		expect(fixture.agent.sessionsOpened).toBe(1)

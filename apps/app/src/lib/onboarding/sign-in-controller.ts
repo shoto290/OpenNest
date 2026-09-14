@@ -87,7 +87,7 @@ export const createSignInController = (
 	}
 }
 
-export type SignInScene = {
+type SignInScene = {
 	chat: ChatController
 	selectedBotId: () => string | null
 }
