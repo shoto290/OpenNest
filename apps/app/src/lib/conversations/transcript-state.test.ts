@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+	type CompanionArrival,
 	type TerminalCompletion,
 	TRANSCRIPT_PAGE_SIZE,
 	TRANSCRIPT_WINDOW_SIZE,
@@ -8,6 +9,7 @@ import {
 	type TranscriptDraft,
 	type TranscriptMessage,
 	type TranscriptPage,
+	type TranscriptWindow,
 } from "./transcript-contract"
 import {
 	CONVERSATION,
@@ -19,6 +21,7 @@ import {
 	isTerminalCompletion,
 	lastWordHeldIn,
 	lastWordIn,
+	selectArrivals,
 	selectHasMore,
 	selectHasNewer,
 	selectMessages,
@@ -802,5 +805,199 @@ describe("leaving a thread away from its newest end", () => {
 
 		expect(idsOf(reopened)).toEqual(["m-80"])
 		expect(selectHasMore(reopened, CONVERSATION)).toBe(true)
+	})
+})
+
+describe("the arrivals a conversation holds", () => {
+	const arrivalOf = (
+		id: string,
+		lastMessageSeq: number,
+		createdAt = 0,
+	): CompanionArrival => ({
+		id,
+		conversationId: CONVERSATION,
+		botId: "bot-2",
+		invitedByBotId: null,
+		lastMessageSeq,
+		createdAt,
+	})
+
+	const pageWith = (
+		messages: TranscriptMessage[],
+		arrivals: CompanionArrival[],
+		hasMore = false,
+	): TranscriptPage => ({
+		conversationId: CONVERSATION,
+		messages,
+		arrivals,
+		hasMore,
+	})
+
+	const windowWith = (
+		messages: TranscriptMessage[],
+		arrivals: CompanionArrival[],
+		hasNewer = false,
+	): TranscriptWindow => ({
+		conversationId: CONVERSATION,
+		messages,
+		arrivals,
+		hasOlder: true,
+		hasNewer,
+	})
+
+	const arrivalIdsOf = (state: TranscriptState): string[] =>
+		selectArrivals(state, CONVERSATION).map(({ id }) => id)
+
+	const announce = (state: TranscriptState, arrival: CompanionArrival) =>
+		transcriptReducer(state, { type: "arrivalAnnounced", arrival })
+
+	const HELD = load(
+		initialTranscriptState,
+		pageWith([message({ id: "m-5", seq: 5 })], [arrivalOf("a-5", 5)], true),
+	)
+
+	it("merges the arrivals of an older page by arrival id", () => {
+		const moved = { ...arrivalOf("a-5", 5), createdAt: 9 }
+		const merged = load(
+			HELD,
+			pageWith([message({ id: "m-2", seq: 2 })], [arrivalOf("a-2", 2), moved]),
+		)
+
+		expect(arrivalIdsOf(merged)).toEqual(["a-2", "a-5"])
+		expect(selectArrivals(merged, CONVERSATION)[1]).toEqual(moved)
+	})
+
+	it("holds the arrivals of a page carrying no message", () => {
+		const merged = load(
+			initialTranscriptState,
+			pageWith([], [arrivalOf("a-0", 0)]),
+		)
+
+		expect(arrivalIdsOf(merged)).toEqual(["a-0"])
+	})
+
+	it("merges the arrivals of a newer window", () => {
+		const landed = transcriptReducer(initialTranscriptState, {
+			type: "windowLanded",
+			window: windowWith([message({ id: "m-5", seq: 5 })], [], true),
+		})
+		const newer = transcriptReducer(landed, {
+			type: "newerLoaded",
+			window: windowWith(
+				[message({ id: "m-6", seq: 6 })],
+				[arrivalOf("a-6", 6)],
+			),
+		})
+
+		expect(arrivalIdsOf(newer)).toEqual(["a-6"])
+	})
+
+	it("replaces the arrivals it holds with those of a landed window", () => {
+		const landed = transcriptReducer(HELD, {
+			type: "windowLanded",
+			window: windowWith(
+				[message({ id: "m-40", seq: 40 })],
+				[arrivalOf("a-40", 40)],
+				true,
+			),
+		})
+
+		expect(arrivalIdsOf(landed)).toEqual(["a-40"])
+	})
+
+	it("replaces the arrivals it holds with those of the newest page", () => {
+		const latest = transcriptReducer(HELD, {
+			type: "latestLoaded",
+			page: pageWith([message({ id: "m-9", seq: 9 })], []),
+		})
+
+		expect(arrivalIdsOf(latest)).toEqual([])
+	})
+
+	it("orders arrivals by the message they follow, then by date, then by id", () => {
+		const held = load(
+			initialTranscriptState,
+			pageWith(
+				[message({ id: "m-1", seq: 1 })],
+				[
+					arrivalOf("c", 3, 1),
+					arrivalOf("b", 2, 5),
+					arrivalOf("z", 2, 4),
+					arrivalOf("a", 2, 4),
+				],
+			),
+		)
+
+		expect(arrivalIdsOf(held)).toEqual(["a", "z", "b", "c"])
+	})
+
+	it("holds an announced arrival as a read one, once per arrival id", () => {
+		const announced = announce(HELD, arrivalOf("a-4", 4))
+
+		expect(arrivalIdsOf(announced)).toEqual(["a-4", "a-5"])
+		expect(announce(announced, arrivalOf("a-4", 4))).toBe(announced)
+	})
+
+	it("ignores an announced arrival away from the newest message", () => {
+		const landed = transcriptReducer(HELD, {
+			type: "windowLanded",
+			window: windowWith([message({ id: "m-40", seq: 40 })], [], true),
+		})
+
+		expect(announce(landed, arrivalOf("a-99", 99))).toBe(landed)
+	})
+
+	it("keeps an arrival below the oldest message when an append drops nothing", () => {
+		const held = load(
+			initialTranscriptState,
+			pageWith([message({ id: "m-1", seq: 1 })], [arrivalOf("a-0", 0)]),
+		)
+
+		const grown = append(held, streamingDraft("live"))
+
+		expect(selectMessages(grown, CONVERSATION)).toHaveLength(2)
+		expect(arrivalIdsOf(grown)).toEqual(["a-0"])
+	})
+
+	it("still holds a companion invited into an empty conversation once a message is appended", () => {
+		const invited = announce(initialTranscriptState, arrivalOf("a-0", 0))
+
+		const grown = append(invited, streamingDraft("live"))
+
+		expect(idsOf(grown)).toEqual(["live"])
+		expect(arrivalIdsOf(grown)).toEqual(["a-0"])
+	})
+
+	it("drops the arrivals below the oldest message kept when the head is trimmed", () => {
+		const history = Array.from({ length: TRANSCRIPT_WINDOW_SIZE }, (_, index) =>
+			message({ id: `m-${index + 1}`, seq: index + 1, turnId: `t-${index}` }),
+		)
+		const full = load(
+			initialTranscriptState,
+			pageWith(history, [arrivalOf("a-1", 1), arrivalOf("a-2", 2)]),
+		)
+
+		const grown = append(full, streamingDraft("live"))
+
+		expect(selectOldestSeq(grown, CONVERSATION)).toBe(2)
+		expect(arrivalIdsOf(grown)).toEqual(["a-2"])
+	})
+
+	it("drops the arrivals below the oldest message kept when the reader leaves", () => {
+		const history = Array.from(
+			{ length: TRANSCRIPT_PAGE_SIZE + 5 },
+			(_, index) => message({ id: `m-${index + 1}`, seq: index + 1 }),
+		)
+		const held = load(
+			initialTranscriptState,
+			pageWith(history, [arrivalOf("a-0", 0), arrivalOf("a-6", 6)]),
+		)
+
+		const left = transcriptReducer(held, {
+			type: "threadLeft",
+			conversationId: CONVERSATION,
+		})
+
+		expect(arrivalIdsOf(left)).toEqual(["a-6"])
 	})
 })

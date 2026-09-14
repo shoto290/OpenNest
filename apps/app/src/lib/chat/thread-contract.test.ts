@@ -68,6 +68,7 @@ const conversationState = (
 ): ConversationState => ({
 	conversationId: "c-1",
 	messages: [],
+	arrivals: [],
 	hasOlder: false,
 	isLoadingOlder: false,
 	hasNewer: false,

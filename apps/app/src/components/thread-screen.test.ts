@@ -60,7 +60,10 @@ import {
 } from "@/lib/conversations/scripted-driver"
 import type { Bot, EnvOwner } from "@/lib/conversations/store-contract"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
-import type { TranscriptRole } from "@/lib/conversations/transcript-contract"
+import type {
+	CompanionArrival,
+	TranscriptRole,
+} from "@/lib/conversations/transcript-contract"
 import {
 	botIdentity,
 	message,
@@ -3062,5 +3065,170 @@ describe("ThreadScreen on a conversation nobody is in", () => {
 		await settle()
 
 		expect(composerValue()).toBe("")
+	})
+})
+
+type ArrivalRoom = {
+	bots: Bot[]
+	thread: ConversationThread
+}
+
+type ArrivalFixture = {
+	id: string
+	arriving: string
+	invitedBy: string | null
+	afterText: string | null
+}
+
+const ARRIVAL_SPOKEN: SpokenTurn[] = [
+	{ turnId: "t-ask", text: "which wall holds?", createdAt: 0, role: "user" },
+	{ turnId: "t-answer", text: "the north one", createdAt: A_MINUTE },
+	{
+		turnId: "t-again",
+		text: "and the south?",
+		createdAt: 2 * A_MINUTE,
+		role: "user",
+	},
+]
+
+const arrivalRoomOf = async (
+	fixtures: ArrivalFixture[],
+	absent: string[] = [],
+): Promise<ArrivalRoom> => {
+	const base = createFakeTranscriptStore()
+	const bots = await seatBots(base, SPACE, ["Ada", "Vela", "Orb"])
+	const idOf = (name: string) =>
+		bots.find((bot) => bot.name === name)?.id ?? name
+	const conversation = await base.createConversation({
+		spaceId: SPACE,
+		sectionId: null,
+		title: "Walls",
+		botIds: [idOf("Ada")],
+	})
+	for (const turn of ARRIVAL_SPOKEN) {
+		await writeTurn(base, conversation.id, idOf("Ada"), turn)
+	}
+	const { messages } = await base.loadPage(conversation.id, null)
+	const seqAfter = (text: string | null) =>
+		messages.find((said) => said.content === text)?.seq ?? 0
+	const arrivals: CompanionArrival[] = fixtures.map((fixture) => ({
+		id: fixture.id,
+		conversationId: conversation.id,
+		botId: idOf(fixture.arriving),
+		invitedByBotId: fixture.invitedBy ? idOf(fixture.invitedBy) : null,
+		lastMessageSeq: seqAfter(fixture.afterText),
+		createdAt: 0,
+	}))
+	const store: TranscriptStore = {
+		...base,
+		loadPage: async (conversationId, cursor) => ({
+			...(await base.loadPage(conversationId, cursor)),
+			arrivals,
+		}),
+	}
+
+	return {
+		bots: bots.filter((bot) => !absent.includes(bot.name)),
+		thread: {
+			kind: "conversation",
+			conversation,
+			runtimes: createConversationRuntimes(createScriptedDriver(), store),
+			isSettingsOpen: false,
+			onOpenSettings: () => undefined,
+		},
+	}
+}
+
+const renderArrivalRoom = async (room: ArrivalRoom) => {
+	render(screenOf(room.thread, room.bots))
+	await settle()
+}
+
+describe("ThreadScreen showing the companions that arrived", () => {
+	let layout: FakeLayout
+
+	beforeEach(() => {
+		layout = fakeLayout()
+		vi.clearAllMocks()
+		listRoutines.mockResolvedValue([])
+		listRuns.mockResolvedValue([])
+		listSources.mockResolvedValue([SCHEDULE_SOURCE])
+		listMissions.mockResolvedValue({ open: [], done: [] })
+		listenToMissions.mockResolvedValue(() => undefined)
+	})
+
+	afterEach(() => {
+		cleanup()
+		layout.restore()
+	})
+
+	it("names the reader as the inviter right after the run the arrival follows", async () => {
+		await renderArrivalRoom(
+			await arrivalRoomOf([
+				{
+					id: "a-1",
+					arriving: "Vela",
+					invitedBy: null,
+					afterText: "the north one",
+				},
+			]),
+		)
+
+		const arrival = rowIndexOf("Vela joined this conversation, invited by you")
+		expect(arrival).toBe(rowIndexOf("the north one") + 1)
+		expect(arrival).toBeLessThan(rowIndexOf("and the south?"))
+	})
+
+	it("names an inviting companion from the space roster even when it is not seated", async () => {
+		await renderArrivalRoom(
+			await arrivalRoomOf([
+				{ id: "a-1", arriving: "Orb", invitedBy: "Vela", afterText: null },
+			]),
+		)
+
+		expect(rowIndexOf("Orb joined this conversation, invited by Vela")).toBe(
+			rowIndexOf("which wall holds?") - 1,
+		)
+	})
+
+	it("renders the arrivals after the same run in the order the conversation holds them", async () => {
+		await renderArrivalRoom(
+			await arrivalRoomOf([
+				{
+					id: "b",
+					arriving: "Orb",
+					invitedBy: null,
+					afterText: "the north one",
+				},
+				{
+					id: "a",
+					arriving: "Vela",
+					invitedBy: null,
+					afterText: "the north one",
+				},
+			]),
+		)
+
+		expect(rowIndexOf("Vela joined")).toBe(rowIndexOf("the north one") + 1)
+		expect(rowIndexOf("Orb joined")).toBe(rowIndexOf("Vela joined") + 1)
+	})
+
+	it("leaves out the arrival of a companion absent from the space roster", async () => {
+		await renderArrivalRoom(
+			await arrivalRoomOf(
+				[
+					{
+						id: "a-1",
+						arriving: "Vela",
+						invitedBy: null,
+						afterText: "the north one",
+					},
+				],
+				["Vela"],
+			),
+		)
+
+		expect(rowIndexOf("which wall holds?")).not.toBe(-1)
+		expect(rowIndexOf("joined this conversation")).toBe(-1)
 	})
 })

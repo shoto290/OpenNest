@@ -1,4 +1,5 @@
 import type {
+	CompanionArrival,
 	TranscriptCursor,
 	TranscriptDraft,
 	TranscriptMessage,
@@ -33,6 +34,7 @@ export type TranscriptController = {
 	follow: (conversationId: string, isAtLiveEdge: boolean) => void
 	leave: (conversationId: string) => void
 	append: (draft: TranscriptDraft) => void
+	announce: (arrival: CompanionArrival) => void
 	stream: (delta: TranscriptDelta) => void
 	settle: (settlement: TranscriptSettlement) => void
 }
@@ -162,6 +164,7 @@ export const createTranscriptController = (
 				draft,
 				isAtLiveEdge: liveEdges.get(draft.conversationId) ?? true,
 			}),
+		announce: (arrival) => dispatch({ type: "arrivalAnnounced", arrival }),
 		stream: (delta) => dispatch({ type: "messageStreamed", delta }),
 		settle: (settlement) => dispatch({ type: "messageSettled", settlement }),
 	}

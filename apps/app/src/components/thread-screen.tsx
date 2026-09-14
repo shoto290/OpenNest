@@ -11,6 +11,10 @@ import { ActivityIndicator } from "@workspace/ui/components/activity-indicator"
 import { AppHeader } from "@workspace/ui/components/app-header"
 import type { BotStopProps } from "@workspace/ui/components/bot-identity-avatar"
 import { ChatEmptyState } from "@workspace/ui/components/chat-empty-state"
+import {
+	type ConversationArrivalInviter,
+	ConversationArrivalRow,
+} from "@workspace/ui/components/conversation-arrival-row"
 import { ConversationEmptyState } from "@workspace/ui/components/conversation-empty-state"
 import { HeaderConversationButton } from "@workspace/ui/components/header-conversation-button"
 import { HeaderIdentityButton } from "@workspace/ui/components/header-identity-button"
@@ -119,6 +123,10 @@ import {
 	useThreadRoster,
 } from "@/lib/chat/use-thread-roster"
 import type { WorkingState } from "@/lib/chat/working-kind"
+import {
+	type PlacedArrival,
+	placeArrivals,
+} from "@/lib/conversations/arrival-transcript"
 import type { SpeakingBot } from "@/lib/conversations/conversation-controller"
 import type { ConversationRuntimes } from "@/lib/conversations/conversation-runtimes"
 import {
@@ -126,7 +134,10 @@ import {
 	mentionableBots,
 } from "@/lib/conversations/roster-conversations"
 import type { Bot, Conversation } from "@/lib/conversations/store-contract"
-import type { TranscriptMessage } from "@/lib/conversations/transcript-contract"
+import type {
+	CompanionArrival,
+	TranscriptMessage,
+} from "@/lib/conversations/transcript-contract"
 import { useConversation } from "@/lib/conversations/use-conversation"
 import {
 	useSeatInConversation,
@@ -728,22 +739,56 @@ const toRunRows = ({
 		),
 	}))
 
-const interleavedWithRuns = <Placed extends { runIndex: number }>(
-	runRows: TranscriptItem[],
-	placed: Placed[],
-	toRows: (placed: Placed) => TranscriptItem[],
-): TranscriptItem[] => {
-	const rowsAfter = (runIndex: number) =>
+type RowsAfterRun = (runIndex: number) => TranscriptItem[]
+
+const rowsPlacedAfter =
+	<Placed extends { runIndex: number }>(
+		placed: Placed[],
+		toRows: (placed: Placed) => TranscriptItem[],
+	): RowsAfterRun =>
+	(runIndex) =>
 		placed.filter((one) => one.runIndex === runIndex).flatMap(toRows)
 
-	return [
-		...rowsAfter(BEFORE_FIRST_RUN),
-		...runRows.flatMap((runRow, runIndex) => [runRow, ...rowsAfter(runIndex)]),
-	]
+const interleavedWithRuns = (
+	runRows: TranscriptItem[],
+	rowsAfter: RowsAfterRun,
+): TranscriptItem[] => [
+	...rowsAfter(BEFORE_FIRST_RUN),
+	...runRows.flatMap((runRow, runIndex) => [runRow, ...rowsAfter(runIndex)]),
+]
+
+const botIn = (bots: Bot[], botId: string) =>
+	bots.find(({ id }) => id === botId)
+
+const inviterOf = (
+	arrival: CompanionArrival,
+	bots: Bot[],
+): ConversationArrivalInviter | null => {
+	if (arrival.invitedByBotId === null) {
+		return { kind: "person" }
+	}
+	const inviting = botIn(bots, arrival.invitedByBotId)
+	return inviting ? { kind: "companion", bot: faceOfBot(inviting) } : null
 }
 
+const arrivalRowsAfter = (placed: PlacedArrival[], bots: Bot[]): RowsAfterRun =>
+	rowsPlacedAfter(placed, ({ arrival }) => {
+		const arriving = botIn(bots, arrival.botId)
+		const inviter = inviterOf(arrival, bots)
+		if (!arriving || !inviter) {
+			return []
+		}
+		return [
+			{
+				key: `arrival-${arrival.id}`,
+				render: () => (
+					<ConversationArrivalRow bot={faceOfBot(arriving)} inviter={inviter} />
+				),
+			},
+		]
+	})
+
 type MissionCardRowsProps = {
-	runRows: TranscriptItem[]
 	placed: PlacedMission[]
 	authors: ThreadAuthors
 	faceOf: ThreadNaming["faceOf"]
@@ -765,14 +810,13 @@ const toMissionCardRow = (
 	),
 })
 
-const withMissionCards = ({
-	runRows,
+const missionCardRowsAfter = ({
 	placed,
 	authors,
 	faceOf,
 	onOpen,
-}: MissionCardRowsProps): TranscriptItem[] =>
-	interleavedWithRuns(runRows, placed, ({ mission }) => {
+}: MissionCardRowsProps): RowsAfterRun =>
+	rowsPlacedAfter(placed, ({ mission }) => {
 		const identity = faceOf(mission.botId)
 		if (!identity) {
 			return []
@@ -783,21 +827,19 @@ const withMissionCards = ({
 	})
 
 type MissionEventRowsProps = {
-	runRows: TranscriptItem[]
 	placed: PlacedMissionEvent[]
 	tools: string[]
 	bot?: MissionBot
 	now: number
 }
 
-const withMissionEvents = ({
-	runRows,
+const missionEventRowsAfter = ({
 	placed,
 	tools,
 	bot,
 	now,
-}: MissionEventRowsProps): TranscriptItem[] =>
-	interleavedWithRuns(runRows, placed, ({ event }) => [
+}: MissionEventRowsProps): RowsAfterRun =>
+	rowsPlacedAfter(placed, ({ event }) => [
 		{
 			key: `mission-event-${event.id}`,
 			render: () => (
@@ -1182,15 +1224,14 @@ function ThreadView({
 	const missionFace = missionSeat
 		? present.find(({ id }) => id === missionSeat.mission.botId)
 		: undefined
-	const transcriptRows = missionSeat
-		? withMissionEvents({
+	const missionRowsAfter = missionSeat
+		? missionEventRowsAfter({
 				bot: missionFace ? toMissionFace(missionFace) : undefined,
 				now: missionSeat.now,
 				placed: placeMissionEvents(runs, missionSeat.events),
-				runRows,
 				tools: missionSeat.mission.tools,
 			})
-		: withMissionCards({
+		: missionCardRowsAfter({
 				authors,
 				faceOf,
 				onOpen: onOpenMission,
@@ -1199,8 +1240,20 @@ function ThreadView({
 					missions: missions.missions,
 					runs,
 				}),
-				runRows,
 			})
+	const arrivalsAfter = arrivalRowsAfter(
+		placeArrivals({
+			arrivals: facts.arrivals,
+			hasOlder: state.hasOlder,
+			messages: state.messages,
+			runs,
+		}),
+		known,
+	)
+	const transcriptRows = interleavedWithRuns(runRows, (runIndex) => [
+		...arrivalsAfter(runIndex),
+		...missionRowsAfter(runIndex),
+	])
 	const refusedTarget = repliedToRefusal
 		? quotes.get(repliedToRefusal)
 		: undefined

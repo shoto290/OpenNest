@@ -1,16 +1,19 @@
 import { i18n } from "@workspace/ui/lib/i18n"
 
+import { createArrivalsListener } from "./create-arrivals-listener"
 import { addresseesIn, toMentionTokens } from "./mentions"
 import { readConversation } from "./read-conversation"
 import { isNameless, leadOf, presentParticipants } from "./roster-conversations"
 import type { Conversation, MessagePin } from "./store-contract"
 import type { TranscriptStore } from "./store-port"
 import type {
+	CompanionArrival,
 	TerminalCompletion,
 	TranscriptMessage,
 } from "./transcript-contract"
 import { createTranscriptController } from "./transcript-controller"
 import {
+	selectArrivals,
 	selectHasMore,
 	selectHasNewer,
 	selectMessages,
@@ -97,6 +100,7 @@ export type SpeakingBot = {
 export type ConversationState = {
 	conversationId: string | null
 	messages: TranscriptMessage[]
+	arrivals: CompanionArrival[]
 	hasOlder: boolean
 	isLoadingOlder: boolean
 	hasNewer: boolean
@@ -134,11 +138,16 @@ export type ConversationController = {
 	shutdown: () => Promise<void>
 }
 
+export type CompanionArrivalListener = (
+	listener: (arrival: CompanionArrival) => void,
+) => Promise<() => void>
+
 export type ConversationControllerOptions = {
 	newId?: () => string
 	now?: () => number
 	onNamed?: (conversationId: string, title: string) => void
 	readReportedRuns?: ReportedRunsReader
+	onCompanionArrived?: CompanionArrivalListener
 }
 
 type OpenTurn = {
@@ -171,6 +180,8 @@ type Speaker = {
 
 const NO_MESSAGES: TranscriptMessage[] = []
 
+const NO_ARRIVALS: CompanionArrival[] = []
+
 const NO_PINS: MessagePin[] = []
 
 const NO_SPEAKERS: SpeakingBot[] = []
@@ -195,6 +206,7 @@ const isSameSpeakers = (left: SpeakingBot[], right: SpeakingBot[]) =>
 const isSameState = (left: ConversationState, right: ConversationState) =>
 	left.conversationId === right.conversationId &&
 	left.messages === right.messages &&
+	left.arrivals === right.arrivals &&
 	left.hasOlder === right.hasOlder &&
 	left.isLoadingOlder === right.isLoadingOlder &&
 	left.hasNewer === right.hasNewer &&
@@ -225,6 +237,7 @@ const speakerWork = (held: Speaker, hasPublished: boolean): WorkingState =>
 const initialState: ConversationState = {
 	conversationId: null,
 	messages: NO_MESSAGES,
+	arrivals: NO_ARRIVALS,
 	hasOlder: false,
 	isLoadingOlder: false,
 	hasNewer: false,
@@ -246,6 +259,8 @@ export const createConversationController = (
 	const now = options.now ?? (() => Date.now())
 	const readReportedRuns =
 		options.readReportedRuns ?? createReportedRunsReader()
+	const onCompanionArrived =
+		options.onCompanionArrived ?? createArrivalsListener()
 	const transcript = createTranscriptController(store)
 	const enqueue = createQueue()
 
@@ -262,6 +277,7 @@ export const createConversationController = (
 	let latestError: ChatError | null = null
 	let errorCount = 0
 	let detach: Promise<() => void> | null = null
+	let stopArrivals: Promise<() => void> | null = null
 
 	const publish = () => {
 		for (const listener of listeners) {
@@ -301,11 +317,17 @@ export const createConversationController = (
 	const readTranscript = () => {
 		const conversationId = conversation?.id
 		if (!conversationId) {
-			return { messages: NO_MESSAGES, hasOlder: false, hasNewer: false }
+			return {
+				messages: NO_MESSAGES,
+				arrivals: NO_ARRIVALS,
+				hasOlder: false,
+				hasNewer: false,
+			}
 		}
 		const held = transcript.getState()
 		return {
 			messages: selectMessages(held, conversationId),
+			arrivals: selectArrivals(held, conversationId),
 			hasOlder: selectHasMore(held, conversationId),
 			hasNewer: selectHasNewer(held, conversationId),
 		}
@@ -618,13 +640,22 @@ export const createConversationController = (
 		apply(held, event)
 	}
 
+	const announce = (arrival: CompanionArrival) => {
+		if (arrival.conversationId === conversation?.id) {
+			transcript.announce(arrival)
+		}
+	}
+
 	const disconnect = () => {
 		detach?.then((unlisten) => unlisten())
 		detach = null
+		stopArrivals?.then((unlisten) => unlisten())
+		stopArrivals = null
 	}
 
 	const connect = () => {
 		disconnect()
+		stopArrivals = onCompanionArrived(announce)
 		detach = driver.subscribe(({ scope, event }) => route(scope, event))
 		return detach
 	}
