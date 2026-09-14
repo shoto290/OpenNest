@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core"
 import { listen } from "@tauri-apps/api/event"
 
 export const CREATED_EVENT = "companion://created"
@@ -15,6 +16,11 @@ export type CompanionSeedRefused = {
 	reason: string
 }
 
+export type LaunchOutcome = {
+	created: CompanionCreated | null
+	refused: CompanionSeedRefused | null
+}
+
 export const companionsTransport = {
 	onCreated: (listener: (created: CompanionCreated) => void) =>
 		listen<CompanionCreated>(CREATED_EVENT, ({ payload }) => listener(payload)),
@@ -24,4 +30,5 @@ export const companionsTransport = {
 		listen<CompanionSeedRefused>(SEED_REFUSED_EVENT, ({ payload }) =>
 			listener(payload),
 		),
+	launchOutcome: () => invoke<LaunchOutcome>("companion_launch_outcome"),
 }

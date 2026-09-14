@@ -2,17 +2,15 @@ use std::fs;
 use std::io::ErrorKind;
 use std::path::Path;
 
-use serde::Serialize;
-use tauri::{AppHandle, Emitter, Runtime};
+use tauri::{AppHandle, Runtime};
 
 use super::commands::create_bundled_bot;
 use super::contract::{AvatarAnimal, BotIdentity, TranscriptStoreError};
 use crate::avatars;
 use crate::bundles;
 use crate::bundles::shoto;
-use crate::companions::contract::{
-	CompanionCreated, CompanionSeedRefused, CREATED_EVENT, SEED_REFUSED_EVENT,
-};
+use crate::companions::contract::CompanionCreated;
+use crate::companions::launch;
 use crate::db;
 use crate::db::repositories::conversations::DEFAULT_BOT_MODEL;
 use crate::db::DatabaseError;
@@ -70,14 +68,19 @@ impl From<DatabaseError> for Refusal {
 	}
 }
 
-pub(super) async fn plant_first_companion<R: Runtime>(app: &AppHandle<R>, database: &db::Database) {
-	match seed(app, database).await {
-		Ok(Some(created)) => announce(app, CREATED_EVENT, created),
-		Ok(None) => {}
+pub(super) async fn plant_first_companion<R: Runtime>(
+	app: &AppHandle<R>,
+	database: &db::Database,
+	mut unlaid: Vec<String>,
+) {
+	let created = match seed(app, database).await {
+		Ok(created) => created,
 		Err(refusal) => {
-			announce(app, SEED_REFUSED_EVENT, CompanionSeedRefused { reason: refusal.reason() })
+			unlaid.push(refusal.reason());
+			None
 		}
-	}
+	};
+	launch::settle(app, created, unlaid);
 }
 
 async fn seed<R: Runtime>(
@@ -192,16 +195,6 @@ fn identity(picture: &Path) -> BotIdentity {
 	}
 }
 
-fn announce<R: Runtime, T: Serialize + Clone + std::fmt::Debug>(
-	app: &AppHandle<R>,
-	event: &str,
-	payload: T,
-) {
-	if let Err(failure) = app.emit(event, payload.clone()) {
-		eprintln!("{event} was not announced for {payload:?}: {failure}");
-	}
-}
-
 #[cfg(test)]
 mod tests {
 	use std::fs;
@@ -212,10 +205,15 @@ mod tests {
 	use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
 	use tauri::{App, Listener, Manager};
 
+	use super::super::commands::list_bundles_at_launch;
 	use super::*;
+	use crate::companions::contract::{
+		CompanionSeedRefused, LaunchOutcome, CREATED_EVENT, SEED_REFUSED_EVENT,
+	};
+	use crate::companions::launch::LaunchOutcomeState;
 	use crate::db::repositories::conversations::{Bot as StoredBot, ConversationDraft};
 
-	fn a_host(name: &str) -> App<MockRuntime> {
+	fn a_bare_host(name: &str) -> App<MockRuntime> {
 		let mut context = mock_context(noop_assets());
 		context.config_mut().identifier =
 			format!("com.kiroshi.conversation-seed-{name}-{}", std::process::id());
@@ -223,12 +221,22 @@ mod tests {
 		if let Ok(dir) = app.path().app_data_dir() {
 			let _ = fs::remove_dir_all(&dir);
 		}
+		app.manage(LaunchOutcomeState::default());
+		app
+	}
+
+	fn a_host(name: &str) -> App<MockRuntime> {
+		let app = a_bare_host(name);
 		app.manage(db::bootstrap(app.handle()));
 		app
 	}
 
 	fn database_of(app: &App<MockRuntime>) -> &db::Database {
 		app.state::<db::DatabaseState>().inner().as_ref().expect("the database opens")
+	}
+
+	fn outcome_of(app: &App<MockRuntime>) -> LaunchOutcome {
+		app.state::<LaunchOutcomeState>().read()
 	}
 
 	fn heard(app: &App<MockRuntime>, event: &'static str) -> Receiver<String> {
@@ -246,8 +254,12 @@ mod tests {
 			.collect()
 	}
 
+	async fn seeded(app: &App<MockRuntime>, database: &db::Database) {
+		plant_first_companion(app.handle(), database, Vec::new()).await;
+	}
+
 	async fn planted(app: &App<MockRuntime>, database: &db::Database) -> Vec<StoredBot> {
-		plant_first_companion(app.handle(), database).await;
+		seeded(app, database).await;
 		database.conversations().bots(personal_space()).await.expect("the roster reads")
 	}
 
@@ -284,6 +296,11 @@ mod tests {
 		fs::read(bundle.join("skills").join(id).join("SKILL.md")).expect("the skill reads")
 	}
 
+	fn a_file_standing_at(path: &Path) {
+		fs::create_dir_all(path.parent().expect("a parent")).expect("the parent stands");
+		fs::write(path, b"not a directory").expect("the file stands where a directory goes");
+	}
+
 	#[tokio::test]
 	async fn a_fresh_install_opens_with_shoto_in_the_personal_space() {
 		let app = a_host("fresh");
@@ -314,6 +331,71 @@ mod tests {
 			vec![CompanionCreated { id: roster[0].id.clone(), name: shoto::NAME.to_owned() }]
 		);
 		assert_eq!(payloads::<CompanionSeedRefused>(&refused), Vec::new());
+	}
+
+	#[tokio::test]
+	async fn a_planted_shoto_stays_readable_when_nothing_listened() {
+		let app = a_host("unheard");
+		let database = database_of(&app);
+
+		let roster = planted(&app, database).await;
+
+		assert_eq!(
+			outcome_of(&app),
+			LaunchOutcome {
+				created: Some(CompanionCreated {
+					id: roster[0].id.clone(),
+					name: shoto::NAME.to_owned()
+				}),
+				refused: None,
+			}
+		);
+	}
+
+	#[tokio::test]
+	async fn a_refusal_stays_readable_when_nothing_listened() {
+		let app = a_host("unheard-refusal");
+		let database = database_of(&app);
+		database.spaces().create("Work".to_owned()).await.expect("the second space");
+		database.spaces().delete(PERSONAL_SPACE_ID.to_owned()).await.expect("the deletion");
+
+		seeded(&app, database).await;
+
+		assert_eq!(
+			outcome_of(&app),
+			LaunchOutcome {
+				created: None,
+				refused: Some(CompanionSeedRefused { reason: Refusal::NoPersonalSpace.reason() }),
+			}
+		);
+	}
+
+	#[tokio::test]
+	async fn a_launch_that_cannot_reach_the_database_names_it_in_the_outcome() {
+		let app = a_bare_host("no-database");
+		app.manage::<db::DatabaseState>(Err(DatabaseError::AppDataDir));
+		let refused = heard(&app, SEED_REFUSED_EVENT);
+
+		list_bundles_at_launch(app.handle()).await;
+
+		let outcome = outcome_of(&app);
+		assert_eq!(outcome.created, None);
+		let reason = outcome.refused.expect("the refusal is kept").reason;
+		assert!(reason.contains("the database could not be reached"), "got {reason}");
+		assert_eq!(payloads::<CompanionSeedRefused>(&refused).len(), 1);
+	}
+
+	#[tokio::test]
+	async fn a_plugin_not_laid_down_before_the_seed_is_named_beside_the_planted_shoto() {
+		let app = a_host("unlaid");
+		a_file_standing_at(&bundles::system::path(app.handle()).expect("the system plugin path"));
+
+		list_bundles_at_launch(app.handle()).await;
+
+		let outcome = outcome_of(&app);
+		assert_eq!(outcome.created.map(|created| created.name), Some(shoto::NAME.to_owned()));
+		let reason = outcome.refused.expect("the refusal is kept").reason;
+		assert!(reason.starts_with("the system plugin was not laid down"), "got {reason}");
 	}
 
 	#[tokio::test]
@@ -362,6 +444,7 @@ mod tests {
 		database.conversations().delete_bot(roster[0].id.clone()).await.expect("the deletion");
 		assert_eq!(planted(&app, database).await.len(), 0, "a deleted Shoto came back");
 		assert_eq!(payloads::<CompanionCreated>(&created), Vec::new());
+		assert_eq!(outcome_of(&app), LaunchOutcome::default());
 	}
 
 	#[tokio::test]
@@ -372,7 +455,7 @@ mod tests {
 		database.spaces().delete(PERSONAL_SPACE_ID.to_owned()).await.expect("the deletion");
 		let refused = heard(&app, SEED_REFUSED_EVENT);
 
-		plant_first_companion(app.handle(), database).await;
+		seeded(&app, database).await;
 
 		assert_eq!(database.conversations().bots(None).await.expect("the roster").len(), 0);
 		assert!(!database.user().is_first_companion_seeded().await.expect("the marker"));
@@ -386,12 +469,10 @@ mod tests {
 	async fn a_bundle_that_cannot_be_written_leaves_no_row_no_picture_and_no_marker() {
 		let app = a_host("unwritable");
 		let database = database_of(&app);
-		let root = bundles::root(app.handle()).expect("the bundle root");
-		fs::create_dir_all(root.parent().expect("a parent")).expect("the data directory stands");
-		fs::write(&root, b"not a directory").expect("the file stands where the bundles go");
+		a_file_standing_at(&bundles::root(app.handle()).expect("the bundle root"));
 		let refused = heard(&app, SEED_REFUSED_EVENT);
 
-		plant_first_companion(app.handle(), database).await;
+		seeded(&app, database).await;
 
 		assert_eq!(database.conversations().bots(None).await.expect("the roster").len(), 0);
 		assert!(!database.user().is_first_companion_seeded().await.expect("the marker"));
@@ -407,11 +488,10 @@ mod tests {
 		let app = a_host("pictureless");
 		let database = database_of(&app);
 		let dir = avatars::dir(app.handle()).expect("the avatars directory");
-		fs::create_dir_all(dir.parent().expect("a parent")).expect("the data directory stands");
-		fs::write(&dir, b"not a directory").expect("the file stands where the pictures go");
+		a_file_standing_at(&dir);
 		let refused = heard(&app, SEED_REFUSED_EVENT);
 
-		plant_first_companion(app.handle(), database).await;
+		seeded(&app, database).await;
 
 		assert_eq!(database.conversations().bots(None).await.expect("the roster").len(), 0);
 		assert!(!database.user().is_first_companion_seeded().await.expect("the marker"));
@@ -423,11 +503,12 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn a_database_that_already_holds_a_companion_receives_no_second_one() {
+	async fn a_database_that_already_holds_a_companion_receives_no_second_one_and_no_notice() {
 		let app = a_host("adopted");
 		let database = database_of(&app);
 		a_companion(database).await;
 		let created = heard(&app, CREATED_EVENT);
+		let refused = heard(&app, SEED_REFUSED_EVENT);
 
 		let roster = planted(&app, database).await;
 
@@ -437,6 +518,8 @@ mod tests {
 		assert!(database.user().is_first_companion_seeded().await.expect("the marker"));
 		assert!(database.user().preferences().await.expect("the preferences").first_run_done);
 		assert_eq!(payloads::<CompanionCreated>(&created), Vec::new());
+		assert_eq!(payloads::<CompanionSeedRefused>(&refused), Vec::new());
+		assert_eq!(outcome_of(&app), LaunchOutcome::default());
 	}
 
 	#[tokio::test]
@@ -446,7 +529,7 @@ mod tests {
 		let retired = a_companion_seated_in_a_mission(database).await;
 		database.conversations().delete_bot(retired.id).await.expect("the deletion");
 
-		plant_first_companion(app.handle(), database).await;
+		seeded(&app, database).await;
 
 		assert_eq!(database.conversations().bots(None).await.expect("the roster").len(), 0);
 		assert!(database.user().is_first_companion_seeded().await.expect("the marker"));

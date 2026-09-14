@@ -44,6 +44,7 @@ pub fn run() {
 		.plugin(tauri_plugin_notification::init())
 		.plugin(tauri_plugin_os::init())
 		.manage(AgentState::default())
+		.manage(companions::launch::LaunchOutcomeState::default())
 		.manage(agent::sign_in::SignInState::default())
 		.manage(mcp_oauth::commands::McpOauthState::default())
 		.manage(mcp_oauth::reports::ConnectorReports::default())

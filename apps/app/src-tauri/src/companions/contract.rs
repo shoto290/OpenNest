@@ -22,6 +22,13 @@ pub struct CompanionSeedRefused {
 	pub reason: String,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LaunchOutcome {
+	pub created: Option<CompanionCreated>,
+	pub refused: Option<CompanionSeedRefused>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum CompanionError {

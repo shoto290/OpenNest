@@ -11,6 +11,7 @@ use super::contract::{
 };
 use super::seed;
 use crate::agent::contract::AgentCommand;
+use crate::companions::launch;
 use crate::attachments;
 use crate::avatars;
 use crate::bundles;
@@ -102,39 +103,58 @@ async fn forget_bundle(root: Option<&Path>, database: &db::Database, bot_id: &st
 }
 
 pub async fn list_bundles_at_launch<R: Runtime>(app: &AppHandle<R>) {
-	if let Some(path) = bundles::system::path(app) {
-		let _ = bundles::system::write(&path);
-	}
-	if let Some(path) = bundles::user::path(app) {
-		if let Err(failure) = bundles::user::lay_down(&path) {
-			report_unlaid(&path, &failure);
-		}
-	}
+	let mut unlaid = lay_down_host_plugins(app);
 	let state = app.state::<db::DatabaseState>();
-	let Ok(database) = state.inner().as_ref() else {
-		return;
+	let database = match state.inner().as_ref() {
+		Ok(database) => database,
+		Err(failure) => {
+			unlaid.push(format!("the database could not be reached: {failure:?}"));
+			launch::settle(app, None, unlaid);
+			return;
+		}
 	};
-	lay_down_space_plugins(app, database).await;
-	seed::plant_first_companion(app, database).await;
+	unlaid.extend(lay_down_space_plugins(app, database).await);
+	seed::plant_first_companion(app, database, unlaid).await;
 	list_bundles(bundles::root(app).as_deref(), database).await;
 }
 
-async fn lay_down_space_plugins<R: Runtime>(app: &AppHandle<R>, database: &db::Database) {
-	let Ok(spaces) = database.spaces().list().await else {
-		return;
-	};
-	for space in &spaces {
-		let Some(path) = bundles::space::path(app, &space.id) else {
-			continue;
-		};
-		if let Err(failure) = bundles::space::lay_down_at(&path) {
-			report_unlaid(&path, &failure);
+fn lay_down_host_plugins<R: Runtime>(app: &AppHandle<R>) -> Vec<String> {
+	let mut unlaid = Vec::new();
+	if let Some(path) = bundles::system::path(app) {
+		if let Err(failure) = bundles::system::write(&path) {
+			unlaid.push(unlaid_reason("the system plugin", &failure));
 		}
 	}
+	if let Some(path) = bundles::user::path(app) {
+		if let Err(failure) = bundles::user::lay_down(&path) {
+			unlaid.push(unlaid_reason("the user plugin", &failure));
+		}
+	}
+	unlaid
 }
 
-fn report_unlaid(bundle: &Path, failure: &std::io::Error) {
-	eprintln!("the plugin at {} was not laid down: {failure}", bundle.display());
+async fn lay_down_space_plugins<R: Runtime>(
+	app: &AppHandle<R>,
+	database: &db::Database,
+) -> Vec<String> {
+	let spaces = match database.spaces().list().await {
+		Ok(spaces) => spaces,
+		Err(failure) => {
+			return vec![format!("the database could not list the spaces to lay down: {failure:?}")]
+		}
+	};
+	spaces
+		.iter()
+		.filter_map(|space| {
+			let path = bundles::space::path(app, &space.id)?;
+			let failure = bundles::space::lay_down_at(&path).err()?;
+			Some(unlaid_reason(&format!("the plugin of the space {}", space.id), &failure))
+		})
+		.collect()
+}
+
+fn unlaid_reason(bundle: &str, failure: &std::io::Error) -> String {
+	format!("{bundle} was not laid down: {failure}")
 }
 
 pub(crate) async fn list_bundles(root: Option<&Path>, database: &db::Database) {
