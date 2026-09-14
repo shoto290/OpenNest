@@ -106,7 +106,7 @@ export function PromptCommandMenu({
 						style={{ transformOrigin: "bottom left" }}
 						className={cn(
 							POPUP_CLASS,
-							"absolute bottom-full left-0 z-50 mb-2 min-w-64 max-w-[min(24rem,100%)] overflow-hidden rounded-xl p-1.5",
+							"absolute bottom-full left-0 z-50 mb-2 min-w-64 max-w-[min(24rem,100%)] overflow-hidden rounded-xl p-1.5 shadow-popover",
 						)}
 					>
 						<div
