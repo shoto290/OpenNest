@@ -437,13 +437,13 @@ export const WithBadgeDot = meta.story({
 		const dotBox = dot.getBoundingClientRect()
 		const column = (dot.offsetParent as HTMLElement).getBoundingClientRect()
 		const preview = slotIn(row, "roster-row-preview") as HTMLElement
-		const previewText =
+		const previewTextEnd =
 			preview.getBoundingClientRect().right -
 			Number.parseFloat(getComputedStyle(preview).paddingInlineEnd)
 
 		await expect(dotBox.right).toBeCloseTo(column.right, 0)
-		await expect(dotBox.left).toBeGreaterThanOrEqual(previewText)
-		await expect(dot?.getBoundingClientRect().right).toBeLessThanOrEqual(
+		await expect(dotBox.left).toBeGreaterThanOrEqual(previewTextEnd)
+		await expect(dotBox.right).toBeLessThanOrEqual(
 			row.getBoundingClientRect().right,
 		)
 	},
