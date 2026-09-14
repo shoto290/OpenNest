@@ -132,7 +132,6 @@ const NoticeList = () => {
 				"pointer-events-auto",
 				TOP_ANCHORED_NOTICE,
 				FADE_ONLY_UNDER_REDUCED_MOTION,
-				notice.type === "error" && "border-destructive",
 			)}
 			key={notice.id}
 			swipeDirection={["up"]}

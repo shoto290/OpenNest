@@ -138,6 +138,11 @@ const closeControl = () => {
 const actionControl = () =>
 	viewport().querySelector<HTMLElement>("[data-slot=toast-action]")
 
+const destructiveRole = () =>
+	getComputedStyle(document.documentElement)
+		.getPropertyValue("--destructive")
+		.trim()
+
 const markOf = (notice: HTMLElement) => {
 	const mark = notice.querySelector<SVGElement>("svg")
 	if (!mark) throw new window.Error("The notice carries no status mark")
@@ -169,7 +174,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The window's notice surface: one viewport mounted once in the shell, anchored to the top edge of the window and centred on it, and two ways to raise something into it. `raiseTransientNotice` reports what went right on the `success` mark, or on the `info`, `warning` or `loading` mark when it is handed a type, and leaves on its own once `TRANSIENT_NOTICE_DELAY` has passed - except on `loading`, which holds until its caller ends it, because the work it reports has no deadline; `raiseFailureNotice` reports what went wrong on the `error` mark, wears the destructive border and stays until the reader closes it - a failure that dismisses itself is close to silence. Both are module-level calls, so a controller, a driver or a scheduler raises a notice without a hook and without a component in scope, and both take an optional action drawn between the text and the close control. Both return the identifier of the notice they raised, and `endNotice` takes that identifier and takes the notice off screen; an identifier no notice on screen carries leaves the surface as it was. Notices land against the top edge, newest nearest it, three at most, with the ones beyond the limit marked `data-limited` rather than removed. Enter and leave travel through the top edge over 500ms, and drop to a fade with no movement under `prefers-reduced-motion` - see `ReducedMotion`. `transientDelay` on the viewport overrides the delay for the whole surface; a failure ignores it.",
+					"The window's notice surface: one viewport mounted once in the shell, anchored to the top edge of the window and centred on it, and two ways to raise something into it. `raiseTransientNotice` reports what went right on the `success` mark, or on the `info`, `warning` or `loading` mark when it is handed a type, and leaves on its own once `TRANSIENT_NOTICE_DELAY` has passed - except on `loading`, which holds until its caller ends it, because the work it reports has no deadline; `raiseFailureNotice` reports what went wrong on the `error` mark, the one mark on the destructive colour role, and stays until the reader closes it - a failure that dismisses itself is close to silence. Both are module-level calls, so a controller, a driver or a scheduler raises a notice without a hook and without a component in scope, and both take an optional action drawn between the text and the close control. Both return the identifier of the notice they raised, and `endNotice` takes that identifier and takes the notice off screen; an identifier no notice on screen carries leaves the surface as it was. Notices land against the top edge, newest nearest it, three at most, with the ones beyond the limit marked `data-limited` rather than removed. Enter and leave travel through the top edge over 500ms, and drop to a fade with no movement under `prefers-reduced-motion` - see `ReducedMotion`. `transientDelay` on the viewport overrides the delay for the whole surface; a failure ignores it.",
 			},
 		},
 	},
@@ -226,7 +231,7 @@ export const Error = meta.story({
 		docs: {
 			description: {
 				story:
-					"The failure a background job raises when nobody opened anything. The story raises it from the trigger and a transient notice straight from the module, outside any component, then waits for the transient to leave: the failure is still there after a delay that already emptied its neighbour, because it holds until the reader closes it. Check that it wears the error mark on the destructive colour role, the same role its border takes. While nobody has focused the surface, the urgent announcement is the library's hidden mirror and the drawn notice stays out of the accessibility tree, so the title is announced once rather than twice; a Tab to the close control puts the notice back in the tree, with a visible ring, and Enter takes it off screen. Pick `Default` for the notice that leaves on its own, `Dismissing` for the gesture, `LongContent` for a failure whose strings run past the notice width.",
+					"The failure a background job raises when nobody opened anything. The story raises it from the trigger and a transient notice straight from the module, outside any component, then waits for the transient to leave: the failure is still there after a delay that already emptied its neighbour, because it holds until the reader closes it. Check that the error mark alone carries the destructive colour role, on a notice surface drawn no louder than any other. While nobody has focused the surface, the urgent announcement is the library's hidden mirror and the drawn notice stays out of the accessibility tree, so the title is announced once rather than twice; a Tab to the close control puts the notice back in the tree, with a visible ring, and Enter takes it off screen. Pick `Default` for the notice that leaves on its own, `Dismissing` for the gesture, `LongContent` for a failure whose strings run past the notice width.",
 			},
 		},
 	},
@@ -242,9 +247,7 @@ export const Error = meta.story({
 		await atTopCentre(notice)
 
 		const mark = markOf(notice)
-		await expect(getComputedStyle(mark).color).toBe(
-			getComputedStyle(notice).borderTopColor,
-		)
+		await expect(getComputedStyle(mark).color).toBe(destructiveRole())
 		await expect(getComputedStyle(mark).color).not.toBe(
 			getComputedStyle(notice).backgroundColor,
 		)
@@ -605,9 +608,7 @@ export const DarkTheme = meta.story({
 		const surface = getComputedStyle(notice).backgroundColor
 		const mark = markOf(notice)
 
-		await expect(getComputedStyle(mark).color).toBe(
-			getComputedStyle(notice).borderTopColor,
-		)
+		await expect(getComputedStyle(mark).color).toBe(destructiveRole())
 		await expect(getComputedStyle(mark).color).not.toBe(surface)
 		await expect(getComputedStyle(closeControl()).color).not.toBe(surface)
 	},
