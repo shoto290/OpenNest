@@ -28,7 +28,10 @@ import "@workspace/ui/lib/i18n"
 
 import { ThreadScreen } from "@/components/thread-screen"
 import type { AgentEvent, CheckReport } from "@/lib/agent/contract"
-import { createAttachmentsController } from "@/lib/chat/attachments-controller"
+import {
+	type AttachmentsController,
+	createAttachmentsController,
+} from "@/lib/chat/attachments-controller"
 import {
 	type ChatController,
 	createChatController,
@@ -325,6 +328,7 @@ type ThreadScreenHarnessProps = {
 	onboarding?: OnboardingController
 	signIn?: SignInController
 	onOpenMission: (missionId: string) => void
+	staging?: AttachmentsController
 }
 
 const ThreadScreenHarness = ({
@@ -334,6 +338,7 @@ const ThreadScreenHarness = ({
 	onboarding,
 	signIn,
 	onOpenMission,
+	staging = attachments,
 }: ThreadScreenHarnessProps) => {
 	const [isOpen, setOpen] = useState(false)
 	const onboardingState = useSyncExternalStore(
@@ -351,7 +356,7 @@ const ThreadScreenHarness = ({
 			onOpenChange: setOpen,
 			openedRoutine: createOpenedRoutineController(),
 		},
-		attachments,
+		attachments: staging,
 		bots,
 		drafts: createDraftsController(),
 		landings,
@@ -2367,19 +2372,43 @@ describe("the first run in a solo thread", () => {
 		expect(isAnchored(screen.getByText("Start"))).toBe(false)
 	})
 
-	it("anchors a message the reader typed", async () => {
+	it("leaves a message typed before the thread mounted unanchored", async () => {
 		const solo = await soloOf({})
+		await solo.send(TYPED_MESSAGE)
+		render(screenOf(solo.thread()))
+		await settle()
+
+		expect(document.querySelector('[aria-busy="true"]')).not.toBeNull()
+		expect(isAnchored(screen.getByText(TYPED_MESSAGE))).toBe(false)
+		expect(document.querySelector('[data-scroll-anchor="true"]')).toBeNull()
+	})
+
+	it("anchors the message the reader sends from the mounted thread", async () => {
+		const solo = await soloOf({})
+		const soloScreen = () =>
+			createElement(ThreadScreenHarness, {
+				bots: NO_BOT_RECORDS,
+				landings: createMessageLandingController(),
+				onOpenMission: () => undefined,
+				staging: createAttachmentsController({
+					store: async () => [],
+					send: (_owner, text) => {
+						void solo.thread().chat.controller.send(text)
+						return true
+					},
+				}),
+				thread: solo.thread(),
+			})
+		const shown = render(soloScreen())
+		await settle()
+
 		await act(async () => {
-			await solo.thread().chat.controller.send(TYPED_MESSAGE)
+			fireEvent.change(screen.getByRole("textbox"), {
+				target: { value: TYPED_MESSAGE },
+			})
 		})
-		render(
-			screenOf(
-				solo.thread(),
-				NO_BOT_RECORDS,
-				() => undefined,
-				createMessageLandingController(),
-			),
-		)
+		await press("Send")
+		shown.rerender(soloScreen())
 		await settle()
 
 		expect(isAnchored(screen.getByText(TYPED_MESSAGE))).toBe(true)
