@@ -186,18 +186,16 @@ export const LongContent = meta.story({
 		const sentence = slotIn(canvasElement, "conversation-arrival-row")
 			.lastElementChild as HTMLElement
 		const sentenceBox = sentence.getBoundingClientRect()
-		const lineHeight = Number.parseFloat(getComputedStyle(sentence).lineHeight)
-		const sentenceLines = Array.from(
-			lineRectsOf(sentence, sentence.textContent ?? ""),
-		)
+		const drawn = getComputedStyle(sentence)
+		const lineHeight = Number.parseFloat(drawn.lineHeight)
 
 		await expect(sentenceBox.height).toBeGreaterThan(lineHeight)
-		await expect(getComputedStyle(sentence).textOverflow).toBe("clip")
-		await expect(getComputedStyle(sentence).webkitLineClamp).toBe("none")
-		await expect(
-			Array.from(lineRectsOf(sentence, LONG_NAMED.name)).length,
-		).toBeGreaterThan(1)
-		for (const line of sentenceLines) {
+		await expect(drawn.textOverflow).toBe("clip")
+		await expect(drawn.webkitLineClamp).toBe("none")
+		await expect(lineRectsOf(sentence, LONG_NAMED.name).length).toBeGreaterThan(
+			1,
+		)
+		for (const line of lineRectsOf(sentence, sentence.textContent ?? "")) {
 			await expect(line.left).toBeGreaterThanOrEqual(sentenceBox.left)
 			await expect(line.right).toBeLessThanOrEqual(sentenceBox.right)
 		}
