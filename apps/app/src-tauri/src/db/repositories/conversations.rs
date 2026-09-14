@@ -5,6 +5,7 @@ use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, 
 use rusqlite::{params, Connection, OptionalExtension, Row, Transaction, TransactionBehavior};
 use uuid::Uuid;
 
+use super::arrivals::{self, Arrival};
 use super::bot_spaces;
 use super::messages::stored_as_text;
 use super::sections;
@@ -164,6 +165,12 @@ pub struct Conversation {
 	pub created_at: i64,
 	pub updated_at: i64,
 	pub seats: Vec<Seat>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Joined {
+	pub conversation: Conversation,
+	pub arrival: Option<Arrival>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -507,9 +514,15 @@ impl ConversationsRepository {
 		&self,
 		conversation_id: String,
 		bot_id: String,
-	) -> Result<Conversation, ConversationError> {
+		invited_by_bot_id: Option<String>,
+	) -> Result<Joined, ConversationError> {
 		self.call_mut(move |connection| {
-			Ok(added_participant(connection, &conversation_id, &bot_id))
+			Ok(added_participant(
+				connection,
+				&conversation_id,
+				&bot_id,
+				invited_by_bot_id.as_deref(),
+			))
 		})
 		.await?
 	}
@@ -1058,17 +1071,32 @@ fn added_participant(
 	connection: &mut Connection,
 	conversation_id: &str,
 	bot_id: &str,
-) -> Result<Conversation, ConversationError> {
+	invited_by_bot_id: Option<&str>,
+) -> Result<Joined, ConversationError> {
 	let transaction = write_transaction(connection)?;
 	let room = conversation_at(&transaction, conversation_id)?;
+	if let Some(inviter) = invited_by_bot_id.filter(|inviter| !is_present(&room, inviter)) {
+		return Err(ConversationError::UnknownParticipant {
+			conversation_id: conversation_id.to_owned(),
+			bot_id: inviter.to_owned(),
+		});
+	}
 	let role = match room.seats.iter().any(|seat| seat.role == LEAD_ROLE) {
 		true => PARTICIPANT_ROLE,
 		false => LEAD_ROLE,
 	};
 	seat(&transaction, conversation_id, bot_id, room.space_id.as_deref(), role)?;
-	let joined = conversation_at(&transaction, conversation_id)?;
+	let arrival = match is_present(&room, bot_id) {
+		true => None,
+		false => Some(arrivals::record(&transaction, conversation_id, bot_id, invited_by_bot_id)?),
+	};
+	let conversation = conversation_at(&transaction, conversation_id)?;
 	transaction.commit()?;
-	Ok(joined)
+	Ok(Joined { conversation, arrival })
+}
+
+fn is_present(room: &Conversation, bot_id: &str) -> bool {
+	room.seats.iter().any(|seat| seat.bot_id == bot_id && seat.left_at.is_none())
 }
 
 fn next_join_seq(
@@ -1317,7 +1345,9 @@ mod tests {
 
 	use super::*;
 	use crate::db::connection::temp_dir;
-	use crate::db::repositories::messages::{MessagePageQuery, NewAssistantMessage, NewTurn};
+	use crate::db::repositories::messages::{
+		MessagePage, MessagePageQuery, MessagesAroundQuery, NewAssistantMessage, NewTurn,
+	};
 	use crate::db::{count_of, open, Database};
 
 	fn an_identity(name: &str) -> BotIdentity {
@@ -2048,9 +2078,10 @@ mod tests {
 			.await
 			.expect("the bot leaves");
 		let back = repository
-			.add_participant(room.id.clone(), first.id.clone())
+			.add_participant(room.id.clone(), first.id.clone(), None)
 			.await
-			.expect("the bot comes back");
+			.expect("the bot comes back")
+			.conversation;
 
 		assert_eq!(
 			roster(&back),
@@ -2093,7 +2124,11 @@ mod tests {
 				.expect("the bot leaves");
 		}
 
-		let back = repository.add_participant(room.id, first.id).await.expect("the bot comes back");
+		let back = repository
+			.add_participant(room.id, first.id, None)
+			.await
+			.expect("the bot comes back")
+			.conversation;
 
 		assert_eq!(
 			roster(&back),
@@ -2159,9 +2194,12 @@ mod tests {
 			.await
 			.expect("the room is opened");
 
-		let refused = repository.add_participant(room.id.clone(), stranger.id).await;
-		let joined =
-			repository.add_participant(room.id, mate.id).await.expect("the bot joins the room");
+		let refused = repository.add_participant(room.id.clone(), stranger.id, None).await;
+		let joined = repository
+			.add_participant(room.id, mate.id, None)
+			.await
+			.expect("the bot joins the room")
+			.conversation;
 
 		assert!(
 			format!("{refused:?}").contains("ForeignBot"),
@@ -2477,7 +2515,7 @@ mod tests {
 			.create_conversation(a_draft(&elsewhere.id, &[&shared]))
 			.await
 			.expect("the room seats the bot whose oldest membership is another space");
-		let refused = repository.add_participant(room.id.clone(), stranger.id).await;
+		let refused = repository.add_participant(room.id.clone(), stranger.id, None).await;
 
 		assert_eq!(
 			room.seats.iter().map(|seat| seat.bot_id.clone()).collect::<Vec<_>>(),
@@ -2704,6 +2742,305 @@ mod tests {
 			named_by_presence(repository, &space_id, None).await,
 			vec!["Mia".to_owned(), "Ada".to_owned()],
 			"the deleted bot was ranked or its seats still counted"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	async fn page_of(
+		database: &Database,
+		conversation_id: &str,
+		before_seq: Option<i64>,
+		limit: u32,
+	) -> MessagePage {
+		database
+			.messages()
+			.page_messages(MessagePageQuery {
+				conversation_id: conversation_id.to_owned(),
+				before_seq,
+				limit,
+			})
+			.await
+			.expect("the page is read")
+	}
+
+	async fn arrived(
+		repository: &ConversationsRepository,
+		room: &Conversation,
+		bot: &Bot,
+	) -> Arrival {
+		repository
+			.add_participant(room.id.clone(), bot.id.clone(), None)
+			.await
+			.expect("the bot joins the room")
+			.arrival
+			.expect("the arrival is recorded")
+	}
+
+	async fn arrived_again(
+		repository: &ConversationsRepository,
+		room: &Conversation,
+		bot: &Bot,
+	) -> Arrival {
+		repository
+			.remove_participant(room.id.clone(), bot.id.clone())
+			.await
+			.expect("the bot leaves");
+		arrived(repository, room, bot).await
+	}
+
+	async fn a_room_of(database: &Database, names: &[&str]) -> (Conversation, Vec<Bot>) {
+		let repository = database.conversations();
+		let mut bots = Vec::new();
+		for name in names {
+			bots.push(repository.create_bot(an_identity(name), None, None).await.expect("the bot"));
+		}
+		let room = repository
+			.create_conversation(a_draft(&home_of(repository, &bots[0]).await, &[&bots[0]]))
+			.await
+			.expect("the room is opened");
+		(room, bots)
+	}
+
+	#[tokio::test]
+	async fn an_arrival_comes_back_between_the_two_messages_around_it() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let repository = database.conversations();
+		let (room, bots) = a_room_of(&database, &["Nyx", "Ada"]).await;
+		spoke_in(&database, &room.id, &bots[0].id).await;
+		spoke_in(&database, &room.id, &bots[0].id).await;
+		let arrival = arrived(repository, &room, &bots[1]).await;
+		spoke_in(&database, &room.id, &bots[0].id).await;
+
+		let page = page_of(&database, &room.id, None, 10).await;
+		let window = database
+			.messages()
+			.messages_around(MessagesAroundQuery {
+				conversation_id: room.id.clone(),
+				seq: 2,
+				limit: 3,
+			})
+			.await
+			.expect("the window is read")
+			.expect("the window holds the message");
+
+		assert_eq!((arrival.last_message_seq, arrival.invited_by_bot_id.clone()), (2, None));
+		assert_eq!(page.messages.iter().map(|message| message.seq).collect::<Vec<_>>(), [1, 2, 3]);
+		assert_eq!(page.arrivals, vec![arrival.clone()], "the page lost the arrival");
+		assert_eq!(window.arrivals, vec![arrival], "the window lost the arrival");
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn arrivals_at_the_same_place_come_back_in_the_same_order_on_every_read() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let repository = database.conversations();
+		let (room, bots) = a_room_of(&database, &["Nyx", "Ada", "Rex", "Kai"]).await;
+		spoke_in(&database, &room.id, &bots[0].id).await;
+		for bot in &bots[1..] {
+			arrived(repository, &room, bot).await;
+		}
+
+		let first = page_of(&database, &room.id, None, 10).await.arrivals;
+		let second = page_of(&database, &room.id, None, 10).await.arrivals;
+
+		let mut ordered = first.clone();
+		ordered.sort_by(|left, right| {
+			(left.last_message_seq, left.created_at, &left.id).cmp(&(
+				right.last_message_seq,
+				right.created_at,
+				&right.id,
+			))
+		});
+		assert_eq!(first.len(), 3);
+		assert_eq!(first, ordered, "the arrivals came back out of seq, time and id order");
+		assert_eq!(first, second, "a second read reordered the arrivals");
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_companion_arrives_again_only_after_it_left() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let repository = database.conversations();
+		let (room, bots) = a_room_of(&database, &["Nyx", "Ada"]).await;
+
+		arrived(repository, &room, &bots[1]).await;
+		let seated_again = repository
+			.add_participant(room.id.clone(), bots[1].id.clone(), None)
+			.await
+			.expect("the seated bot is seated again");
+		let after_second_seat = page_of(&database, &room.id, None, 10).await.arrivals.len();
+		arrived_again(repository, &room, &bots[1]).await;
+
+		assert_eq!(seated_again.arrival, None, "a bot already seated arrived a second time");
+		assert_eq!(after_second_seat, 1);
+		assert_eq!(page_of(&database, &room.id, None, 10).await.arrivals.len(), 2);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn an_arrival_in_a_conversation_without_messages_comes_back_on_its_first_page() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let (room, bots) = a_room_of(&database, &["Nyx", "Ada"]).await;
+
+		let arrival = arrived(database.conversations(), &room, &bots[1]).await;
+		let page = page_of(&database, &room.id, None, 20).await;
+
+		assert_eq!(arrival.last_message_seq, 0);
+		assert_eq!(page.arrivals, vec![arrival]);
+		assert!(!page.has_more);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_walk_from_the_newest_page_returns_each_arrival_once() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let repository = database.conversations();
+		let (room, bots) = a_room_of(&database, &["Nyx", "Ada"]).await;
+		let mut written = vec![arrived(repository, &room, &bots[1]).await.id];
+		for seq in 1..=7 {
+			spoke_in(&database, &room.id, &bots[0].id).await;
+			if [3, 4, 6, 7].contains(&seq) {
+				written.push(arrived_again(repository, &room, &bots[1]).await.id);
+			}
+		}
+
+		let mut walked = Vec::new();
+		let mut before_seq = None;
+		loop {
+			let page = page_of(&database, &room.id, before_seq, 3).await;
+			walked.extend(page.arrivals.into_iter().map(|arrival| arrival.id));
+			if !page.has_more {
+				break;
+			}
+			before_seq = page.messages.first().map(|message| message.seq);
+		}
+
+		written.sort();
+		walked.sort();
+		assert_eq!(walked, written, "the walk lost or repeated an arrival");
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_window_with_messages_beyond_it_leaves_out_the_arrivals_beyond_it() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let repository = database.conversations();
+		let (room, bots) = a_room_of(&database, &["Nyx", "Ada"]).await;
+		arrived(repository, &room, &bots[1]).await;
+		let mut inside = Vec::new();
+		for seq in 1..=6 {
+			spoke_in(&database, &room.id, &bots[0].id).await;
+			match seq {
+				3 => inside.push(arrived_again(repository, &room, &bots[1]).await),
+				5 => {
+					arrived_again(repository, &room, &bots[1]).await;
+				}
+				_ => {}
+			}
+		}
+
+		let window = database
+			.messages()
+			.messages_around(MessagesAroundQuery {
+				conversation_id: room.id.clone(),
+				seq: 3,
+				limit: 3,
+			})
+			.await
+			.expect("the window is read")
+			.expect("the window holds the message");
+
+		assert_eq!(
+			window.messages.iter().map(|message| message.seq).collect::<Vec<_>>(),
+			[2, 3, 4]
+		);
+		assert!(window.has_older && window.has_newer);
+		assert_eq!(window.arrivals, inside, "the window held an arrival beyond its messages");
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_refused_seat_or_inviter_records_no_arrival_and_an_invitation_names_its_inviter() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let repository = database.conversations();
+		let (room, bots) = a_room_of(&database, &["Nyx", "Ada"]).await;
+		let elsewhere = database.spaces().create("Writers".to_owned()).await.expect("the space");
+		let stranger = repository
+			.create_bot(an_identity("Rex"), Some(elsewhere.id), None)
+			.await
+			.expect("the bot");
+
+		let foreign = repository.add_participant(room.id.clone(), stranger.id, None).await;
+		let absent_inviter = repository
+			.add_participant(room.id.clone(), bots[1].id.clone(), Some("nobody".to_owned()))
+			.await;
+		let arrivals_after_refusals = count_of(&database, "conversation_arrivals").await;
+		let invited = repository
+			.add_participant(room.id.clone(), bots[1].id.clone(), Some(bots[0].id.clone()))
+			.await
+			.expect("the bot is invited")
+			.arrival
+			.expect("the arrival is recorded");
+
+		assert!(matches!(foreign, Err(ConversationError::ForeignBot { .. })));
+		assert!(matches!(absent_inviter, Err(ConversationError::UnknownParticipant { .. })));
+		assert_eq!(arrivals_after_refusals, 0, "a refused seat left an arrival behind");
+		assert_eq!(invited.invited_by_bot_id, Some(bots[0].id.clone()));
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn an_arrival_outlives_the_seat_of_the_companion_that_invited_it() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let repository = database.conversations();
+		let (room, bots) = a_room_of(&database, &["Nyx", "Ada"]).await;
+		let invited = repository
+			.add_participant(room.id.clone(), bots[1].id.clone(), Some(bots[0].id.clone()))
+			.await
+			.expect("the bot is invited")
+			.arrival
+			.expect("the arrival is recorded");
+		let (conversation_id, inviter_id) = (room.id.clone(), bots[0].id.clone());
+
+		database
+			.call_mut(move |connection| {
+				Ok(connection.execute(
+					"DELETE FROM conversation_participants
+						WHERE conversation_id = ?1 AND bot_id = ?2",
+					params![conversation_id, inviter_id],
+				)?)
+			})
+			.await
+			.expect("the inviter seat goes");
+
+		assert_eq!(
+			page_of(&database, &room.id, None, 10).await.arrivals,
+			vec![invited],
+			"the arrival went with the seat of its inviter"
 		);
 
 		drop(database);

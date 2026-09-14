@@ -207,6 +207,7 @@ const refusingOlderStore = (): TranscriptStore => {
 				: Promise.resolve({
 						conversationId,
 						messages: [message({ conversationId, seq: 2 })],
+						arrivals: [],
 						hasMore: true,
 					}),
 	}

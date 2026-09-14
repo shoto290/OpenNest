@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core"
+import { listen } from "@tauri-apps/api/event"
 
 import type {
 	AvatarBlot,
@@ -31,6 +32,8 @@ import type {
 } from "./store-contract"
 import type { TranscriptStore } from "./store-port"
 import {
+	COMPANION_ARRIVED_EVENT,
+	type CompanionArrival,
 	type TerminalCompletion,
 	TRANSCRIPT_PAGE_SIZE,
 	TRANSCRIPT_WINDOW_SIZE,
@@ -40,6 +43,13 @@ import {
 } from "./transcript-contract"
 
 import type { AgentCommand } from "@/lib/agent/contract"
+
+export const arrivalsTransport = {
+	onCompanionArrived: (listener: (arrival: CompanionArrival) => void) =>
+		listen<CompanionArrival>(COMPANION_ARRIVED_EVENT, ({ payload }) =>
+			listener(payload),
+		),
+}
 
 export const conversationStore: TranscriptStore = {
 	loadPage: (conversationId: string, cursor: TranscriptCursor | null) =>
@@ -411,6 +421,7 @@ export const conversationStore: TranscriptStore = {
 		invoke<Conversation>("conversation_add_participant", {
 			conversationId,
 			botId,
+			invitedByBotId: null,
 		}),
 
 	removeConversationParticipant: (conversationId: string, botId: string) =>

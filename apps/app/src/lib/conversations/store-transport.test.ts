@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core"
+import { listen } from "@tauri-apps/api/event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type {
@@ -9,8 +10,10 @@ import type {
 	NewUserMessage,
 	TranscriptStoreError,
 } from "./store-contract"
-import { conversationStore } from "./store-transport"
+import { arrivalsTransport, conversationStore } from "./store-transport"
 import {
+	COMPANION_ARRIVED_EVENT,
+	type CompanionArrival,
 	type TerminalCompletion,
 	TRANSCRIPT_PAGE_SIZE,
 	type TranscriptPage,
@@ -23,8 +26,10 @@ import {
 } from "./transcript-fixtures"
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }))
+vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn() }))
 
 const hostInvoke = vi.mocked(invoke)
+const hostListen = vi.mocked(listen)
 
 const PAGE: TranscriptPage = {
 	conversationId: CONVERSATION,
@@ -33,6 +38,7 @@ const PAGE: TranscriptPage = {
 		message({ id: "m-2", seq: 2 }),
 		message({ id: "m-3", seq: 3 }),
 	],
+	arrivals: [],
 	hasMore: true,
 }
 
@@ -165,7 +171,7 @@ const WRITES: WriteCase[] = [
 		write: () => conversationStore.addConversationParticipant("c-1", "b-1"),
 		call: [
 			"conversation_add_participant",
-			{ conversationId: "c-1", botId: "b-1" },
+			{ conversationId: "c-1", botId: "b-1", invitedByBotId: null },
 		],
 	},
 	{
@@ -533,6 +539,28 @@ describe("conversationStore writes", () => {
 			id: "m-2",
 			completion,
 		})
+	})
+})
+
+describe("arrivalsTransport", () => {
+	it("hands each companion arrival announced by the host to its listener", async () => {
+		const arrival: CompanionArrival = {
+			id: "a-1",
+			conversationId: CONVERSATION,
+			botId: "b-2",
+			invitedByBotId: null,
+			lastMessageSeq: 3,
+			createdAt: 9,
+		}
+		const listener = vi.fn()
+		hostListen.mockResolvedValue(() => undefined)
+
+		await arrivalsTransport.onCompanionArrived(listener)
+		const [event, handler] = hostListen.mock.calls[0] ?? []
+		handler?.({ event: COMPANION_ARRIVED_EVENT, id: 1, payload: arrival })
+
+		expect(event).toBe(COMPANION_ARRIVED_EVENT)
+		expect(listener).toHaveBeenCalledWith(arrival)
 	})
 })
 

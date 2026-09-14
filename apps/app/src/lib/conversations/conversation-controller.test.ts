@@ -275,6 +275,7 @@ describe("createConversationController", () => {
 			return {
 				conversationId,
 				messages: page,
+				arrivals: [],
 				hasMore: (page[0]?.seq ?? 1) > 1,
 			}
 		}
@@ -1656,6 +1657,7 @@ describe("failures the conversation carries to the screen", () => {
 					return Promise.resolve({
 						conversationId,
 						messages: [message({ id: "m-2", conversationId, seq: 2 })],
+						arrivals: [],
 						hasMore: true,
 					})
 				}
@@ -1666,6 +1668,7 @@ describe("failures the conversation carries to the screen", () => {
 				return Promise.resolve({
 					conversationId,
 					messages: [message({ id: "m-1", conversationId, seq: 1 })],
+					arrivals: [],
 					hasMore: false,
 				})
 			},
@@ -1902,6 +1905,7 @@ describe("the pages a conversation holds", () => {
 				return Promise.resolve({
 					conversationId,
 					messages: page,
+					arrivals: [],
 					hasMore: (page[0]?.seq ?? 1) > 1,
 				})
 			},

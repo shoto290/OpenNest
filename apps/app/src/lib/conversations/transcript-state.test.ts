@@ -31,7 +31,7 @@ const page = (
 	messages: TranscriptMessage[],
 	hasMore = false,
 	conversationId = CONVERSATION,
-): TranscriptPage => ({ conversationId, messages, hasMore })
+): TranscriptPage => ({ conversationId, messages, arrivals: [], hasMore })
 
 const load = (
 	state: TranscriptState,
@@ -776,6 +776,7 @@ describe("leaving a thread away from its newest end", () => {
 		window: {
 			conversationId: CONVERSATION,
 			messages: [message({ id: "m-40", seq: 40 })],
+			arrivals: [],
 			hasOlder: true,
 			hasNewer: true,
 		},
