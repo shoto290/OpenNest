@@ -202,10 +202,8 @@ pub async fn conversation_bots_by_presence<R: Runtime>(
 ) -> Result<Vec<Bot>, TranscriptStoreError> {
 	let dir = avatars::dir(&app);
 	let bundle_root = bundles::root(&app);
-	let stored = ready(&state)?
-		.conversations()
-		.bots_by_presence(space_id, excluded_conversation_id)
-		.await?;
+	let stored =
+		ready(&state)?.conversations().bots_by_presence(space_id, excluded_conversation_id).await?;
 	Ok(stored.into_iter().map(|bot| Bot::of(bot, dir.as_deref(), bundle_root.as_deref())).collect())
 }
 

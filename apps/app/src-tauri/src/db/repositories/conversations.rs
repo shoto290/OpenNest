@@ -312,7 +312,8 @@ impl ConversationsRepository {
 		excluded_conversation_id: Option<String>,
 	) -> Result<Vec<Bot>, DatabaseError> {
 		self.call(move |connection| {
-			let mut statement = connection.prepare_cached(&format!("{BOT_COLUMNS} {PRESENCE_ORDER}"))?;
+			let mut statement = connection
+				.prepare_cached(&format!("{BOT_COLUMNS} {RANKED_BY_PRESENCE_IN_SPACE}"))?;
 			let rows = statement
 				.query_map(params![space_id, excluded_conversation_id, TOPIC_KIND], bot)?;
 			Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
@@ -568,7 +569,8 @@ const OLDEST_MEMBERSHIP: &str = "membership.space_id = (SELECT space_id FROM bot
 
 const BOT_ORDER: &str = "ORDER BY bots.created_at ASC, bots.id ASC";
 
-const PRESENCE_ORDER: &str = "LEFT JOIN (SELECT seat.bot_id, count(DISTINCT seat.conversation_id) AS seated
+const RANKED_BY_PRESENCE_IN_SPACE: &str = "LEFT JOIN (SELECT seat.bot_id,
+		count(DISTINCT seat.conversation_id) AS seated
 		FROM conversation_participants AS seat
 		JOIN conversations ON conversations.id = seat.conversation_id
 		WHERE conversations.space_id = ?1 AND conversations.kind = ?3
@@ -2567,8 +2569,8 @@ mod tests {
 		let zed = repository.create_bot(an_identity("Zed"), None, None).await.expect("the bot");
 		repository.create_bot(an_identity("Mia"), None, None).await.expect("the bot");
 		let space_id = home_of(repository, &ada).await;
-		for seated in [&[&ada, &zed][..], &[&zed][..], &[&zed][..]] {
-			repository.create_conversation(a_draft(&space_id, seated)).await.expect("the room");
+		for seated in [vec![&ada, &zed], vec![&zed], vec![&zed]] {
+			repository.create_conversation(a_draft(&space_id, &seated)).await.expect("the room");
 		}
 
 		assert_eq!(
@@ -2589,8 +2591,10 @@ mod tests {
 		let zed = repository.create_bot(an_identity("Zed"), None, None).await.expect("the bot");
 		let space_id = home_of(repository, &ada).await;
 		repository.create_conversation(a_draft(&space_id, &[&zed])).await.expect("the room");
-		let left =
-			repository.create_conversation(a_draft(&space_id, &[&ada, &zed])).await.expect("the room");
+		let left = repository
+			.create_conversation(a_draft(&space_id, &[&ada, &zed]))
+			.await
+			.expect("the room");
 		repository.remove_participant(left.id, zed.id.clone()).await.expect("zed leaves");
 
 		assert_eq!(
