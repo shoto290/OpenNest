@@ -41,13 +41,17 @@ const calls: [string, Record<string, unknown>, string][] = [
 	["companion_suggestions", {}, "suggestions"],
 	["companion_create", A_DRAFT, "create"],
 	["companion_first_run_done", {}, "firstRunDone"],
+	["companion_invite", { companion: "Quill" }, "invite"],
 ]
 
 const answers: Record<string, unknown> = {
 	suggestions: [A_SUGGESTION],
 	create: { id: "b2", name: "Quill" },
 	firstRunDone: null,
+	invite: { id: "b2", name: "Quill", alreadySeated: false },
 }
+
+const NAMES_A_SEQUENCE = /\b(then|after|first|next|once|until)\b/i
 
 const aHost = (served: (asked: Asked) => Served) => {
 	const asked: Asked[] = []
@@ -101,6 +105,14 @@ describe("companionTools", () => {
 			expect(held.description.split(". ")).toHaveLength(1)
 			expect(held.description).toMatch(NAMES_A_MOMENT)
 		}
+	})
+
+	it("takes one field naming the companion to invite and names no sequence of work", () => {
+		const invite = toolNamed(SESSION, "companion_invite")
+
+		expect(Object.keys(invite.inputSchema)).toEqual(["companion"])
+		expect(invite.description).toMatch(/\bbefore\b/)
+		expect(invite.description).not.toMatch(NAMES_A_SEQUENCE)
 	})
 
 	it("hands each call to the host of its session and speaks the answer back", async () => {

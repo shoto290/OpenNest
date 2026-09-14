@@ -691,7 +691,11 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 			scope.conversation_id.clone(),
 			scope.bot_id.clone(),
 		)))
-		.hosting(Arc::new(CompanionHost::new(app.clone(), scope.conversation_id.clone())))
+		.hosting(Arc::new(CompanionHost::new(
+			app.clone(),
+			scope.conversation_id.clone(),
+			scope.bot_id.clone(),
+		)))
 		.hosting(Arc::new(ConnectorHost::new(app.clone(), scope.bot_id.clone())))
 		.answering(output_schema);
 

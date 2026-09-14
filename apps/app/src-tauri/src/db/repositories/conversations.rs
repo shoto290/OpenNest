@@ -20,7 +20,7 @@ const PARTICIPANT_ROLE: &str = "assistant";
 const LEAD_ROLE: &str = "lead";
 const CHAT_TITLE: &str = "Chat";
 const CHAT_KIND: &str = "main";
-const TOPIC_KIND: &str = "topic";
+pub const TOPIC_KIND: &str = "topic";
 const MISSION_KIND: &str = "mission";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -557,6 +557,16 @@ impl ConversationsRepository {
 		self.call(move |connection| space_of_conversation(connection, &conversation_id)).await
 	}
 
+	pub async fn kind(&self, conversation_id: String) -> Result<Option<String>, DatabaseError> {
+		self.call(move |connection| {
+			Ok(connection
+				.prepare_cached("SELECT kind FROM conversations WHERE id = ?1")?
+				.query_row([conversation_id], |row| row.get(0))
+				.optional()?)
+		})
+		.await
+	}
+
 	pub async fn oldest_bot_space(&self, bot_id: String) -> Result<Option<String>, DatabaseError> {
 		self.call(move |connection| Ok(oldest_space_of(connection, &bot_id)?)).await
 	}
@@ -1081,18 +1091,18 @@ fn added_participant(
 			bot_id: inviter.to_owned(),
 		});
 	}
+	if is_present(&room, bot_id) {
+		return Ok(Joined { conversation: room, arrival: None });
+	}
 	let role = match room.seats.iter().any(|seat| seat.role == LEAD_ROLE) {
 		true => PARTICIPANT_ROLE,
 		false => LEAD_ROLE,
 	};
 	seat(&transaction, conversation_id, bot_id, room.space_id.as_deref(), role)?;
-	let arrival = match is_present(&room, bot_id) {
-		true => None,
-		false => Some(arrivals::record(&transaction, conversation_id, bot_id, invited_by_bot_id)?),
-	};
+	let arrival = arrivals::record(&transaction, conversation_id, bot_id, invited_by_bot_id)?;
 	let conversation = conversation_at(&transaction, conversation_id)?;
 	transaction.commit()?;
-	Ok(Joined { conversation, arrival })
+	Ok(Joined { conversation, arrival: Some(arrival) })
 }
 
 fn is_present(room: &Conversation, bot_id: &str) -> bool {
@@ -2138,6 +2148,28 @@ mod tests {
 			],
 			"the bot came back to a room that is still led by nobody"
 		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn seating_a_bot_already_seated_leaves_every_role_and_join_order_as_they_stand() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let repository = database.conversations();
+		let (room, bots) = a_room_of(&database, &["Nyx", "Ada"]).await;
+		arrived(repository, &room, &bots[1]).await;
+		let before = repository.seats(room.id.clone()).await.expect("the seats read");
+
+		let seated_again = repository
+			.add_participant(room.id.clone(), bots[0].id.clone(), Some(bots[1].id.clone()))
+			.await
+			.expect("the seated lead is seated again");
+
+		assert_eq!(seated_again.arrival, None);
+		assert_eq!(seated_again.conversation.seats, before, "a seat moved on a second seating");
+		assert_eq!(repository.seats(room.id).await.expect("the seats read"), before);
 
 		drop(database);
 		fs::remove_dir_all(&dir).expect("cleanup");
