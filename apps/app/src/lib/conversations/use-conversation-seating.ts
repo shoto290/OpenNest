@@ -48,10 +48,13 @@ const seatMentionedIn = async ({
 	text,
 }: MentionedSeating): Promise<boolean> => {
 	const absent = new Set(unseatedBots(bots, conversation).map((bot) => bot.id))
-	const named = mentionedBotIdsIn(text, mentionableBots(bots, conversation))
+	const namedAbsentIds = mentionedBotIdsIn(
+		text,
+		mentionableBots(bots, conversation),
+	).filter((botId) => absent.has(botId))
 	let held = conversation
 
-	for (const botId of named.filter((id) => absent.has(id))) {
+	for (const botId of namedAbsentIds) {
 		const seated = await seating.seat(conversation.id, botId)
 		if (!seated) {
 			return false
