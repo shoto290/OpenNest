@@ -3941,3 +3941,51 @@ describe("returning to a solo thread", () => {
 		detach()
 	})
 })
+
+describe("reopening a session", () => {
+	beforeEach(() => {
+		vi.useFakeTimers()
+	})
+
+	afterEach(() => {
+		vi.useRealTimers()
+	})
+
+	it("resumes the session identifier of the companion it is given", async () => {
+		const { driver, controller } = await bootedHarness()
+		await controller.send("hello")
+		await vi.runAllTimersAsync()
+		const sessionId = controller.getState().sessionId
+		expect(sessionId).not.toBeNull()
+		const startSpy = vi.spyOn(driver, "startOrResumeSession")
+
+		await controller.reopen(BOT)
+		await vi.runAllTimersAsync()
+
+		expect(startSpy).toHaveBeenCalledWith(runOf(controller), sessionId)
+	})
+
+	it("answers nothing for a companion whose session it never opened", async () => {
+		const { controller } = await bootedHarness()
+
+		await expect(controller.reopen("stranger")).resolves.toBeNull()
+	})
+
+	it("waits for a running turn to end before it reopens", async () => {
+		const { driver, controller } = await bootedHarness()
+		const sent = controller.send("hello")
+		await vi.advanceTimersByTimeAsync(STEP_MS * 3)
+		expect(controller.getState().turn).toBe("running")
+		const startSpy = vi.spyOn(driver, "startOrResumeSession")
+
+		const reopening = controller.reopen(BOT)
+		await vi.advanceTimersByTimeAsync(STEP_MS)
+		expect(startSpy).not.toHaveBeenCalled()
+
+		await sent
+		await vi.runAllTimersAsync()
+		await reopening
+
+		expect(startSpy).toHaveBeenCalledTimes(1)
+	})
+})

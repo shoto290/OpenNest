@@ -105,6 +105,7 @@ export type ChatController = {
 	leave: (botId: string) => void
 	redescribe: (botId: string) => void
 	restart: () => Promise<SessionHandle | null>
+	reopen: (botId: string) => Promise<SessionHandle | null>
 	rotate: () => Promise<SessionHandle | null>
 	loadOlder: () => Promise<void>
 	loadNewer: () => Promise<void>
@@ -684,6 +685,27 @@ export function createChatController(
 			bot.pendingPreflight = null
 		})
 		return bot.pendingPreflight
+	}
+
+	const turnEnded = (bot: BotChat) =>
+		new Promise<void>((resolve) => {
+			if (!isTurnBusy(bot.state.turn)) {
+				resolve()
+				return
+			}
+			const watch = () => {
+				if (isTurnBusy(bot.state.turn)) {
+					return
+				}
+				listeners.delete(watch)
+				resolve()
+			}
+			listeners.add(watch)
+		})
+
+	const reopenFor = async (bot: BotChat) => {
+		await turnEnded(bot)
+		return preflightFor(bot, bot.state.sessionId ?? undefined)
 	}
 
 	const recallCommands = (bot: BotChat) =>
@@ -1551,6 +1573,10 @@ export function createChatController(
 				(bot) => preflightFor(bot, bot.state.sessionId ?? undefined),
 				null,
 			),
+		reopen: (botId) => {
+			const bot = bots.get(botId)
+			return bot ? reopenFor(bot) : Promise.resolve(null)
+		},
 		rotate: () => onSelected((bot) => rotateFor(bot, ASKED_FOR), null),
 		loadOlder: () => onSelected(loadOlder, undefined),
 		loadNewer: () => onSelected(loadNewer, undefined),

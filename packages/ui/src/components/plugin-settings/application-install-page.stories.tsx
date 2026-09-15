@@ -12,6 +12,7 @@ import {
 	LONG_INSTALL,
 	REGISTRY_INSTALL,
 	SIGN_IN_INSTALL,
+	UNSTATED_REACH_INSTALL,
 } from "@workspace/ui/components/plugin-settings/applications.fixtures"
 import type { ApplicationsOwner } from "@workspace/ui/components/plugin-settings/applications-panel"
 
@@ -180,6 +181,21 @@ export const NothingToSetUp = meta.story({
 			),
 		).toBeVisible()
 		await expect(canvas.getByText("7 tools, reads and writes")).toBeVisible()
+	},
+})
+
+export const ReachUnstated = meta.story({
+	args: { application: UNSTATED_REACH_INSTALL },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A descriptor that states neither reads nor writes, which is every descriptor the registry answers. Check that the tool count names how many there are and claims nothing else.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(canvas.getByText("3 tools")).toBeVisible()
 	},
 })
 

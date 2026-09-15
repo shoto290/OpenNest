@@ -1,3 +1,9 @@
+import {
+	declaredServers,
+	declareServer,
+	undeclareServer,
+} from "./mcp-server-writes"
+
 import { createQueue } from "../queue"
 import type { BotMcpServer, EnvOwner } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
@@ -12,13 +18,14 @@ export type McpServersController = {
 	getState: () => McpServersState
 	subscribe: (listener: () => void) => () => void
 	open: (owner: EnvOwner) => Promise<void>
-	create: (name: string, config: Record<string, unknown>) => void
+	reload: () => Promise<void>
+	create: (name: string, config: Record<string, unknown>) => Promise<boolean>
 	rename: (
 		openedName: string,
 		name: string,
 		config: Record<string, unknown>,
-	) => void
-	remove: (name: string) => void
+	) => Promise<boolean>
+	remove: (name: string) => Promise<boolean>
 }
 
 export const initialMcpServersState: McpServersState = {
@@ -57,40 +64,9 @@ export const createMcpServersController = (
 		}
 	}
 
-	const declared = (owner: EnvOwner) => {
-		if (owner.kind === "user") {
-			return store.userPluginMcpServers()
-		}
-		return owner.kind === "space"
-			? store.spaceMcpServers(owner.id)
-			: store.botMcpServers(owner.id)
-	}
-
-	const declare = (
-		owner: EnvOwner,
-		name: string,
-		config: Record<string, unknown>,
-	) => {
-		if (owner.kind === "user") {
-			return store.setUserPluginMcpServer(name, config)
-		}
-		return owner.kind === "space"
-			? store.setSpaceMcpServer(owner.id, name, config)
-			: store.setBotMcpServer(owner.id, name, config)
-	}
-
-	const undeclare = (owner: EnvOwner, name: string) => {
-		if (owner.kind === "user") {
-			return store.deleteUserPluginMcpServer(name)
-		}
-		return owner.kind === "space"
-			? store.deleteSpaceMcpServer(owner.id, name)
-			: store.deleteBotMcpServer(owner.id, name)
-	}
-
 	const read = async (owner: EnvOwner) =>
 		applyTo(owner, {
-			servers: await declared(owner),
+			servers: await declaredServers(store, owner),
 			hasFailedToLoad: false,
 		})
 
@@ -98,16 +74,21 @@ export const createMcpServersController = (
 
 	const reload = () => {
 		const owner = state.owner
-		if (owner) {
-			void enqueue(() => read(owner)).catch(noteFailedRead)
+		if (!owner) {
+			return Promise.resolve()
 		}
+		return enqueue(() => read(owner)).catch(noteFailedRead)
 	}
 
 	const onOpenOwner = (run: (owner: EnvOwner) => Promise<void>) => {
 		const owner = state.owner
-		if (owner) {
-			void enqueue(() => run(owner)).catch(reload)
+		if (!owner) {
+			return Promise.resolve(false)
 		}
+		return enqueue(() => run(owner)).then(
+			() => true,
+			() => reload().then(() => false),
+		)
 	}
 
 	const written = (servers: BotMcpServer[], server: BotMcpServer) =>
@@ -121,9 +102,9 @@ export const createMcpServersController = (
 		config: Record<string, unknown>,
 	) =>
 		onOpenOwner(async (owner) => {
-			const server = await declare(owner, name, config)
+			const server = await declareServer(store, owner, name, config)
 			if (openedName && openedName !== name) {
-				await undeclare(owner, openedName)
+				await undeclareServer(store, owner, openedName)
 			}
 			applyTo(owner, {
 				servers: written(
@@ -148,6 +129,8 @@ export const createMcpServersController = (
 			return enqueue(() => read(owner)).catch(noteFailedRead)
 		},
 
+		reload,
+
 		create: (name: string, config: Record<string, unknown>) =>
 			write(null, name, config),
 
@@ -155,7 +138,7 @@ export const createMcpServersController = (
 
 		remove: (name: string) =>
 			onOpenOwner(async (owner) => {
-				await undeclare(owner, name)
+				await undeclareServer(store, owner, name)
 				applyTo(owner, {
 					servers: state.servers.filter((server) => server.name !== name),
 				})

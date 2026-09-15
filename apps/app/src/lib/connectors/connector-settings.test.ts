@@ -34,9 +34,10 @@ const SERVERS: BotMcpServer[] = [
 
 type SpaceConnectorsProps = {
 	port: FakeConnectorPort
+	onSettled?: () => void
 }
 
-const SpaceConnectors = ({ port }: SpaceConnectorsProps) => {
+const SpaceConnectors = ({ port, onSettled }: SpaceConnectorsProps) => {
 	const connectors = useConnectors(port)
 	const [openedName, setOpenedName] = useState<string | null>(null)
 
@@ -45,7 +46,12 @@ const SpaceConnectors = ({ port }: SpaceConnectorsProps) => {
 	}, [connectors.controller])
 
 	return createElement(SpaceSettingsDialog, {
-		...toConnectorSettings({ servers: SERVERS, connectors, openedName }),
+		...toConnectorSettings({
+			servers: SERVERS,
+			connectors,
+			openedName,
+			onSettled,
+		}),
 		environment: [],
 		history: { days: [], oldestDate: "", onUndo: vi.fn() },
 		onClose: vi.fn(),
@@ -75,8 +81,8 @@ const settle = () =>
 		}
 	})
 
-const mounted = async (port: FakeConnectorPort) => {
-	render(createElement(SpaceConnectors, { port }))
+const mounted = async (port: FakeConnectorPort, onSettled?: () => void) => {
+	render(createElement(SpaceConnectors, { port, onSettled }))
 	await settle()
 	return screen.getByRole("tabpanel", { name: "Applications" })
 }
@@ -183,6 +189,44 @@ describe("space connectors", () => {
 			{ command: "disconnect", owner: SPACE, name: "atlas", url: ATLAS_URL },
 			{ command: "status", owner: SPACE },
 		])
+	})
+
+	it("says a connect landed once the grant is read", async () => {
+		const port = connectorPort("needsAuthorization")
+		const onSettled = vi.fn()
+		await mounted(port, onSettled)
+
+		await press("Connect atlas")
+		expect(onSettled).not.toHaveBeenCalled()
+
+		port.rows.space = [{ name: "atlas", status: "connected" }]
+		port.grant()
+		await settle()
+
+		expect(onSettled).toHaveBeenCalledTimes(1)
+	})
+
+	it("says nothing landed when the connect was refused", async () => {
+		const port = connectorPort("needsAuthorization")
+		port.refusals.connect = { kind: "denied", detail: "access_denied" }
+		const onSettled = vi.fn()
+		await mounted(port, onSettled)
+
+		await press("Connect atlas")
+
+		expect(onSettled).not.toHaveBeenCalled()
+	})
+
+	it("says a disconnect landed once it is confirmed", async () => {
+		const port = connectorPort("connected")
+		const onSettled = vi.fn()
+		await mounted(port, onSettled)
+		await press("Open atlas")
+
+		await press("Disconnect")
+		await press("Disconnect", screen.getByRole("alertdialog"))
+
+		expect(onSettled).toHaveBeenCalledTimes(1)
 	})
 
 	it("shows a refused connect as a connector that could not connect", async () => {

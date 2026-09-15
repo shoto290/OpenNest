@@ -166,8 +166,20 @@ export const REGISTRY_INSTALL: InstallableApplication = {
 	unreviewed: { publisher: "kwn", publishedAt: "4 days ago" },
 }
 
+export const UNSTATED_REACH_INSTALL: InstallableApplication = {
+	id: "io.github.weatherdesk/forecast",
+	name: "forecast",
+	description: "Forecasts and alerts from national weather services.",
+	packageIdentity: "npx -y @weatherdesk/forecast-mcp",
+	setup: "none",
+	tools: ["get_forecast", "get_alerts", "find_station"],
+}
+
 export const LONG_INSTALL: InstallableApplication = {
 	...REGISTRY_INSTALL,
 	name: "a-very-long-registry-application-name-that-keeps-going-on-end",
 	tools: Array.from({ length: 40 }, (_, index) => `tool_number_${index + 1}`),
 }
+
+export const DRAWN_MARK =
+	'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 2 20h20L12 2Z"/></svg>'

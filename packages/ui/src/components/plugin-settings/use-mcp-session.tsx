@@ -13,6 +13,10 @@ import type { McpConnectionSection } from "@workspace/ui/components/bot-settings
 import { McpServerEditor } from "@workspace/ui/components/bot-settings-dialog/mcp-server-editor"
 import type { EnvironmentSection } from "@workspace/ui/components/environment-panel"
 import {
+	ApplicationInstallPage,
+	type ApplicationInstallPageProps,
+} from "@workspace/ui/components/plugin-settings/application-install-page"
+import {
 	ApplicationsCatalogue,
 	type ApplicationsCatalogueProps,
 } from "@workspace/ui/components/plugin-settings/applications-catalogue"
@@ -21,10 +25,19 @@ import {
 	ApplicationsPanel,
 } from "@workspace/ui/components/plugin-settings/applications-panel"
 
+type ApplicationInstallSection = Pick<
+	ApplicationInstallPageProps,
+	"application" | "isInstalling" | "isInstalled" | "failure" | "onInstall"
+> & {
+	onLeave: () => void
+}
+
 type ApplicationsCatalogueSection = Omit<
 	ApplicationsCatalogueProps,
 	"onBack" | "onPaste" | "className"
->
+> & {
+	install?: ApplicationInstallSection
+}
 
 type McpSessionProps = {
 	owner: ApplicationsOwner
@@ -85,6 +98,11 @@ const useMcpSession = ({
 
 	const paste = () => open({ draft: BLANK_MCP_SERVER_DRAFT })
 
+	const browse = () => {
+		catalogue?.install?.onLeave()
+		setBrowsing(true)
+	}
+
 	const save = (
 		{ draft, saved }: OpenedServer,
 		config: Record<string, unknown>,
@@ -122,19 +140,38 @@ const useMcpSession = ({
 		)
 	}
 
-	const pushedPage = () => {
-		if (session) return editorFor(session)
+	const browsedPage = (section: ApplicationsCatalogueSection) => {
+		const { install, ...browsing } = section
+		const leaveBrowsing = () => setBrowsing(false)
 
-		if (isBrowsing && catalogue) {
+		if (install) {
+			const { onLeave, ...installing } = install
+
 			return (
-				<ApplicationsCatalogue
-					{...catalogue}
-					onBack={() => setBrowsing(false)}
+				<ApplicationInstallPage
+					{...installing}
+					categories={browsing.categories}
+					category={browsing.category}
+					onBack={onLeave}
+					onCategoryChange={browsing.onCategoryChange}
 					onPaste={paste}
+					owner={owner}
 				/>
 			)
 		}
 
+		return (
+			<ApplicationsCatalogue
+				{...browsing}
+				onBack={leaveBrowsing}
+				onPaste={paste}
+			/>
+		)
+	}
+
+	const pushedPage = () => {
+		if (session) return editorFor(session)
+		if (isBrowsing && catalogue) return browsedPage(catalogue)
 		return null
 	}
 
@@ -142,7 +179,7 @@ const useMcpSession = ({
 		panel: (
 			<ApplicationsPanel
 				haveFailedToLoad={haveFailedToLoad}
-				onAdd={catalogue ? () => setBrowsing(true) : paste}
+				onAdd={catalogue ? browse : paste}
 				onConnect={onServerConnect}
 				onOpen={(opened) =>
 					open({
@@ -167,6 +204,7 @@ const useMcpSession = ({
 }
 
 export {
+	type ApplicationInstallSection,
 	type ApplicationsCatalogueSection,
 	type ApplicationsSection,
 	type McpSession,
