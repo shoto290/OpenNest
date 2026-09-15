@@ -5,6 +5,7 @@ use rusqlite::{params, Row};
 use serde_json::Value;
 use uuid::Uuid;
 
+use super::missions::oldest_first;
 use crate::applications::contract::{ApplicationInstall, Destination, InstallCase, InstallDraft};
 use crate::db::{Access, DatabaseError};
 
@@ -88,11 +89,11 @@ impl ApplicationInstallsRepository {
 			.call(move |connection| {
 				let mut statement = connection.prepare_cached(&format!(
 					"{INSTALL_COLUMNS} WHERE conversation_id = ?1
-					ORDER BY created_at ASC, id ASC LIMIT ?2"
+					ORDER BY created_at DESC, id DESC LIMIT ?2"
 				))?;
 				let rows = statement
 					.query_map(params![conversation_id, MAX_INSTALLS_PER_READ], install)?;
-				Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+				Ok(oldest_first(rows.collect::<rusqlite::Result<Vec<_>>>()?))
 			})
 			.await
 	}
@@ -176,6 +177,29 @@ mod tests {
 		}
 	}
 
+	async fn planted(database: &crate::db::Database, moments: Vec<(String, i64)>) {
+		database
+			.call_mut(move |connection| {
+				let transaction = connection.transaction()?;
+				for (application, created_at) in &moments {
+					transaction.execute(
+						"INSERT INTO application_installs (id, conversation_id, application,
+							title, scope, install_kind, last_message_seq, created_at)
+							VALUES (?1, 'c1', ?1, ?1, 'user', 'oauth', 0, ?2)",
+						params![application, created_at],
+					)?;
+				}
+				transaction.commit()?;
+				Ok(())
+			})
+			.await
+			.expect("the installs are planted");
+	}
+
+	fn named_at(moments: [(&str, i64); 3]) -> Vec<(String, i64)> {
+		moments.into_iter().map(|(name, at)| (name.to_owned(), at)).collect()
+	}
+
 	async fn a_store(dir: &std::path::Path) -> crate::db::Database {
 		let database = open(dir);
 		database
@@ -214,13 +238,7 @@ mod tests {
 	async fn the_installs_of_one_conversation_read_oldest_first_and_leave_the_others_out() {
 		let dir = temp_dir();
 		let database = a_store(&dir).await;
-		for application in ["paper", "linear", "granola"] {
-			database
-				.application_installs()
-				.record(a_draft(application, InstallCase::Oauth))
-				.await
-				.expect("the install is recorded");
-		}
+		planted(&database, named_at([("linear", 20), ("granola", 30), ("paper", 10)])).await;
 
 		let read = database
 			.application_installs()
@@ -236,6 +254,32 @@ mod tests {
 			database.application_installs().of_conversation("c2".to_owned()).await.expect("read"),
 			Vec::new(),
 			"a conversation with no install answered rows"
+		);
+
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_conversation_holding_more_installs_than_the_cap_reads_the_newest_ones_oldest_first() {
+		let dir = temp_dir();
+		let database = a_store(&dir).await;
+		let planted_count = i64::from(MAX_INSTALLS_PER_READ) + 5;
+		let moments =
+			(1..=planted_count).map(|at| (format!("app-{at:04}"), at)).collect::<Vec<_>>();
+		planted(&database, moments).await;
+
+		let read = database
+			.application_installs()
+			.of_conversation("c1".to_owned())
+			.await
+			.expect("the installs read");
+
+		assert_eq!(read.len(), MAX_INSTALLS_PER_READ as usize);
+		assert_eq!(read.first().map(|held| held.application.as_str()), Some("app-0006"));
+		assert_eq!(read.last().map(|held| held.application.as_str()), Some("app-0205"));
+		assert!(
+			read.windows(2).all(|pair| pair[0].created_at < pair[1].created_at),
+			"the capped read did not answer oldest first"
 		);
 
 		std::fs::remove_dir_all(&dir).expect("cleanup");

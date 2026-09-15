@@ -578,14 +578,17 @@ mod tests {
 				expected("user", Value::Null),
 			]
 		);
-		let recorded = recorded_in(&app, "c1").await;
+		let mut announced_ids = announced
+			.iter()
+			.map(|event| event["id"].as_str().expect("the event names its row").to_owned())
+			.collect::<Vec<_>>();
+		announced_ids.sort();
+		let mut recorded_ids =
+			recorded_in(&app, "c1").await.into_iter().map(|held| held.id).collect::<Vec<_>>();
+		recorded_ids.sort();
 		assert_eq!(
-			announced
-				.iter()
-				.map(|event| event["id"].as_str().expect("the event names its row").to_owned())
-				.collect::<Vec<_>>(),
-			recorded.iter().map(|held| held.id.clone()).collect::<Vec<_>>(),
-			"the announced rows are not the rows that were written, oldest first"
+			announced_ids, recorded_ids,
+			"the announced rows are not the rows that were written"
 		);
 		for event in &announced {
 			assert!(event["createdAt"].as_i64().is_some_and(|held| held > 0), "got {event}");
@@ -661,20 +664,21 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn the_installs_of_a_conversation_read_oldest_first_and_a_conversation_with_none_reads_empty(
-	) {
+	async fn every_install_of_a_conversation_is_recorded_and_a_conversation_with_none_reads_empty() {
 		let app = a_host("read-installs").await;
 		let host = serving_in(&app, "c1", unreached().await);
 		for application in ["paper", "linear", "granola"] {
 			host.answer(an_install(application, "user")).await.expect("the install answers");
 		}
 
-		let read = recorded_in(&app, "c1").await;
+		let mut read = recorded_in(&app, "c1")
+			.await
+			.into_iter()
+			.map(|held| held.application)
+			.collect::<Vec<_>>();
+		read.sort();
 
-		assert_eq!(
-			read.iter().map(|held| held.application.as_str()).collect::<Vec<_>>(),
-			["paper", "linear", "granola"]
-		);
+		assert_eq!(read, ["granola", "linear", "paper"]);
 		assert_eq!(recorded_in(&app, "nowhere").await, Vec::new());
 		cleaned(&app);
 	}

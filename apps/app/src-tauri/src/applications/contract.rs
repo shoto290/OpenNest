@@ -293,6 +293,62 @@ mod tests {
 	}
 
 	#[test]
+	fn a_recorded_install_crosses_to_the_front_under_the_names_it_reads() {
+		let record = ApplicationInstall {
+			id: "i1".to_owned(),
+			conversation_id: "c1".to_owned(),
+			application: "superset".to_owned(),
+			title: "Superset".to_owned(),
+			logo: Some("<svg/>".to_owned()),
+			scope: Destination::Space,
+			destination_id: Some("personal".to_owned()),
+			install: InstallCase::Key { secret: "SUPERSET_API_KEY".to_owned() },
+			last_message_seq: 12,
+			created_at: 1_700_000_000_000,
+		};
+
+		assert_eq!(
+			to_value(record).expect("it serialises"),
+			json!({
+				"id": "i1",
+				"conversationId": "c1",
+				"application": "superset",
+				"title": "Superset",
+				"logo": "<svg/>",
+				"scope": "space",
+				"destinationId": "personal",
+				"install": { "kind": "key", "secret": "SUPERSET_API_KEY" },
+				"lastMessageSeq": 12,
+				"createdAt": 1_700_000_000_000_i64,
+			})
+		);
+	}
+
+	#[test]
+	fn an_install_a_conversation_carries_nowhere_leaves_out_what_it_holds_no_value_for() {
+		let draft = InstallDraft {
+			conversation_id: "c1".to_owned(),
+			application: "paper".to_owned(),
+			title: "Paper".to_owned(),
+			logo: None,
+			scope: Destination::User,
+			destination_id: None,
+			install: InstallCase::Nothing,
+		};
+
+		assert_eq!(
+			to_value(ApplicationInstalled::from(draft)).expect("it serialises"),
+			json!({
+				"conversationId": "c1",
+				"application": "paper",
+				"title": "Paper",
+				"scope": "user",
+				"install": { "kind": "nothing" },
+			})
+		);
+	}
+
+	#[test]
 	fn every_error_names_its_kind() {
 		assert_eq!(
 			to_value(ApplicationsError::RegistryRefused { status: 503 }).expect("it serialises"),

@@ -770,7 +770,8 @@ CREATE TABLE application_installs (
 	install_kind TEXT NOT NULL CHECK (install_kind IN ('nothing', 'key', 'oauth')),
 	secret_name TEXT,
 	last_message_seq INTEGER NOT NULL,
-	created_at INTEGER NOT NULL
+	created_at INTEGER NOT NULL,
+	CHECK (install_kind <> 'key' OR secret_name IS NOT NULL)
 );
 
 CREATE INDEX application_installs_in_order
@@ -1814,6 +1815,38 @@ mod tests {
 			"the step lost a conversation written before it"
 		);
 		assert_eq!(version(&connection).expect("version"), latest_version());
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[test]
+	fn a_key_install_naming_no_secret_is_refused_by_the_table() {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply(&mut connection).expect("the schema installs");
+		write(
+			&connection,
+			"INSERT INTO conversations (id, kind, title, created_at, updated_at)
+				VALUES ('c1', 'main', 'Chat', 1, 1)",
+		)
+		.expect("a conversation");
+
+		let refused = write(
+			&connection,
+			"INSERT INTO application_installs (id, conversation_id, application, title, scope,
+				install_kind, last_message_seq, created_at)
+				VALUES ('i1', 'c1', 'superset', 'Superset', 'user', 'key', 0, 1)",
+		);
+
+		assert!(refused.is_err(), "a key install landed without the name of its secret");
+		write(
+			&connection,
+			"INSERT INTO application_installs (id, conversation_id, application, title, scope,
+				install_kind, secret_name, last_message_seq, created_at)
+				VALUES ('i1', 'c1', 'superset', 'Superset', 'user', 'key', 'SUPERSET_API_KEY', 0, 1)",
+		)
+		.expect("a key install naming its secret lands");
 
 		drop(connection);
 		fs::remove_dir_all(&dir).expect("cleanup");

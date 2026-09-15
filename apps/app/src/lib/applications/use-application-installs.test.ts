@@ -6,15 +6,13 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import type { ApplicationInstalled } from "./application-port"
 import { createFakeApplicationPort } from "./fake-application-port"
 import {
-	type ApplicationInstall,
+	type AnnouncedInstall,
 	useApplicationInstalls,
 } from "./use-application-installs"
 
 afterEach(cleanup)
 
-const listening = async (
-	onInstalled: (install: ApplicationInstall) => void,
-) => {
+const listening = async (onInstalled: (install: AnnouncedInstall) => void) => {
 	const port = createFakeApplicationPort()
 	const rendered = renderHook(() => useApplicationInstalls(port, onInstalled))
 	await act(async () => undefined)

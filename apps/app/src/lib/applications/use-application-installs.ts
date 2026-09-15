@@ -3,7 +3,7 @@ import { useEffect, useRef } from "react"
 import type { ApplicationInstalled, ApplicationPort } from "./application-port"
 import type { ReopenedScope } from "./session-reopening"
 
-export type ApplicationInstall = {
+export type AnnouncedInstall = {
 	application: string
 	scope: ReopenedScope
 }
@@ -25,7 +25,7 @@ const scopeOf = ({
 
 export const useApplicationInstalls = (
 	port: ApplicationPort,
-	onInstalled: (install: ApplicationInstall) => void,
+	onInstalled: (install: AnnouncedInstall) => void,
 ) => {
 	const announce = useRef(onInstalled)
 
