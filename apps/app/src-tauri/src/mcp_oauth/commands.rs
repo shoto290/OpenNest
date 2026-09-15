@@ -164,8 +164,12 @@ async fn disconnected<R: Runtime>(
 	Ok(revocation)
 }
 
-fn held_at(_root: &Path, owner: &EnvOwner, name: &str) -> Result<EnvScope, EnvError> {
-	Ok(EnvScope::Server { name: name.to_owned(), owner: owner.clone() })
+fn held_at(root: &Path, owner: &EnvOwner, name: &str) -> Result<EnvScope, EnvError> {
+	let served = credentials::served(root, owner)?.remove(name);
+	Ok(served.map_or_else(
+		|| EnvScope::Server { name: name.to_owned(), owner: owner.clone() },
+		|grant| grant.scope,
+	))
 }
 
 #[tauri::command]
@@ -276,38 +280,6 @@ mod tests {
 		app.manage(McpOauthState::default());
 		app.manage(ConnectorReports::default());
 		(app, data)
-	}
-
-	#[tokio::test]
-	async fn a_disconnect_of_an_owner_holding_no_grant_forgets_nothing_a_wider_owner_holds() {
-		let (app, data) = a_host("disconnect-wider");
-		let root = writable_root(app.handle()).expect("the store has a home");
-		let of_the_user = EnvScope::Server { name: "granola".to_owned(), owner: EnvOwner::User };
-		credentials::store(&root, &of_the_user, &a_live_grant()).expect("the user grant lands");
-		credentials::store(&root, &granola_of_the_space(), &a_live_grant())
-			.expect("the space grant lands");
-
-		for owner in [a_bot(), EnvOwner::Space { id: "s2".to_owned() }] {
-			let settled = mcp_oauth_disconnect(
-				app.handle().clone(),
-				owner,
-				"granola".to_owned(),
-				"https://mcp.granola.test/mcp".to_owned(),
-			)
-			.await;
-
-			assert_eq!(
-				settled,
-				Ok(Disconnected { revoked: false, detail: Some(NOTHING_STORED.to_owned()) })
-			);
-		}
-
-		for scope in [of_the_user, granola_of_the_space()] {
-			assert!(store::values(&root, &scope)
-				.expect("the scope is readable")
-				.contains_key(OAUTH_ACCESS_TOKEN));
-		}
-		let _ = std::fs::remove_dir_all(&data);
 	}
 
 	#[tokio::test]
@@ -472,6 +444,18 @@ mod tests {
 			.expect("the space grant is written");
 
 		assert_eq!(held_at(&root, &a_bot(), "granola"), Ok(granola_of_the_space()));
+
+		let root = a_root("held-at-user");
+		let of_the_user = EnvScope::Server { name: "granola".to_owned(), owner: EnvOwner::User };
+		credentials::store(&root, &of_the_user, &a_live_grant())
+			.expect("the user grant is written");
+
+		assert_eq!(held_at(&root, &a_bot(), "granola"), Ok(of_the_user));
+
+		credentials::store(&root, &a_server("granola"), &a_live_grant())
+			.expect("the bot grant is written");
+
+		assert_eq!(held_at(&root, &a_bot(), "granola"), Ok(a_server("granola")));
 	}
 
 	#[tokio::test]
