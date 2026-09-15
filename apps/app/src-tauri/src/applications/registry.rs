@@ -135,12 +135,20 @@ async fn answered(mut details: JoinSet<DetailRead>) -> Result<Vec<Server>, Appli
 		});
 	}
 	outcomes.sort_by_key(|(at, _)| *at);
-	let (read, failed): (Vec<_>, Vec<_>) =
-		outcomes.into_iter().map(|(_, outcome)| outcome).partition(Result::is_ok);
-	if let (true, Some(Err(failure))) = (read.is_empty(), failed.into_iter().next()) {
-		return Err(failure);
+	let mut read = Vec::new();
+	let mut first_failure = None;
+	for (_, outcome) in outcomes {
+		match outcome {
+			Ok(entry) => read.push(entry.server),
+			Err(failure) => {
+				first_failure.get_or_insert(failure);
+			}
+		}
 	}
-	Ok(read.into_iter().flatten().map(|entry| entry.server).collect())
+	match first_failure {
+		Some(failure) if read.is_empty() => Err(failure),
+		_ => Ok(read),
+	}
 }
 
 fn client() -> Result<Client, ApplicationsError> {
