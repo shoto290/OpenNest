@@ -1,7 +1,7 @@
 import { Icons } from "@workspace/ui/components/icons"
 import { cn } from "@workspace/ui/lib/utils"
 
-type ApplicationMarkSize = "md" | "sm" | "xs"
+type ApplicationMarkSize = "md" | "sm" | "xsm" | "xs"
 
 type ApplicationMarkStyle = {
 	slot: string
@@ -11,6 +11,7 @@ type ApplicationMarkStyle = {
 const APPLICATION_MARK_STYLE = {
 	md: { slot: "size-9 rounded-md", glyph: "size-4" },
 	sm: { slot: "size-7 rounded-md", glyph: "size-3.5" },
+	xsm: { slot: "size-6 rounded-sm", glyph: "size-3" },
 	xs: { slot: "size-5 rounded-sm", glyph: "size-3" },
 } as const satisfies Record<ApplicationMarkSize, ApplicationMarkStyle>
 

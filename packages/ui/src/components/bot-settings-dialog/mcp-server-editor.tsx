@@ -23,8 +23,10 @@ import {
 	toMcpServerWrittenConfig,
 } from "@workspace/ui/components/bot-settings"
 import {
+	MCP_ATTENTION_FIELD,
 	MCP_CONNECTION_DOT,
 	type McpConnectionSection,
+	type McpRefusedRefresh,
 } from "@workspace/ui/components/bot-settings-dialog/mcp-connection"
 import { McpServerLaunch } from "@workspace/ui/components/bot-settings-dialog/mcp-server-launch"
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
@@ -33,6 +35,7 @@ import {
 	type EnvironmentSection,
 } from "@workspace/ui/components/environment-panel"
 import { type Icon, Icons } from "@workspace/ui/components/icons"
+import { ApplicationMark } from "@workspace/ui/components/plugin-settings/application-mark"
 import { SettingsField } from "@workspace/ui/components/settings-field"
 import {
 	RAIL_LABELS_MIN_WIDTH,
@@ -92,10 +95,63 @@ const QUIET_FIELD = "border-border bg-muted/60"
 
 const AUTHORIZATION_FIELD = {
 	connected: QUIET_FIELD,
-	needsAuthorization: "border-bot-badge-attention/45 bg-bot-badge-attention/8",
-	connecting: "border-bot-badge-attention/45 bg-bot-badge-attention/8",
+	needsAuthorization: MCP_ATTENTION_FIELD,
+	connecting: MCP_ATTENTION_FIELD,
 	failed: "border-destructive/45 bg-destructive/8",
 } satisfies Record<BotMcpConnectionState, string>
+
+type McpRefusedRefreshBlockProps = {
+	refusal: McpRefusedRefresh
+	name: string
+	onConnect?: () => void
+}
+
+const McpRefusedRefreshBlock = ({
+	refusal,
+	name,
+	onConnect,
+}: McpRefusedRefreshBlockProps) => {
+	const { t } = useTranslation("bots")
+
+	return (
+		<div
+			className={cn(
+				"flex shrink-0 items-start gap-2.5 rounded-xl border p-3.5",
+				AUTHORIZATION_FIELD.failed,
+			)}
+		>
+			<span className="mt-0.75 flex size-4 shrink-0 items-center justify-center">
+				<span
+					aria-hidden="true"
+					className={cn("size-2 rounded-full", MCP_CONNECTION_DOT.failed)}
+				/>
+			</span>
+			<div className="flex min-w-0 flex-1 flex-col items-start gap-1.5">
+				<p className="font-medium text-foreground text-sm/5">
+					{t("applications.connection.refused.title")}
+				</p>
+				<p className="wrap-break-word text-[13px]/4.5 text-muted-foreground">
+					{t("applications.connection.refused.description", {
+						name,
+						companion: refusal.companionName,
+						count: refusal.toolCount,
+						sessions: t("applications.connection.refused.sessions", {
+							count: refusal.sessionCount,
+						}),
+					})}
+				</p>
+				<code className="block max-w-full wrap-break-word rounded-md border border-border bg-background px-2.5 py-1.25 font-mono text-muted-foreground text-xs/4">
+					{refusal.reason}
+				</code>
+			</div>
+			{onConnect ? (
+				<Button className="shrink-0" onClick={onConnect} size="sm">
+					{t("applications.connection.refused.action")}
+				</Button>
+			) : null}
+		</div>
+	)
+}
 
 type McpAuthorizationProps = McpConnectionSection & {
 	name: string
@@ -107,6 +163,7 @@ const McpAuthorization = ({
 	state,
 	host,
 	authorizedAt,
+	refusedRefresh,
 	name,
 	isSaved,
 	defaultDisconnecting,
@@ -117,6 +174,16 @@ const McpAuthorization = ({
 }: McpAuthorizationProps) => {
 	const { t } = useTranslation("bots")
 	const isWaiting = isSaved && state === "connecting"
+
+	if (isSaved && refusedRefresh) {
+		return (
+			<McpRefusedRefreshBlock
+				name={name}
+				onConnect={onConnect}
+				refusal={refusedRefresh}
+			/>
+		)
+	}
 
 	const readDescription = () => {
 		if (!isSaved) return t("applications.connection.description.unsaved")
@@ -237,6 +304,8 @@ type McpServerEditorProps = {
 	onDelete?: () => void
 	connection?: McpConnectionSection
 	environment?: EnvironmentSection
+	mark?: string
+	displayName?: string
 	defaultSection?: string
 	defaultConfirming?: boolean
 	defaultDisconnecting?: boolean
@@ -253,6 +322,8 @@ const McpServerEditor = ({
 	onDelete,
 	connection,
 	environment,
+	mark,
+	displayName,
 	defaultSection,
 	defaultConfirming,
 	defaultDisconnecting,
@@ -265,7 +336,7 @@ const McpServerEditor = ({
 	const [typed, setTyped] = useState<Partial<BotMcpServerFields>>({})
 	const iconsOnly = useIsNarrowerThan(root, RAIL_LABELS_MIN_WIDTH)
 
-	const name = draft.name.trim() || t("applications.untitled")
+	const name = displayName ?? (draft.name.trim() || t("applications.untitled"))
 	const config = parseMcpServerConfig(draft.config)
 	const fields = readMcpServerFields(config ?? {})
 	const written = config && toMcpServerWrittenConfig(config, draft.transport)
@@ -382,7 +453,13 @@ const McpServerEditor = ({
 			<div className="flex min-h-0 min-w-0 flex-1 flex-col">
 				<div className="flex shrink-0 items-center justify-between gap-2 border-border border-b px-5 py-3">
 					<div className="flex min-w-0 items-center gap-2">
-						<span className="truncate font-medium text-foreground text-sm">
+						<ApplicationMark mark={mark} size="xsm" />
+						<span
+							className={cn(
+								"truncate font-medium text-foreground text-sm",
+								!displayName && "font-mono",
+							)}
+						>
 							{name}
 						</span>
 						{isUnsaved && isWritten ? (

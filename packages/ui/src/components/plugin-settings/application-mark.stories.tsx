@@ -35,3 +35,13 @@ export const WithoutMark = meta.story({
 export const Small = meta.story({
 	args: { size: "sm" },
 })
+
+export const ExtraSmall = meta.story({
+	args: { size: "xsm" },
+	play: async ({ canvasElement }) => {
+		const slot = canvasElement.querySelector<HTMLElement>(
+			'[data-slot="application-mark"]',
+		)
+		await expect(slot?.getBoundingClientRect().width).toBe(24)
+	},
+})
