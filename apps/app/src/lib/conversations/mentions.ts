@@ -80,24 +80,20 @@ const mentionOf = (name: string) => `${ARROBASE}${name} `
 const spacedEnd = (prompt: string) =>
 	prompt.length === 0 || TRAILING_SPACE.test(prompt) ? prompt : `${prompt} `
 
-export const promptWithMention = (prompt: string, name: string): string => {
+const withoutMentionDraft = (prompt: string): string => {
 	const draft = MENTION_DRAFT.exec(prompt)
-	if (!draft) {
-		return prompt
-	}
-	const kept = prompt.slice(0, prompt.length - draft[1].length - 1)
-	return `${kept}${mentionOf(name)}`
+	return draft ? prompt.slice(0, prompt.length - draft[1].length - 1) : prompt
 }
 
-export const promptWithMentionAdded = (
-	prompt: string,
-	name: string,
-): string => {
-	const draft = MENTION_DRAFT.exec(prompt)
-	return draft
+export const promptWithMention = (prompt: string, name: string): string =>
+	MENTION_DRAFT.test(prompt)
+		? `${withoutMentionDraft(prompt)}${mentionOf(name)}`
+		: prompt
+
+export const promptWithMentionAdded = (prompt: string, name: string): string =>
+	MENTION_DRAFT.test(prompt)
 		? promptWithMention(prompt, name)
 		: `${spacedEnd(prompt)}${mentionOf(name)}`
-}
 
 const namedBotsIn = (text: string, bots: MentionBot[]): MentionBot[] => {
 	const named: MentionBot[] = []
@@ -118,11 +114,6 @@ const namedBotsIn = (text: string, bots: MentionBot[]): MentionBot[] => {
 	return named
 }
 
-const withoutMentionDraft = (prompt: string): string => {
-	const draft = MENTION_DRAFT.exec(prompt)
-	return draft ? prompt.slice(0, prompt.length - draft[1].length - 1) : prompt
-}
-
 export const mentionCountsIn = (
 	prompt: string,
 	bots: MentionBot[],
@@ -137,12 +128,4 @@ export const mentionCountsIn = (
 export const mentionedBotIdsIn = (
 	text: string,
 	bots: MentionBot[],
-): string[] => {
-	const botIds: string[] = []
-	for (const named of namedBotsIn(text, bots)) {
-		if (!botIds.includes(named.id)) {
-			botIds.push(named.id)
-		}
-	}
-	return botIds
-}
+): string[] => [...new Set(namedBotsIn(text, bots).map((named) => named.id))]
