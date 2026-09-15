@@ -40,7 +40,7 @@ const APPLICATION_STATUS = {
 	},
 	waiting: {
 		label: "applications.connection.waiting",
-		tone: MCP_CONNECTION_DOT.connecting,
+		tone: MCP_CONNECTION_DOT.needsAuthorization,
 		labelTone: "text-muted-foreground",
 	},
 	connected: {

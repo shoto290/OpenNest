@@ -19,6 +19,7 @@ import {
 	ToolQuestion,
 	type ToolQuestionAnswers,
 	type ToolQuestionItem,
+	type ToolQuestionNotice,
 	type ToolQuestionProps,
 } from "@workspace/ui/components/tool-question"
 import { chat } from "@workspace/ui/lib/i18n-en/chat"
@@ -1185,10 +1186,9 @@ export const ApplicationScope = meta.story({
 	},
 })
 
-const KEY_REFUSED_NOTICE: ToolQuestionItem = {
-	question: "What should Shoto do about the Sentry key?",
+const KEY_REFUSED_NOTICE: ToolQuestionNotice = {
+	isNotice: true,
 	header: "Sentry",
-	options: [],
 	failure: {
 		title: "Sentry refused the key",
 		detail: "401 Unauthorized: invalid auth token",
@@ -1207,7 +1207,7 @@ export const FailureWithAction = meta.story({
 		docs: {
 			description: {
 				story:
-					"The upper bubble of artboard E11: a failure with nothing to answer. No option, no free text and no question line are drawn, so the failure title names the form, and the primary action replaces Send, enabled without any answer, with its own label and leading glyph. Pick `Failure` when the failure still asks a question below it.",
+					"The upper bubble of artboard E11: an item declared a notice, a failure with nothing to answer. A notice takes no question text, so no option, no free text and no question line are drawn, the failure title names the form, and the primary action replaces Send, enabled without any answer, with its own label and leading glyph. Pick `Failure` when the failure still asks a question below it, and `NoticeInQueue` for a notice beside a question.",
 			},
 		},
 	},
@@ -1220,9 +1220,6 @@ export const FailureWithAction = meta.story({
 		await expect(canvas.queryByRole("radio")).not.toBeInTheDocument()
 		await expect(canvas.queryByRole("textbox")).not.toBeInTheDocument()
 		await expect(
-			canvas.queryByText(KEY_REFUSED_NOTICE.question),
-		).not.toBeInTheDocument()
-		await expect(
 			canvas.queryByRole("button", { name: chat.toolQuestion.submit }),
 		).not.toBeInTheDocument()
 		await expect(action.querySelector("svg")).not.toBeNull()
@@ -1230,5 +1227,38 @@ export const FailureWithAction = meta.story({
 
 		action.click()
 		await expect(KEY_REFUSED_NOTICE.action?.onSelect).toHaveBeenCalledTimes(1)
+	},
+})
+
+export const NoticeInQueue = meta.story({
+	args: { questions: [RELEASE_QUESTION, KEY_REFUSED_NOTICE] },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A question queued beside a notice. The notice has nothing to answer, so it never waits: picking the question's option keeps the card on the question, the primary control reads `Send answers` rather than `Next question`, and sending reports the question's answer alone. Pick `FailureWithAction` for a notice on its own.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		await userEvent.click(canvas.getByRole("radio", { name: /^Now/ }))
+
+		await expect(canvas.getByRole("tab", { name: "Release" })).toHaveAttribute(
+			"aria-selected",
+			"true",
+		)
+		await expect(canvas.getByRole("tab", { name: "Sentry" })).toHaveAttribute(
+			"aria-selected",
+			"false",
+		)
+
+		const send = canvas.getByRole("button", { name: chat.toolQuestion.submit })
+		await expect(send).toBeEnabled()
+		await userEvent.click(send)
+
+		await expect(args.onAnswer).toHaveBeenCalledTimes(1)
+		await expect(args.onAnswer).toHaveBeenCalledWith({
+			[RELEASE_QUESTION.question]: "Now",
+		})
 	},
 })

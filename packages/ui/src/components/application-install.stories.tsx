@@ -1,7 +1,7 @@
 import { expect, fn, spyOn } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { slotIn } from "@workspace/storybook/story-utils"
+import { probedStyleOf, slotIn } from "@workspace/storybook/story-utils"
 import {
 	ApplicationInstall,
 	type ApplicationInstallProps,
@@ -83,8 +83,13 @@ const meta = preview.meta({
 	},
 	args: {
 		application: curatedCardOf("postgres"),
-		primary: { label: "Install Postgres", icon: Icons.Add, onSelect: fn() },
-		secondary: { label: "Not now", emphasis: "outline", onSelect: fn() },
+		leading: {
+			label: "Install Postgres",
+			emphasis: "primary",
+			icon: Icons.Add,
+			onSelect: fn(),
+		},
+		trailing: { label: "Not now", emphasis: "outline", onSelect: fn() },
 	} satisfies ApplicationInstallProps,
 	render: InstallByShoto,
 	decorators: [
@@ -128,15 +133,20 @@ export const NothingToSetUp = meta.story({
 		await expect(getComputedStyle(primary).boxShadow).not.toBe("none")
 
 		await userEvent.keyboard("{Enter}")
-		await expect(args.primary.onSelect).toHaveBeenCalledTimes(1)
+		await expect(args.leading.onSelect).toHaveBeenCalledTimes(1)
 	},
 })
 
 export const NeedsAnApiKey = meta.story({
 	args: {
 		application: curatedCardOf("sentry"),
-		primary: { label: "Open Settings", icon: Icons.Settings, onSelect: fn() },
-		secondary: { label: "Not now", emphasis: "quiet", onSelect: fn() },
+		leading: {
+			label: "Open Settings",
+			emphasis: "primary",
+			icon: Icons.Settings,
+			onSelect: fn(),
+		},
+		trailing: { label: "Not now", emphasis: "quiet", onSelect: fn() },
 	},
 	parameters: {
 		docs: {
@@ -160,20 +170,16 @@ export const NeedsAnApiKey = meta.story({
 
 export const SignsYouIn = meta.story({
 	args: {
-		application: curatedCardOf("linear"),
+		application: { ...curatedCardOf("linear"), status: "waiting" },
 		address: SIGN_IN_ADDRESS,
-		primary: {
-			label: "Open in browser",
-			icon: Icons.ExternalLink,
-			onSelect: fn(),
-		},
-		secondary: undefined,
+		leading: { label: "Open in browser", emphasis: "outline", onSelect: fn() },
+		trailing: { label: "Not now", emphasis: "quiet", onSelect: fn() },
 	},
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"An application that signs the person in through the browser. The read-only address row sits between the card and the action row, and its copy control announces the copy politely. Pick `CopyFailed` for a refused clipboard and `LongContent` for an address that does not fit.",
+					"An install waiting on the browser sign-in. The read-only address row sits between the card and the action row, and its copy control announces the copy politely. Nothing in the row is filled: the leading control sits on the outline surface with no glyph, fully rounded, and the trailing one is quiet. Pick `CopyFailed` for a refused clipboard and `LongContent` for an address that does not fit.",
 			},
 		},
 	},
@@ -185,11 +191,34 @@ export const SignsYouIn = meta.story({
 		const card = slotIn(canvasElement, "application-card")
 		const row = slotIn(canvasElement, "application-install-address")
 		const address = canvas.getByLabelText(chat.applicationInstall.address)
-		const primary = canvas.getByRole("button", { name: "Open in browser" })
+		const leading = canvas.getByRole("button", { name: "Open in browser" })
+		const trailing = canvas.getByRole("button", { name: "Not now" })
+		const leadingStyle = getComputedStyle(leading)
+		const trailingStyle = getComputedStyle(trailing)
 		const copy = canvas.getByRole("button", { name: chat.toolQuestion.copy })
 
 		await expect(follows(card, row)).toBe(true)
-		await expect(follows(row, primary)).toBe(true)
+		await expect(follows(row, leading)).toBe(true)
+		await expect(follows(leading, trailing)).toBe(true)
+
+		await expect(leading.querySelector("svg")).toBeNull()
+		await expect(leadingStyle.borderTopWidth).toBe("1px")
+		await expect(leadingStyle.borderTopColor).toBe(
+			probedStyleOf("border border-border", "borderTopColor"),
+		)
+		await expect(leadingStyle.backgroundColor).toBe(
+			probedStyleOf("bg-background", "backgroundColor"),
+		)
+		await expect(leading.getBoundingClientRect().height).toBe(32)
+		await expect(leadingStyle.paddingInlineStart).toBe("14px")
+		await expect(leadingStyle.lineHeight).toBe("18px")
+
+		await expect(trailing).toBeVisible()
+		await expect(trailingStyle.backgroundColor).toBe("rgba(0, 0, 0, 0)")
+		await expect(trailingStyle.color).toBe(
+			probedStyleOf("text-muted-foreground", "color"),
+		)
+		await expect(trailingStyle.lineHeight).toBe("18px")
 		await expect(address).toHaveAttribute("readonly")
 		await expect(address).toHaveValue(SIGN_IN_ADDRESS)
 		await expect(row.getBoundingClientRect().height).toBe(36)
@@ -254,12 +283,8 @@ export const LongContent = meta.story({
 			status: "waiting",
 		},
 		address: `${SIGN_IN_ADDRESS}&redirect_uri=http%3A%2F%2F127.0.0.1%3A53682%2Fcallback`,
-		primary: {
-			label: "Open in browser",
-			icon: Icons.ExternalLink,
-			onSelect: fn(),
-		},
-		secondary: { label: "Not now", emphasis: "quiet", onSelect: fn() },
+		leading: { label: "Open in browser", emphasis: "outline", onSelect: fn() },
+		trailing: { label: "Not now", emphasis: "quiet", onSelect: fn() },
 	},
 	decorators: [
 		(Story) => (

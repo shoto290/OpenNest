@@ -1,13 +1,16 @@
+import type { ReactNode } from "react"
 import { expect, fn } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
 	listExhaustively,
+	probedStyleOf,
 	slotIn,
 	slotsIn,
 } from "@workspace/storybook/story-utils"
 import {
 	ApplicationCard,
+	type ApplicationCardFootnote,
 	type ApplicationCardProps,
 	type ApplicationCardStatus,
 } from "@workspace/ui/components/application-card"
@@ -45,19 +48,25 @@ const APPLICATION_STATUSES = listExhaustively<ApplicationCardStatus>({
 	connected: true,
 })
 
-type ProbedProperty = "color" | "backgroundColor" | "fontFamily"
-
-const probedStyleOf = (className: string, property: ProbedProperty) => {
-	const probe = document.createElement("span")
-	probe.className = className
-	document.body.append(probe)
-	const value = getComputedStyle(probe)[property]
-	probe.remove()
-	return value
-}
-
 const fontFamilyOf = (className: string) =>
 	probedStyleOf(className, "fontFamily")
+
+const expectInside = async (inner: Element, outer: Element) => {
+	const innerBox = inner.getBoundingClientRect()
+	const outerBox = outer.getBoundingClientRect()
+	await expect(innerBox.left).toBeGreaterThanOrEqual(outerBox.left)
+	await expect(innerBox.right).toBeLessThanOrEqual(outerBox.right)
+}
+
+type BubbleSurfaceProps = {
+	children: ReactNode
+}
+
+const BubbleSurface = ({ children }: BubbleSurfaceProps) => (
+	<div className="mx-auto grid max-w-md gap-3 rounded-bubble bg-muted px-3.5 py-2.5">
+		{children}
+	</div>
+)
 
 const meta = preview.meta({
 	title: "Conversation/Tools/ApplicationCard",
@@ -77,16 +86,16 @@ const meta = preview.meta({
 		description: "Reads and files issues, projects and cycles.",
 		status: "signIn",
 	} satisfies ApplicationCardProps,
-	decorators: [
-		(Story) => (
-			<div className="mx-auto grid max-w-md gap-3 rounded-bubble bg-muted px-3.5 py-2.5">
-				<Story />
-			</div>
-		),
-	],
 })
 
 export const Default = meta.story({
+	decorators: [
+		(Story) => (
+			<BubbleSurface>
+				<Story />
+			</BubbleSurface>
+		),
+	],
 	parameters: {
 		docs: {
 			description: {
@@ -112,6 +121,13 @@ export const WithSlug = meta.story({
 		description: "Forecasts and alerts from national weather services.",
 		status: "none",
 	},
+	decorators: [
+		(Story) => (
+			<BubbleSurface>
+				<Story />
+			</BubbleSurface>
+		),
+	],
 	parameters: {
 		docs: {
 			description: {
@@ -129,16 +145,18 @@ export const WithSlug = meta.story({
 	},
 })
 
+type StatusIndicator = {
+	className: string
+	property: "color" | "backgroundColor"
+}
+
 const STATUS_INDICATOR = {
 	none: { className: "text-state-connected", property: "color" },
 	apiKey: { className: "text-muted-foreground", property: "color" },
 	signIn: { className: "bg-bot-badge-attention", property: "backgroundColor" },
-	waiting: { className: "bg-muted-foreground", property: "backgroundColor" },
+	waiting: { className: "bg-bot-badge-attention", property: "backgroundColor" },
 	connected: { className: "bg-state-connected", property: "backgroundColor" },
-} as const satisfies Record<
-	ApplicationCardStatus,
-	{ className: string; property: "color" | "backgroundColor" }
->
+} as const satisfies Record<ApplicationCardStatus, StatusIndicator>
 
 const STATUS_LABEL = {
 	none: bots.applications.catalogue.setup.none,
@@ -149,6 +167,13 @@ const STATUS_LABEL = {
 } as const satisfies Record<ApplicationCardStatus, string>
 
 export const Statuses = meta.story({
+	decorators: [
+		(Story) => (
+			<BubbleSurface>
+				<Story />
+			</BubbleSurface>
+		),
+	],
 	render: (args) => (
 		<>
 			{APPLICATION_STATUSES.map((status) => (
@@ -160,7 +185,7 @@ export const Statuses = meta.story({
 		docs: {
 			description: {
 				story:
-					"Every status the card can carry. Labels come from the catalogue setup and connection catalogues; indicators from the connection dot map and the connected token. Check nothing to set up is a check stroked in the connected token, an API key is a muted key, and a connected application reads its label in the foreground token.",
+					"Every status the card can carry. Labels come from the catalogue setup and connection catalogues; indicators from the connection dot map and the connected token. Check nothing to set up is a check stroked in the connected token, an API key is a muted key, signing in and waiting on the browser share the attention token, and a connected application reads its label in the foreground token.",
 			},
 		},
 	},
@@ -188,9 +213,8 @@ const RefusedKeyBubble = () => (
 				onDeny={fn()}
 				questions={[
 					{
-						question: "What should Shoto do about the Sentry key?",
+						isNotice: true,
 						header: "Sentry",
-						options: [],
 						failure: {
 							title: "Sentry refused the key",
 							detail: "401 Unauthorized: invalid auth token",
@@ -208,17 +232,19 @@ const RefusedKeyBubble = () => (
 	</MessageBubble>
 )
 
+const RECEIPT_FOOTNOTE: ApplicationCardFootnote = {
+	sentence: "Shoto has Sentry in every conversation.",
+	actionLabel: "Open Settings",
+	onAction: fn(),
+}
+
 const RECEIPT: ApplicationCardProps = {
 	name: "sentry",
 	displayName: undefined,
 	mark: SENTRY_MARK,
 	description: "Pulls the errors and traces behind a release.",
 	status: "connected",
-	footnote: {
-		sentence: "Shoto has Sentry in every conversation.",
-		actionLabel: "Open Settings",
-		onAction: fn(),
-	},
+	footnote: RECEIPT_FOOTNOTE,
 }
 
 export const Receipt = meta.story({
@@ -252,7 +278,7 @@ export const Receipt = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard E11. Above, the refused key as a question that only reports: the failure, then the way to Settings, with no key field. Below, the receipt posted bare in the thread: the same card, bordered, naming the slug in the mono face, its footnote row separated by one rule with a muted sentence and a control that opens Settings.",
+					"Artboard E11. Above, the refused key as a notice: the failure, then the way to Settings, with no key field. Below, the receipt posted bare in the thread: the same card, bordered, naming the slug in the mono face, its footnote row separated by one rule with a muted sentence and a control that opens Settings. Pick `ReceiptNarrow` for a 320px column.",
 			},
 		},
 	},
@@ -281,5 +307,43 @@ export const Receipt = meta.story({
 		await expect(getComputedStyle(openSettings).boxShadow).not.toBe("none")
 		await userEvent.keyboard("{Enter}")
 		await expect(args.footnote?.onAction).toHaveBeenCalledTimes(1)
+	},
+})
+
+const NARROW_FOOTNOTE: ApplicationCardFootnote = {
+	sentence:
+		"Shoto has Sentry in every conversation, and so does every companion you add later.",
+	actionLabel: "Open Settings",
+	onAction: fn(),
+}
+
+export const ReceiptNarrow = meta.story({
+	args: { ...RECEIPT, footnote: NARROW_FOOTNOTE },
+	decorators: [
+		(Story) => (
+			<div className="w-[320px]" data-testid="column">
+				<Story />
+			</div>
+		),
+	],
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The receipt in a 320px column, which is also what 200 percent zoom leaves. The footnote sentence wraps and its control keeps its full label at the inline end, both inside the column. Pick `Receipt` for the thread it is posted in.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const column = canvas.getByTestId("column")
+		const sentence = canvas.getByText(NARROW_FOOTNOTE.sentence)
+		const control = canvas.getByRole("button", {
+			name: NARROW_FOOTNOTE.actionLabel,
+		})
+
+		await expectInside(sentence, column)
+		await expectInside(control, column)
+		await expect(control.scrollWidth).toBeLessThanOrEqual(control.clientWidth)
+		await expect(column.scrollWidth).toBeLessThanOrEqual(column.clientWidth)
 	},
 })

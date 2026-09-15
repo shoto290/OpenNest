@@ -88,12 +88,22 @@ export type ToolQuestionItem = {
 	action?: ToolQuestionAction
 	exit?: ToolQuestionExit
 	failure?: ToolQuestionFailure
+	isNotice?: false
+}
+
+export type ToolQuestionNotice = {
+	isNotice: true
+	header: string
+	failure: ToolQuestionFailure
+	action?: ToolQuestionAction
+	exit?: ToolQuestionExit
+	question?: never
 }
 
 export type ToolQuestionAnswers = Record<string, string>
 
 export interface ToolQuestionProps {
-	questions: ToolQuestionItem[]
+	questions: (ToolQuestionItem | ToolQuestionNotice)[]
 	onAnswer?: (answers: ToolQuestionAnswers) => void
 	onDeny?: () => void
 	className?: string
@@ -117,19 +127,25 @@ const ToolQuestion = ({
 	const askedId = useId()
 	const failureId = useId()
 	const [drafts, setDrafts] = useState<Record<string, Draft>>({})
-	const [asked, setAsked] = useState(questions[0]?.question)
+	const [shownIndex, setShownIndex] = useState(0)
 
 	const draftOf = (question: string) => drafts[question] ?? EMPTY_DRAFT
 
 	const writeDraft = (question: string, draft: Draft) =>
 		setDrafts((current) => ({ ...current, [question]: draft }))
 
-	const answers = Object.fromEntries(
-		questions.map(({ question }) => [question, answerOf(draftOf(question))]),
+	const asks = questions.filter(
+		(candidate): candidate is ToolQuestionItem => !candidate.isNotice,
 	)
 
-	const waitingAfter = (answered: ToolQuestionItem) =>
-		questions.find((item) => item !== answered && answers[item.question] === "")
+	const answers = Object.fromEntries(
+		asks.map(({ question }) => [question, answerOf(draftOf(question))]),
+	)
+
+	const waitingAfter = (shown: ToolQuestionItem | ToolQuestionNotice) =>
+		asks.find((ask) => ask !== shown && answers[ask.question] === "")
+
+	const show = (ask: ToolQuestionItem) => setShownIndex(questions.indexOf(ask))
 
 	const pickOption = (item: ToolQuestionItem, label: string) => {
 		const { selected } = draftOf(item.question)
@@ -145,41 +161,19 @@ const ToolQuestion = ({
 		if (item.multiSelect || held) return
 
 		const next = waitingAfter(item)
-		if (next) setAsked(next.question)
+		if (next) show(next)
 	}
 
-	const item = questions.find((candidate) => candidate.question === asked)
+	const item = questions[shownIndex]
 	if (!item) return null
 
-	const draft = draftOf(item.question)
-	const rows = item.options.map((option) => (
-		<OptionRow
-			isSelected={draft.selected.includes(option.label)}
-			key={option.label}
-			option={option}
-			render={(id) =>
-				item.multiSelect ? (
-					<Checkbox
-						checked={draft.selected.includes(option.label)}
-						id={id}
-						onCheckedChange={() => pickOption(item, option.label)}
-					/>
-				) : (
-					<RadioGroupItem id={id} value={option.label} />
-				)
-			}
-		/>
-	))
-
-	const isAnswered = answers[item.question] !== ""
+	const isAnswered = item.isNotice || answers[item.question] !== ""
 	const waiting = waitingAfter(item)
-	const isFailureOnly =
-		Boolean(item.failure) && item.options.length === 0 && !item.entry
 
 	const sendOrAdvance = () => {
 		if (!isAnswered) return
 		if (waiting) {
-			setAsked(waiting.question)
+			show(waiting)
 			return
 		}
 		onAnswer?.(answers)
@@ -197,29 +191,32 @@ const ToolQuestion = ({
 		sendOrAdvance()
 	}
 
-	const writeTypedAnswer = (text: string) =>
-		writeDraft(item.question, { selected: [], text })
+	const hasEntry = !item.isNotice && Boolean(item.entry)
 
 	return (
 		<form
-			aria-describedby={item.failure && !isFailureOnly ? failureId : undefined}
-			aria-labelledby={isFailureOnly ? failureId : askedId}
+			aria-describedby={!item.isNotice && item.failure ? failureId : undefined}
+			aria-labelledby={item.isNotice ? failureId : askedId}
 			className={cn(QUESTION_FORM_CLASS, className)}
 			onKeyDown={readKey}
 			onSubmit={submitForm}
 			ref={cardRef}
 			tabIndex={-1}
 		>
-			<Tabs onValueChange={setAsked} value={item.question}>
+			<Tabs onValueChange={setShownIndex} value={shownIndex}>
 				<TabsList activateOnFocus className={QUESTION_TAB_LIST_CLASS}>
-					{questions.map((candidate) => (
+					{questions.map((candidate, index) => (
 						<TabsTrigger
 							className={QUESTION_TAB_CLASS}
-							key={candidate.question}
-							value={candidate.question}
+							key={
+								candidate.isNotice
+									? `notice:${candidate.header}`
+									: candidate.question
+							}
+							value={index}
 						>
 							{candidate.header}
-							{answers[candidate.question] ? (
+							{!candidate.isNotice && answers[candidate.question] ? (
 								<Icons.Check className="ml-1.5 size-3" />
 							) : null}
 						</TabsTrigger>
@@ -227,58 +224,20 @@ const ToolQuestion = ({
 				</TabsList>
 			</Tabs>
 
-			<div className={cn("grid", item.entry ? "gap-3" : "gap-2")}>
+			<div className={cn("grid", hasEntry ? "gap-3" : "gap-2")}>
 				{item.failure ? (
 					<FailureBlock failure={item.failure} titleId={failureId} />
 				) : null}
 
-				{isFailureOnly ? null : (
-					<p
-						className={cn(
-							"font-medium text-foreground",
-							item.mark && "flex items-center gap-2",
-						)}
-						id={askedId}
-					>
-						{item.mark ? (
-							<ApplicationMark mark={item.mark} size="inline" />
-						) : null}
-						{item.question}
-					</p>
-				)}
-
-				{item.link ? <LinkField link={item.link} /> : null}
-
-				{isFailureOnly ? null : item.entry ? (
-					<EntryField
-						entry={item.entry}
+				{item.isNotice ? null : (
+					<QuestionFields
+						draft={draftOf(item.question)}
+						item={item}
+						onPick={(label) => pickOption(item, label)}
 						onSubmit={sendOrAdvance}
-						onValueChange={writeTypedAnswer}
-						value={draft.text}
+						onType={(text) => writeDraft(item.question, { selected: [], text })}
+						questionId={askedId}
 					/>
-				) : (
-					<>
-						{item.multiSelect ? (
-							<div className="grid gap-2">{rows}</div>
-						) : (
-							<RadioGroup
-								className="gap-2"
-								onValueChange={(label: string) => pickOption(item, label)}
-								value={draft.selected[0] ?? ""}
-							>
-								{rows}
-							</RadioGroup>
-						)}
-
-						{item.optionsOnly ? null : (
-							<SettingsField
-								label={t("toolQuestion.freeText")}
-								onValueChange={writeTypedAnswer}
-								placeholder={t("toolQuestion.freeTextPlaceholder")}
-								value={draft.text}
-							/>
-						)}
-					</>
 				)}
 			</div>
 
@@ -295,9 +254,7 @@ const ToolQuestion = ({
 						) : (
 							<>
 								<Icons.Send data-icon="inline-start" />
-								{t(
-									item.entry ? "toolQuestion.continue" : "toolQuestion.submit",
-								)}
+								{t(hasEntry ? "toolQuestion.continue" : "toolQuestion.submit")}
 							</>
 						)}
 					</Button>
@@ -321,6 +278,93 @@ const ToolQuestion = ({
 				) : null}
 			</div>
 		</form>
+	)
+}
+
+type QuestionFieldsProps = {
+	item: ToolQuestionItem
+	questionId: string
+	draft: Draft
+	onPick: (label: string) => void
+	onType: (text: string) => void
+	onSubmit: () => void
+}
+
+const QuestionFields = ({
+	item,
+	questionId,
+	draft,
+	onPick,
+	onType,
+	onSubmit,
+}: QuestionFieldsProps) => {
+	const { t } = useTranslation("chat")
+	const rows = item.options.map((option) => (
+		<OptionRow
+			isSelected={draft.selected.includes(option.label)}
+			key={option.label}
+			option={option}
+			render={(id) =>
+				item.multiSelect ? (
+					<Checkbox
+						checked={draft.selected.includes(option.label)}
+						id={id}
+						onCheckedChange={() => onPick(option.label)}
+					/>
+				) : (
+					<RadioGroupItem id={id} value={option.label} />
+				)
+			}
+		/>
+	))
+
+	return (
+		<>
+			<p
+				className={cn(
+					"font-medium text-foreground",
+					item.mark && "flex items-center gap-2",
+				)}
+				id={questionId}
+			>
+				{item.mark ? <ApplicationMark mark={item.mark} size="inline" /> : null}
+				{item.question}
+			</p>
+
+			{item.link ? <LinkField link={item.link} /> : null}
+
+			{item.entry ? (
+				<EntryField
+					entry={item.entry}
+					onSubmit={onSubmit}
+					onValueChange={onType}
+					value={draft.text}
+				/>
+			) : (
+				<>
+					{item.multiSelect ? (
+						<div className="grid gap-2">{rows}</div>
+					) : (
+						<RadioGroup
+							className="gap-2"
+							onValueChange={(label: string) => onPick(label)}
+							value={draft.selected[0] ?? ""}
+						>
+							{rows}
+						</RadioGroup>
+					)}
+
+					{item.optionsOnly ? null : (
+						<SettingsField
+							label={t("toolQuestion.freeText")}
+							onValueChange={onType}
+							placeholder={t("toolQuestion.freeTextPlaceholder")}
+							value={draft.text}
+						/>
+					)}
+				</>
+			)}
+		</>
 	)
 }
 

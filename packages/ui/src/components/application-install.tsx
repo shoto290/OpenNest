@@ -18,27 +18,28 @@ import type {
 import { Button } from "@workspace/ui/components/ui/button"
 import { useCopyText } from "@workspace/ui/hooks/use-copy-text"
 
-const SECONDARY_BUTTON = {
-	outline: { variant: "outline" },
-	quiet: { variant: "ghost", className: "text-muted-foreground" },
+const INSTALL_CONTROL = {
+	primary: { variant: "default" },
+	outline: { variant: "outline", className: "rounded-full px-3.5 leading-4.5" },
+	quiet: { variant: "ghost", className: "text-muted-foreground leading-4.5" },
 } as const
 
-type ApplicationInstallSecondary = ToolQuestionExit & {
-	emphasis: keyof typeof SECONDARY_BUTTON
-}
+type ApplicationInstallControl =
+	| (ToolQuestionAction & { emphasis: "primary" })
+	| (ToolQuestionExit & { emphasis: "outline" | "quiet" })
 
 type ApplicationInstallProps = {
 	application: Omit<ApplicationCardProps, "footnote">
 	address?: string
-	primary: ToolQuestionAction
-	secondary?: ApplicationInstallSecondary
+	leading: ApplicationInstallControl
+	trailing?: ApplicationInstallControl
 }
 
 const ApplicationInstall = ({
 	application,
 	address,
-	primary: { label, icon: PrimaryGlyph, onSelect },
-	secondary,
+	leading,
+	trailing,
 }: ApplicationInstallProps) => (
 	<MessageBubble variant="soft">
 		<MessageBubbleContent className="w-full">
@@ -46,23 +47,29 @@ const ApplicationInstall = ({
 				<ApplicationCard {...application} />
 				{address ? <AddressRow address={address} /> : null}
 				<div className="flex flex-wrap items-center gap-2">
-					<Button onClick={onSelect} type="button">
-						<PrimaryGlyph className="size-3.5" data-icon="inline-start" />
-						{label}
-					</Button>
-					{secondary ? (
-						<Button
-							{...SECONDARY_BUTTON[secondary.emphasis]}
-							onClick={secondary.onSelect}
-							type="button"
-						>
-							{secondary.label}
-						</Button>
-					) : null}
+					<InstallControl control={leading} />
+					{trailing ? <InstallControl control={trailing} /> : null}
 				</div>
 			</div>
 		</MessageBubbleContent>
 	</MessageBubble>
+)
+
+type InstallControlProps = {
+	control: ApplicationInstallControl
+}
+
+const InstallControl = ({ control }: InstallControlProps) => (
+	<Button
+		{...INSTALL_CONTROL[control.emphasis]}
+		onClick={control.onSelect}
+		type="button"
+	>
+		{control.emphasis === "primary" ? (
+			<control.icon className="size-3.5" data-icon="inline-start" />
+		) : null}
+		{control.label}
+	</Button>
 )
 
 type AddressRowProps = {
@@ -120,6 +127,6 @@ const AddressRow = ({ address }: AddressRowProps) => {
 
 export {
 	ApplicationInstall,
+	type ApplicationInstallControl,
 	type ApplicationInstallProps,
-	type ApplicationInstallSecondary,
 }
