@@ -443,6 +443,68 @@ const bots = {
 					"It’s waiting for your authorization, so this session ran without its tools.",
 				action: "Open Applications",
 			},
+			refused: {
+				title: "The sign-in stopped working",
+				description_one:
+					"Kiroshi couldn’t refresh the token, so {{name}}’s only tool was left out of {{companion}}’s {{sessions}}. Signing in again is usually all it takes.",
+				description_other:
+					"Kiroshi couldn’t refresh the token, so {{name}}’s {{count}} tools were left out of {{companion}}’s {{sessions}}. Signing in again is usually all it takes.",
+				sessions_one: "last session",
+				sessions_other: "last {{count}} sessions",
+				action: "Sign in again",
+			},
+		},
+		install: {
+			signIn: {
+				title: "{{name}} signs you in",
+				description:
+					"A browser tab opens as soon as you add it. Kiroshi keeps the token with this application’s secrets, and refreshes it on its own.",
+				action: "Add and sign in",
+			},
+			key: {
+				title: "{{name}} needs an API key",
+				placeholder: "Starts with {{prefix}}",
+				reveal: "Show",
+				conceal: "Hide",
+				revealLabel: "Show the API key",
+				concealLabel: "Hide the API key",
+				description: {
+					companion:
+						"Kept with this application’s secrets, never in the configuration. {{name}} sees the tools, never the key.",
+					space:
+						"Kept with this application’s secrets, never in the configuration. Every companion in {{name}} sees the tools, never the key.",
+					profile:
+						"Kept with this application’s secrets, never in the configuration. Every companion you have sees the tools, never the key.",
+				},
+			},
+			none: "Nothing to set up. It runs on this machine, with no key and no sign-in.",
+			unreviewed: {
+				title: "Kiroshi hasn’t read this one",
+				description: {
+					reads:
+						"Published on the MCP registry by {{publisher}}, {{date}}. It runs on this machine with your account’s access. Read what it does before you add it.",
+					writes:
+						"Published on the MCP registry by {{publisher}}, {{date}}. It runs on this machine with your account’s access, and it writes as well as reads. Read what it does before you add it.",
+				},
+			},
+			tools: {
+				title: "What it brings",
+				count: {
+					reads_one: "{{count}} tool, read only",
+					reads_other: "{{count}} tools, read only",
+					writes_one: "{{count}} tool, reads and writes",
+					writes_other: "{{count}} tools, reads and writes",
+				},
+			},
+			footnote: {
+				companion:
+					"Applications run on your machine, under your account. Adding one reopens {{name}}’s session so the tools are there straight away.",
+				space:
+					"Applications run on your machine, under your account. Adding one here gives every companion in {{name}} its tools.",
+				profile:
+					"Applications run on your machine, under your account. Adding one here gives every companion you have its tools, in every space.",
+			},
+			done: "Added",
 		},
 		notice:
 			"This companion runs applications on your machine, under your account. Only add ones you trust.",

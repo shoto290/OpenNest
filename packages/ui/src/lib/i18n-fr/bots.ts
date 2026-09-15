@@ -450,6 +450,73 @@ const bots = {
 					"Il attend votre autorisation, cette session s'est donc déroulée sans ses outils.",
 				action: "Ouvrir les applications",
 			},
+			refused: {
+				title: "La connexion ne fonctionne plus",
+				description_one:
+					"Kiroshi n'a pas pu renouveler le jeton, le seul outil de {{name}} a donc été absent {{sessions}} de {{companion}}. Se reconnecter suffit en général.",
+				description_many:
+					"Kiroshi n'a pas pu renouveler le jeton, les {{count}} outils de {{name}} ont donc été absents {{sessions}} de {{companion}}. Se reconnecter suffit en général.",
+				description_other:
+					"Kiroshi n'a pas pu renouveler le jeton, les {{count}} outils de {{name}} ont donc été absents {{sessions}} de {{companion}}. Se reconnecter suffit en général.",
+				sessions_one: "de la dernière session",
+				sessions_many: "des {{count}} dernières sessions",
+				sessions_other: "des {{count}} dernières sessions",
+				action: "Se reconnecter",
+			},
+		},
+		install: {
+			signIn: {
+				title: "{{name}} vous connecte",
+				description:
+					"Un onglet du navigateur s'ouvre dès que vous l'ajoutez. Kiroshi garde le jeton avec les secrets de cette application, et le renouvelle tout seul.",
+				action: "Ajouter et se connecter",
+			},
+			key: {
+				title: "{{name}} demande une clé d'API",
+				placeholder: "Commence par {{prefix}}",
+				reveal: "Afficher",
+				conceal: "Masquer",
+				revealLabel: "Afficher la clé d'API",
+				concealLabel: "Masquer la clé d'API",
+				description: {
+					companion:
+						"Gardée avec les secrets de cette application, jamais dans la configuration. {{name}} voit les outils, jamais la clé.",
+					space:
+						"Gardée avec les secrets de cette application, jamais dans la configuration. Chaque compagnon de {{name}} voit les outils, jamais la clé.",
+					profile:
+						"Gardée avec les secrets de cette application, jamais dans la configuration. Chacun de vos compagnons voit les outils, jamais la clé.",
+				},
+			},
+			none: "Rien à configurer. Elle tourne sur cette machine, sans clé ni connexion.",
+			unreviewed: {
+				title: "Kiroshi ne l'a pas lue",
+				description: {
+					reads:
+						"Publiée sur le registre MCP par {{publisher}}, {{date}}. Elle tourne sur cette machine avec les accès de votre compte. Lisez ce qu'elle fait avant de l'ajouter.",
+					writes:
+						"Publiée sur le registre MCP par {{publisher}}, {{date}}. Elle tourne sur cette machine avec les accès de votre compte, et elle écrit autant qu'elle lit. Lisez ce qu'elle fait avant de l'ajouter.",
+				},
+			},
+			tools: {
+				title: "Ce qu'elle apporte",
+				count: {
+					reads_one: "{{count}} outil, lecture seule",
+					reads_many: "{{count}} outils, lecture seule",
+					reads_other: "{{count}} outils, lecture seule",
+					writes_one: "{{count}} outil, lecture et écriture",
+					writes_many: "{{count}} outils, lecture et écriture",
+					writes_other: "{{count}} outils, lecture et écriture",
+				},
+			},
+			footnote: {
+				companion:
+					"Les applications tournent sur votre machine, sous votre compte. En ajouter une rouvre la session de {{name}} pour que les outils soient là tout de suite.",
+				space:
+					"Les applications tournent sur votre machine, sous votre compte. En ajouter une ici donne ses outils à chaque compagnon de {{name}}.",
+				profile:
+					"Les applications tournent sur votre machine, sous votre compte. En ajouter une ici donne ses outils à chacun de vos compagnons, dans chaque espace.",
+			},
+			done: "Ajoutée",
 		},
 		notice:
 			"Ce compagnon lance ses applications sur votre machine, sous votre compte. Ajoutez seulement ceux en qui vous avez confiance.",

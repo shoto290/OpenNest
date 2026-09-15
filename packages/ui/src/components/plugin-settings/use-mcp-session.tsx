@@ -57,6 +57,8 @@ type McpSession = {
 type OpenedServer = {
 	draft: BotMcpServerDraft
 	saved?: BotMcpServerDraft
+	mark?: string
+	displayName?: string
 }
 
 const useMcpSession = ({
@@ -101,18 +103,24 @@ const useMcpSession = ({
 		open(null)
 	}
 
-	const editorFor = ({ draft, saved }: OpenedServer) => (
-		<McpServerEditor
-			connection={serverConnection}
-			draft={draft}
-			environment={saved ? serverEnvironment : undefined}
-			onBack={() => open(null)}
-			onDelete={saved ? () => remove(saved) : undefined}
-			onDraftChange={(next) => setSession({ draft: next, saved })}
-			onSave={(config) => save({ draft, saved }, config)}
-			saved={saved}
-		/>
-	)
+	const editorFor = (opened: OpenedServer) => {
+		const { saved } = opened
+
+		return (
+			<McpServerEditor
+				connection={serverConnection}
+				displayName={opened.displayName}
+				draft={opened.draft}
+				environment={saved ? serverEnvironment : undefined}
+				mark={opened.mark}
+				onBack={() => open(null)}
+				onDelete={saved ? () => remove(saved) : undefined}
+				onDraftChange={(next) => setSession({ ...opened, draft: next })}
+				onSave={(config) => save(opened, config)}
+				saved={saved}
+			/>
+		)
+	}
 
 	const pushedPage = () => {
 		if (session) return editorFor(session)
@@ -140,6 +148,8 @@ const useMcpSession = ({
 					open({
 						draft: toMcpServerDraft(opened),
 						saved: toMcpServerDraft(opened),
+						mark: opened.mark,
+						displayName: opened.displayName,
 					})
 				}
 				onPaste={paste}

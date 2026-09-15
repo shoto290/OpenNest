@@ -21,6 +21,7 @@ import {
 	LONG_MCP_SERVER,
 } from "@workspace/ui/components/bot-settings-dialog/mcp-servers.fixtures"
 import { SERVER_ENVIRONMENT } from "@workspace/ui/components/environment.fixtures"
+import { GRANOLA_MARK } from "@workspace/ui/components/plugin-settings/applications.fixtures"
 
 const [LOCAL, REMOTE] = BOT_MCP_SERVERS
 
@@ -490,6 +491,90 @@ export const ConnectionFailed = meta.story({
 		await userEvent.click(canvas.getByRole("button", { name: "Retry" }))
 
 		await expect(args.connection?.onConnect).toHaveBeenCalledTimes(1)
+	},
+})
+
+const GRANOLA = toMcpServerDraft({
+	name: "granola",
+	config: { type: "http", url: "https://mcp.granola.ai/mcp" },
+})
+
+const REFUSED_REFRESH = {
+	reason: "401 · refresh token revoked",
+	companionName: "Rei",
+	toolCount: 6,
+	sessionCount: 2,
+}
+
+export const RefusedRefresh = meta.story({
+	args: {
+		draft: GRANOLA,
+		saved: GRANOLA,
+		mark: GRANOLA_MARK,
+		connection: {
+			state: "failed",
+			refusedRefresh: REFUSED_REFRESH,
+			onConnect: fn(),
+		},
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"E8. The token refresh was refused. Check the mark and the monospace name in the header, the destructive dot and field the failed state already draws, a title saying the sign-in stopped working, a sentence naming what it cost, the raw reason in its own chip, and Sign in again as the primary action.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		await expect(
+			canvasElement.querySelector('[data-slot="application-mark"] img'),
+		).not.toBeNull()
+		await expect(canvas.getByText("granola", { selector: "span" })).toHaveClass(
+			"font-mono",
+		)
+		await expect(canvas.getByText("The sign-in stopped working")).toBeVisible()
+		await expect(
+			canvas.getByText(
+				"Kiroshi couldn’t refresh the token, so granola’s 6 tools were left out of Rei’s last 2 sessions. Signing in again is usually all it takes.",
+			),
+		).toBeVisible()
+		await expect(canvas.getByText("401 · refresh token revoked").tagName).toBe(
+			"CODE",
+		)
+		await expect(canvas.queryByText("Couldn’t connect")).not.toBeInTheDocument()
+
+		await userEvent.click(canvas.getByRole("button", { name: "Sign in again" }))
+		await expect(args.connection?.onConnect).toHaveBeenCalledTimes(1)
+	},
+})
+
+export const RefusedRefreshLongReason = meta.story({
+	args: {
+		draft: GRANOLA,
+		saved: GRANOLA,
+		connection: {
+			state: "failed",
+			refusedRefresh: {
+				...REFUSED_REFRESH,
+				reason: `401 · ${"invalid_grant refresh token revoked by the authorization server ".repeat(3).trim()}`,
+			},
+			onConnect: fn(),
+		},
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A refused refresh whose raw reason runs to 200 characters. Check that the chip wraps inside the column instead of pushing the action off the block.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const chip = canvas.getByText(/invalid_grant/)
+		await expect(chip.scrollWidth).toBeLessThanOrEqual(chip.clientWidth)
+		await expect(
+			canvas.getByRole("button", { name: "Sign in again" }),
+		).toBeVisible()
 	},
 })
 

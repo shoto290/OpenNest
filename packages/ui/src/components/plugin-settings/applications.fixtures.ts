@@ -1,4 +1,5 @@
 import type { BotMcpServerItem } from "@workspace/ui/components/bot-settings"
+import type { InstallableApplication } from "@workspace/ui/components/plugin-settings/application-install-page"
 import type {
 	ApplicationCategory,
 	CatalogueApplication,
@@ -107,3 +108,66 @@ export const REGISTRY_APPLICATIONS: CatalogueApplication[] = [
 ]
 
 export const PUBLISHED_APPLICATION_COUNT = 1284
+
+export const GRANOLA_MARK = markOf("#1f6f43", "G")
+
+export const SIGN_IN_INSTALL: InstallableApplication = {
+	id: "granola",
+	name: "Granola",
+	description: "Reads your meeting notes and transcripts.",
+	packageIdentity: "https://mcp.granola.ai/mcp",
+	setup: "signIn",
+	mark: GRANOLA_MARK,
+	tools: [
+		"list_meetings",
+		"get_meeting",
+		"get_transcript",
+		"search_notes",
+		"list_folders",
+		"get_attendees",
+	],
+	canWrite: false,
+}
+
+export const API_KEY_INSTALL: InstallableApplication = {
+	id: "sentry",
+	name: "Sentry",
+	description: "Pulls the errors and traces behind a release.",
+	packageIdentity: "https://mcp.sentry.dev/mcp",
+	setup: "apiKey",
+	mark: SENTRY_MARK,
+	tools: [
+		"find_issues",
+		"get_issue_details",
+		"search_events",
+		"find_releases",
+		"get_trace",
+	],
+	canWrite: false,
+	keyPlace: "sentry.io > Settings > Auth tokens",
+	keyPrefix: "sntryu_",
+}
+
+export const REGISTRY_INSTALL: InstallableApplication = {
+	id: "io.github.kwn/tasklog",
+	name: "tasklog",
+	packageIdentity: "npx -y @kwn/tasklog-mcp",
+	setup: "none",
+	tools: [
+		"list_tasks",
+		"get_task",
+		"create_task",
+		"update_task",
+		"close_task",
+		"add_comment",
+		"search_tasks",
+	],
+	canWrite: true,
+	unreviewed: { publisher: "kwn", publishedAt: "4 days ago" },
+}
+
+export const LONG_INSTALL: InstallableApplication = {
+	...REGISTRY_INSTALL,
+	name: "a-very-long-registry-application-name-that-keeps-going-on-end",
+	tools: Array.from({ length: 40 }, (_, index) => `tool_number_${index + 1}`),
+}

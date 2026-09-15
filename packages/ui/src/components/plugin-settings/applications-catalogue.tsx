@@ -147,10 +147,77 @@ const CatalogueLine = ({
 	</div>
 )
 
-type ApplicationsCatalogueProps = {
+type CataloguePageProps = {
 	categories: ApplicationCategory[]
 	category: string
 	onCategoryChange: (category: string) => void
+	onBack: () => void
+	onPaste: () => void
+	className?: string
+	children: ReactNode
+}
+
+const CataloguePage = ({
+	categories,
+	category,
+	onCategoryChange,
+	onBack,
+	onPaste,
+	className,
+	children,
+}: CataloguePageProps) => {
+	const { t } = useTranslation("bots")
+
+	return (
+		<Tabs.Root
+			className={cn("flex min-h-0 flex-1", className)}
+			onValueChange={onCategoryChange}
+			orientation="vertical"
+			value={category}
+		>
+			<SettingsRail
+				iconsOnly={false}
+				leading={
+					<>
+						<SettingsRailBack
+							iconsOnly={false}
+							label={t("applications.back")}
+							onClick={onBack}
+						/>
+						<SettingsRailSeparator />
+					</>
+				}
+				trailing={
+					<>
+						<SettingsRailSeparator />
+						<SettingsRailAction
+							icon={Icons.Json}
+							iconsOnly={false}
+							label={t("applications.paste")}
+							onClick={onPaste}
+						/>
+					</>
+				}
+			>
+				{categories.map((entry) => (
+					<Tabs.Tab className={RAIL_ITEM_CLASS} key={entry.id} value={entry.id}>
+						<span className="min-w-0 flex-1 wrap-break-word text-start">
+							{entry.label}
+						</span>
+						{entry.count === undefined ? null : (
+							<span className="shrink-0 text-muted-foreground text-xs tabular-nums">
+								{entry.count}
+							</span>
+						)}
+					</Tabs.Tab>
+				))}
+			</SettingsRail>
+			{children}
+		</Tabs.Root>
+	)
+}
+
+type ApplicationsCatalogueProps = Omit<CataloguePageProps, "children"> & {
 	query: string
 	onQueryChange: (query: string) => void
 	curated: CatalogueApplication[]
@@ -247,50 +314,14 @@ const ApplicationsCatalogue = ({
 	}
 
 	return (
-		<Tabs.Root
-			className={cn("flex min-h-0 flex-1", className)}
-			onValueChange={onCategoryChange}
-			orientation="vertical"
-			value={category}
+		<CataloguePage
+			categories={categories}
+			category={category}
+			className={className}
+			onBack={onBack}
+			onCategoryChange={onCategoryChange}
+			onPaste={onPaste}
 		>
-			<SettingsRail
-				iconsOnly={false}
-				leading={
-					<>
-						<SettingsRailBack
-							iconsOnly={false}
-							label={t("applications.back")}
-							onClick={onBack}
-						/>
-						<SettingsRailSeparator />
-					</>
-				}
-				trailing={
-					<>
-						<SettingsRailSeparator />
-						<SettingsRailAction
-							icon={Icons.Json}
-							iconsOnly={false}
-							label={t("applications.paste")}
-							onClick={onPaste}
-						/>
-					</>
-				}
-			>
-				{categories.map((entry) => (
-					<Tabs.Tab className={RAIL_ITEM_CLASS} key={entry.id} value={entry.id}>
-						<span className="min-w-0 flex-1 wrap-break-word text-start">
-							{entry.label}
-						</span>
-						{entry.count === undefined ? null : (
-							<span className="shrink-0 text-muted-foreground text-xs tabular-nums">
-								{entry.count}
-							</span>
-						)}
-					</Tabs.Tab>
-				))}
-			</SettingsRail>
-
 			<Tabs.Panel
 				className={cn(SETTINGS_PANEL_CLASS, "gap-3.5 overflow-y-auto")}
 				ref={panel}
@@ -328,7 +359,7 @@ const ApplicationsCatalogue = ({
 					{registryBody()}
 				</CatalogueSection>
 			</Tabs.Panel>
-		</Tabs.Root>
+		</CataloguePage>
 	)
 }
 
@@ -338,4 +369,6 @@ export {
 	ApplicationsCatalogue,
 	type ApplicationsCatalogueProps,
 	type CatalogueApplication,
+	CataloguePage,
+	type CataloguePageProps,
 }
