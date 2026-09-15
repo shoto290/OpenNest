@@ -29,6 +29,7 @@
 	--bot-badge-attention: oklch(0.72 0.18 62);
 	--bot-badge-done: oklch(0.68 0.17 148);
 	--bot-badge-failed: oklch(0.62 0.22 27);
+	--state-connected: oklch(0.696 0.17 162.48);
 	--color-scheme: light;
 	--card: oklch(1 0 0);
 	--card-foreground: oklch(0.141 0.005 285.823);
@@ -146,6 +147,7 @@
 	--color-bot-badge-attention: var(--bot-badge-attention);
 	--color-bot-badge-done: var(--bot-badge-done);
 	--color-bot-badge-failed: var(--bot-badge-failed);
+	--color-state-connected: var(--state-connected);
 	--color-user-bubble-foreground: var(--user-bubble-foreground);
 	--radius-xs: calc(var(--radius-root) * 0.2);
 	--radius-sm: calc(var(--radius-root) * 0.6);

@@ -10,7 +10,7 @@ const settings = {
 		notifications: "Notifications",
 		language: "Langue",
 		skills: "Compétences",
-		connectors: "Connecteurs",
+		applications: "Applications",
 		history: "Historique",
 		danger: "Zone sensible",
 	},

@@ -94,29 +94,37 @@ const SettingsRailItem = ({
 		iconsOnly,
 	)
 
-type SettingsRailBackProps = {
+type SettingsRailActionProps = {
+	icon: Icon
 	label: string
 	onClick: () => void
 	iconsOnly: boolean
 }
 
-const SettingsRailBack = ({
+const SettingsRailAction = ({
+	icon: ActionIcon,
 	label,
 	onClick,
 	iconsOnly,
-}: SettingsRailBackProps) =>
+}: SettingsRailActionProps) =>
 	named(
 		<button
 			className={cn(RAIL_ITEM_CLASS, iconsOnly && "justify-center")}
 			onClick={onClick}
 			type="button"
 		>
-			<Icons.Previous aria-hidden="true" className="size-4 shrink-0" />
+			<ActionIcon aria-hidden="true" className="size-4 shrink-0" />
 			<span className={iconsOnly ? "sr-only" : undefined}>{label}</span>
 		</button>,
 		label,
 		iconsOnly,
 	)
+
+type SettingsRailBackProps = Omit<SettingsRailActionProps, "icon">
+
+const SettingsRailBack = (props: SettingsRailBackProps) => (
+	<SettingsRailAction {...props} icon={Icons.Previous} />
+)
 
 const SettingsRailSeparator = () => (
 	<span aria-hidden="true" className="mx-1 my-1 h-px shrink-0 bg-border" />
@@ -125,6 +133,7 @@ const SettingsRailSeparator = () => (
 type SettingsRailProps = {
 	iconsOnly: boolean
 	leading?: ReactNode
+	trailing?: ReactNode
 	children: ReactNode
 	className?: string
 }
@@ -132,6 +141,7 @@ type SettingsRailProps = {
 const SettingsRail = ({
 	iconsOnly,
 	leading,
+	trailing,
 	children,
 	className,
 }: SettingsRailProps) => (
@@ -147,6 +157,7 @@ const SettingsRail = ({
 		<Tabs.List className="flex min-h-0 flex-col gap-1 overflow-y-auto">
 			{children}
 		</Tabs.List>
+		{trailing}
 	</div>
 )
 
@@ -156,6 +167,8 @@ export {
 	RAIL_LABELS_MIN_WIDTH,
 	SETTINGS_PANEL_CLASS,
 	SettingsRail,
+	SettingsRailAction,
+	type SettingsRailActionProps,
 	SettingsRailBack,
 	type SettingsRailBackProps,
 	SettingsRailItem,

@@ -119,16 +119,18 @@ const McpAuthorization = ({
 	const isWaiting = isSaved && state === "connecting"
 
 	const readDescription = () => {
-		if (!isSaved) return t("connectors.connection.description.unsaved")
+		if (!isSaved) return t("applications.connection.description.unsaved")
 		if (state === "needsAuthorization")
-			return t("connectors.connection.description.needsAuthorization", { name })
+			return t("applications.connection.description.needsAuthorization", {
+				name,
+			})
 		if (state === "connecting")
 			return host
-				? t("connectors.connection.description.connecting", { host })
+				? t("applications.connection.description.connecting", { host })
 				: null
 		if (state === "connected")
 			return authorizedAt
-				? t("connectors.connection.description.connected", {
+				? t("applications.connection.description.connected", {
 						date: authorizedAt,
 					})
 				: null
@@ -140,7 +142,7 @@ const McpAuthorization = ({
 			return onConnect ? (
 				<Button disabled size="sm">
 					<OpensBrowserIcon />
-					{t("connectors.connection.connect")}
+					{t("applications.connection.connect")}
 				</Button>
 			) : null
 
@@ -148,14 +150,14 @@ const McpAuthorization = ({
 			return onConnect ? (
 				<Button onClick={onConnect} size="sm">
 					<OpensBrowserIcon />
-					{t("connectors.connection.connect")}
+					{t("applications.connection.connect")}
 				</Button>
 			) : null
 
 		if (state === "failed")
 			return onConnect ? (
 				<Button onClick={onConnect} size="sm" variant="outline">
-					{t("connectors.connection.retry")}
+					{t("applications.connection.retry")}
 				</Button>
 			) : null
 
@@ -165,12 +167,12 @@ const McpAuthorization = ({
 					{onReopen ? (
 						<Button onClick={onReopen} size="sm" variant="outline">
 							<OpensBrowserIcon />
-							{t("connectors.connection.reopen")}
+							{t("applications.connection.reopen")}
 						</Button>
 					) : null}
 					{onCancel ? (
 						<Button onClick={onCancel} size="sm" variant="ghost">
-							{t("connectors.connection.cancel")}
+							{t("applications.connection.cancel")}
 						</Button>
 					) : null}
 				</>
@@ -178,12 +180,12 @@ const McpAuthorization = ({
 
 		return onDisconnect ? (
 			<ConfirmDialog
-				confirmLabel={t("connectors.connection.disconnect")}
+				confirmLabel={t("applications.connection.disconnect")}
 				defaultOpen={defaultDisconnecting}
-				description={t("connectors.connection.confirm.description", { name })}
+				description={t("applications.connection.confirm.description", { name })}
 				onConfirm={onDisconnect}
-				title={t("connectors.connection.confirm.title", { name })}
-				trigger={t("connectors.connection.disconnect")}
+				title={t("applications.connection.confirm.title", { name })}
+				trigger={t("applications.connection.disconnect")}
 				triggerClassName={buttonVariants({ variant: "outline", size: "sm" })}
 			/>
 		) : null
@@ -214,8 +216,8 @@ const McpAuthorization = ({
 			<div className="flex min-w-0 flex-1 flex-col gap-1">
 				<p className="font-medium text-foreground text-sm">
 					{isWaiting
-						? t("connectors.connection.waiting")
-						: t(`connectors.connection.state.${state}`)}
+						? t("applications.connection.waiting")
+						: t(`applications.connection.state.${state}`)}
 				</p>
 				{description ? (
 					<p className="text-muted-foreground text-xs">{description}</p>
@@ -263,7 +265,7 @@ const McpServerEditor = ({
 	const [typed, setTyped] = useState<Partial<BotMcpServerFields>>({})
 	const iconsOnly = useIsNarrowerThan(root, RAIL_LABELS_MIN_WIDTH)
 
-	const name = draft.name.trim() || t("connectors.untitled")
+	const name = draft.name.trim() || t("applications.untitled")
 	const config = parseMcpServerConfig(draft.config)
 	const fields = readMcpServerFields(config ?? {})
 	const written = config && toMcpServerWrittenConfig(config, draft.transport)
@@ -320,12 +322,12 @@ const McpServerEditor = ({
 	const leave = () => (isUnsaved ? setLeaving(true) : onBack())
 
 	const transportOptions = MCP_TRANSPORTS.map((transport) => ({
-		label: t(`connectors.transport.option.${transport}`),
+		label: t(`applications.transport.option.${transport}`),
 		value: transport,
 	}))
 
 	const endpointOptions = MCP_ENDPOINT_KINDS.map((kind) => ({
-		label: t(`connectors.endpoint.option.${kind}`),
+		label: t(`applications.endpoint.option.${kind}`),
 		value: kind,
 	}))
 
@@ -333,7 +335,7 @@ const McpServerEditor = ({
 		<EditorNotice
 			danger
 			icon={Icons.Error}
-			text={t("connectors.config.invalid")}
+			text={t("applications.config.invalid")}
 		/>
 	)
 
@@ -350,7 +352,7 @@ const McpServerEditor = ({
 					<>
 						<SettingsRailBack
 							iconsOnly={iconsOnly}
-							label={t("connectors.back")}
+							label={t("applications.back")}
 							onClick={leave}
 						/>
 						<SettingsRailSeparator />
@@ -360,19 +362,19 @@ const McpServerEditor = ({
 				<SettingsRailItem
 					icon={Icons.Server}
 					iconsOnly={iconsOnly}
-					label={t("connectors.section.connection")}
+					label={t("applications.section.connection")}
 					value={FIRST_SECTION}
 				/>
 				<SettingsRailItem
 					icon={Icons.Shield}
 					iconsOnly={iconsOnly}
-					label={t("connectors.section.secrets")}
+					label={t("applications.section.secrets")}
 					value="environment"
 				/>
 				<SettingsRailItem
 					icon={Icons.Json}
 					iconsOnly={iconsOnly}
-					label={t("connectors.section.advanced")}
+					label={t("applications.section.advanced")}
 					value="advanced"
 				/>
 			</SettingsRail>
@@ -385,22 +387,22 @@ const McpServerEditor = ({
 						</span>
 						{isUnsaved && isWritten ? (
 							<span className={cn(SETTINGS_TAG_CLASS, "text-muted-foreground")}>
-								{t("connectors.unsaved")}
+								{t("applications.unsaved")}
 							</span>
 						) : null}
 					</div>
 					<div className="flex shrink-0 items-center gap-2">
 						{isWritten && onDelete ? (
 							<ConfirmDialog
-								confirmLabel={t("connectors.delete.action")}
+								confirmLabel={t("applications.delete.action")}
 								defaultOpen={defaultConfirming}
-								description={t("connectors.delete.description")}
+								description={t("applications.delete.description")}
 								onConfirm={onDelete}
-								title={t("connectors.delete.confirm.title", { name })}
+								title={t("applications.delete.confirm.title", { name })}
 								trigger={
 									<>
 										<Icons.Delete aria-hidden="true" className="size-3.5" />
-										{t("connectors.delete.action")}
+										{t("applications.delete.action")}
 									</>
 								}
 								triggerClassName={buttonVariants({
@@ -419,7 +421,7 @@ const McpServerEditor = ({
 							) : (
 								<Icons.Add aria-hidden="true" className="size-3.5" />
 							)}
-							{isWritten ? t("connectors.save") : t("connectors.create")}
+							{isWritten ? t("applications.save") : t("applications.create")}
 						</Button>
 					</div>
 				</div>
@@ -433,17 +435,17 @@ const McpServerEditor = ({
 							name={name}
 						/>
 					) : null}
-					<EditorNotice icon={Icons.Alert} text={t("connectors.notice")} />
+					<EditorNotice icon={Icons.Alert} text={t("applications.notice")} />
 					<SettingsField
-						hint={t("connectors.name.hint")}
-						label={t("connectors.name.label")}
+						hint={t("applications.name.hint")}
+						label={t("applications.name.label")}
 						onValueChange={(value) => patch({ name: toBundleName(value) })}
-						placeholder={t("connectors.name.placeholder")}
+						placeholder={t("applications.name.placeholder")}
 						value={draft.name}
 					/>
 					<SettingsSelect
-						hint={t("connectors.transport.hint")}
-						label={t("connectors.transport.label")}
+						hint={t("applications.transport.hint")}
+						label={t("applications.transport.label")}
 						onValueChange={pickTransport}
 						options={transportOptions}
 						value={draft.transport}
@@ -452,17 +454,17 @@ const McpServerEditor = ({
 					{config && draft.transport === "local" ? (
 						<>
 							<SettingsField
-								hint={t("connectors.command.hint")}
-								label={t("connectors.command.label")}
+								hint={t("applications.command.hint")}
+								label={t("applications.command.label")}
 								onValueChange={(value) => answer("command", value)}
-								placeholder={t("connectors.command.placeholder")}
+								placeholder={t("applications.command.placeholder")}
 								value={shown("command")}
 							/>
 							<SettingsField
-								hint={t("connectors.args.hint")}
-								label={t("connectors.args.label")}
+								hint={t("applications.args.hint")}
+								label={t("applications.args.label")}
 								onValueChange={(value) => answer("args", value)}
-								placeholder={t("connectors.args.placeholder")}
+								placeholder={t("applications.args.placeholder")}
 								rows={4}
 								value={shown("args")}
 							/>
@@ -471,24 +473,24 @@ const McpServerEditor = ({
 					{config && draft.transport === "remote" ? (
 						<>
 							<SettingsField
-								hint={t("connectors.url.hint")}
-								label={t("connectors.url.label")}
+								hint={t("applications.url.hint")}
+								label={t("applications.url.label")}
 								onValueChange={(value) => answer("url", value)}
-								placeholder={t("connectors.url.placeholder")}
+								placeholder={t("applications.url.placeholder")}
 								value={shown("url")}
 							/>
 							<SettingsSelect
-								hint={t("connectors.endpoint.hint")}
-								label={t("connectors.endpoint.label")}
+								hint={t("applications.endpoint.hint")}
+								label={t("applications.endpoint.label")}
 								onValueChange={(value) => answer("type", value)}
 								options={endpointOptions}
 								value={readMcpEndpointKind(fields.type)}
 							/>
 							<SettingsField
-								hint={t("connectors.headers.hint")}
-								label={t("connectors.headers.label")}
+								hint={t("applications.headers.hint")}
+								label={t("applications.headers.label")}
 								onValueChange={(value) => answer("headers", value)}
-								placeholder={t("connectors.headers.placeholder")}
+								placeholder={t("applications.headers.placeholder")}
 								rows={4}
 								value={shown("headers")}
 							/>
@@ -499,10 +501,10 @@ const McpServerEditor = ({
 				<SettingsScrollingPanel value="environment">
 					{config ? (
 						<SettingsField
-							hint={t("connectors.secrets.hint")}
-							label={t("connectors.secrets.label")}
+							hint={t("applications.secrets.hint")}
+							label={t("applications.secrets.label")}
 							onValueChange={(value) => answer("environment", value)}
-							placeholder={t("connectors.secrets.placeholder")}
+							placeholder={t("applications.secrets.placeholder")}
 							rows={8}
 							value={shown("environment")}
 						/>
@@ -516,11 +518,11 @@ const McpServerEditor = ({
 
 				<SettingsScrollingPanel value="advanced">
 					<SettingsField
-						error={config ? undefined : t("connectors.config.invalid")}
-						hint={t("connectors.config.hint")}
-						label={t("connectors.config.label")}
+						error={config ? undefined : t("applications.config.invalid")}
+						hint={t("applications.config.hint")}
+						label={t("applications.config.label")}
 						onValueChange={editConfig}
-						placeholder={t("connectors.config.placeholder")}
+						placeholder={t("applications.config.placeholder")}
 						rows={10}
 						value={draft.config}
 					/>
@@ -529,12 +531,12 @@ const McpServerEditor = ({
 			</div>
 
 			<ConfirmDialog
-				confirmLabel={t("connectors.leave.action")}
-				description={t("connectors.leave.description")}
+				confirmLabel={t("applications.leave.action")}
+				description={t("applications.leave.description")}
 				onConfirm={onBack}
 				onOpenChange={setLeaving}
 				open={isLeaving}
-				title={t("connectors.leave.title")}
+				title={t("applications.leave.title")}
 			/>
 		</Tabs.Root>
 	)

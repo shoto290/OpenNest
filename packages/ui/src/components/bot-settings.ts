@@ -187,6 +187,8 @@ type BotMcpServerItem = {
 	name: string
 	config: Record<string, unknown>
 	connection?: BotMcpConnectionState
+	displayName?: string
+	mark?: string
 }
 
 type BotMcpTransport = (typeof MCP_TRANSPORTS)[number]

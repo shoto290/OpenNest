@@ -11,10 +11,23 @@ import {
 } from "@workspace/ui/components/bot-settings"
 import type { McpConnectionSection } from "@workspace/ui/components/bot-settings-dialog/mcp-connection"
 import { McpServerEditor } from "@workspace/ui/components/bot-settings-dialog/mcp-server-editor"
-import { McpServersPanel } from "@workspace/ui/components/bot-settings-dialog/mcp-servers-panel"
 import type { EnvironmentSection } from "@workspace/ui/components/environment-panel"
+import {
+	ApplicationsCatalogue,
+	type ApplicationsCatalogueProps,
+} from "@workspace/ui/components/plugin-settings/applications-catalogue"
+import {
+	type ApplicationsOwner,
+	ApplicationsPanel,
+} from "@workspace/ui/components/plugin-settings/applications-panel"
+
+type ApplicationsCatalogueSection = Omit<
+	ApplicationsCatalogueProps,
+	"onBack" | "onPaste" | "className"
+>
 
 type McpSessionProps = {
+	owner: ApplicationsOwner
 	servers: BotMcpServerItem[]
 	haveFailedToLoad?: boolean
 	onServerCreate: (name: string, config: Record<string, unknown>) => void
@@ -28,7 +41,10 @@ type McpSessionProps = {
 	onServerConnect?: (server: BotMcpServerItem) => void
 	serverConnection?: McpConnectionSection
 	serverEnvironment?: EnvironmentSection
+	catalogue?: ApplicationsCatalogueSection
 }
+
+type ApplicationsSection = Omit<McpSessionProps, "owner">
 
 type McpSession = {
 	panel: ReactNode
@@ -44,6 +60,7 @@ type OpenedServer = {
 }
 
 const useMcpSession = ({
+	owner,
 	servers,
 	haveFailedToLoad,
 	onServerCreate,
@@ -53,13 +70,18 @@ const useMcpSession = ({
 	onServerConnect,
 	serverConnection,
 	serverEnvironment,
+	catalogue,
 }: McpSessionProps): McpSession => {
 	const [session, setSession] = useState<OpenedServer | null>(null)
+	const [isBrowsing, setBrowsing] = useState(false)
 
 	const open = (opened: OpenedServer | null) => {
+		setBrowsing(false)
 		setSession(opened)
 		onServerOpen?.(opened?.saved?.name ?? null)
 	}
+
+	const paste = () => open({ draft: BLANK_MCP_SERVER_DRAFT })
 
 	const save = (
 		{ draft, saved }: OpenedServer,
@@ -92,11 +114,27 @@ const useMcpSession = ({
 		/>
 	)
 
+	const pushedPage = () => {
+		if (session) return editorFor(session)
+
+		if (isBrowsing && catalogue) {
+			return (
+				<ApplicationsCatalogue
+					{...catalogue}
+					onBack={() => setBrowsing(false)}
+					onPaste={paste}
+				/>
+			)
+		}
+
+		return null
+	}
+
 	return {
 		panel: (
-			<McpServersPanel
+			<ApplicationsPanel
 				haveFailedToLoad={haveFailedToLoad}
-				onAdd={() => open({ draft: BLANK_MCP_SERVER_DRAFT })}
+				onAdd={catalogue ? () => setBrowsing(true) : paste}
 				onConnect={onServerConnect}
 				onOpen={(opened) =>
 					open({
@@ -104,11 +142,13 @@ const useMcpSession = ({
 						saved: toMcpServerDraft(opened),
 					})
 				}
+				onPaste={paste}
+				owner={owner}
 				servers={servers}
 			/>
 		),
-		editor: session ? editorFor(session) : null,
-		isOpen: session !== null,
+		editor: pushedPage(),
+		isOpen: session !== null || isBrowsing,
 		isUnsaved: Boolean(
 			session && isMcpServerDraftUnsaved(session.draft, session.saved),
 		),
@@ -116,4 +156,10 @@ const useMcpSession = ({
 	}
 }
 
-export { type McpSession, type McpSessionProps, useMcpSession }
+export {
+	type ApplicationsCatalogueSection,
+	type ApplicationsSection,
+	type McpSession,
+	type McpSessionProps,
+	useMcpSession,
+}

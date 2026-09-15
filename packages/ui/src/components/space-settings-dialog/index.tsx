@@ -20,13 +20,17 @@ import {
 	type EnvironmentWrite,
 } from "@workspace/ui/components/environment-panel"
 import { Icons } from "@workspace/ui/components/icons"
+import type { InheritedApplication } from "@workspace/ui/components/plugin-settings/applications-panel"
 import type { PluginHistory } from "@workspace/ui/components/plugin-settings/history-panel"
 import type { PluginSkillFiles } from "@workspace/ui/components/plugin-settings/skill-files-panel"
 import {
 	HISTORY_TAB,
 	useHistorySession,
 } from "@workspace/ui/components/plugin-settings/use-history-session"
-import { useMcpSession } from "@workspace/ui/components/plugin-settings/use-mcp-session"
+import {
+	type ApplicationsCatalogueSection,
+	useMcpSession,
+} from "@workspace/ui/components/plugin-settings/use-mcp-session"
 import { useSkillSession } from "@workspace/ui/components/plugin-settings/use-skill-session"
 import {
 	DANGER_RAIL_ITEM_CLASS,
@@ -74,6 +78,9 @@ type SpaceSettingsDialogProps = {
 		config: Record<string, unknown>,
 	) => void
 	onMcpServerDelete: (name: string) => void
+	companionCount?: number
+	mcpServersInherited?: InheritedApplication[]
+	mcpCatalogue?: ApplicationsCatalogueSection
 	onMcpServerOpen?: (name: string | null) => void
 	onServerConnect?: (server: BotMcpServerItem) => void
 	serverConnection?: McpConnectionSection
@@ -105,6 +112,9 @@ const SpaceSettingsDialog = ({
 	onMcpServerCreate,
 	onMcpServerChange,
 	onMcpServerDelete,
+	companionCount,
+	mcpServersInherited,
+	mcpCatalogue,
 	onMcpServerOpen,
 	onServerConnect,
 	serverConnection,
@@ -129,6 +139,13 @@ const SpaceSettingsDialog = ({
 		skills,
 	})
 	const mcpSession = useMcpSession({
+		owner: {
+			kind: "space",
+			name: spaceName,
+			companionCount,
+			inherited: mcpServersInherited,
+		},
+		catalogue: mcpCatalogue,
 		servers: mcpServers,
 		haveFailedToLoad: haveMcpServersFailedToLoad,
 		onServerChange: onMcpServerChange,
@@ -157,9 +174,9 @@ const SpaceSettingsDialog = ({
 
 	const leaveCopy = mcpSession.isOpen
 		? {
-				title: t("connectors.leave.title", { ns: "bots" }),
-				description: t("connectors.leave.description", { ns: "bots" }),
-				action: t("connectors.leave.action", { ns: "bots" }),
+				title: t("applications.leave.title", { ns: "bots" }),
+				description: t("applications.leave.description", { ns: "bots" }),
+				action: t("applications.leave.action", { ns: "bots" }),
 			}
 		: {
 				title: t("skills.leave.title", { ns: "bots" }),
@@ -219,7 +236,7 @@ const SpaceSettingsDialog = ({
 							<SettingsRailItem
 								icon={Icons.Server}
 								iconsOnly={iconsOnly}
-								label={t("rail.connectors")}
+								label={t("rail.applications")}
 								value="mcp"
 							/>
 							<SettingsRailItem

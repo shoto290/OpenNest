@@ -43,13 +43,13 @@ const leftOutMessageOf = (
 	t: ChatCopy,
 	leftOut: LeftOutConnector,
 ): NoticeMessage => ({
-	title: t("connectors.connection.session.title", {
+	title: t("applications.connection.session.title", {
 		ns: "bots",
 		name: leftOut.name,
 	}),
-	description: t("connectors.connection.session.description", { ns: "bots" }),
+	description: t("applications.connection.session.description", { ns: "bots" }),
 	action: {
-		label: t("connectors.connection.session.action", { ns: "bots" }),
+		label: t("applications.connection.session.action", { ns: "bots" }),
 		onPress: leftOut.open,
 	},
 })

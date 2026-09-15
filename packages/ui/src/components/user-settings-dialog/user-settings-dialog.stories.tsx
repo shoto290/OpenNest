@@ -8,6 +8,7 @@ import {
 	UPLOADED_AVATAR_IMAGE,
 	widthInRems,
 } from "@workspace/storybook/story-utils"
+import { MARKED_APPLICATIONS } from "@workspace/ui/components/plugin-settings/applications.fixtures"
 import {
 	HISTORY_DAYS,
 	HISTORY_OLDEST_DATE,
@@ -383,6 +384,61 @@ export const WithALongSkill = meta.story({
 		await expect(row.getBoundingClientRect().right).toBeLessThanOrEqual(
 			dialog.getBoundingClientRect().right,
 		)
+	},
+})
+
+export const Applications = meta.story({
+	args: {
+		applications: {
+			servers: MARKED_APPLICATIONS,
+			onServerCreate: fn(),
+			onServerChange: fn(),
+			onServerDelete: fn(),
+		},
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The applications the person connects to in every space, on the rail between Skills and History. Check the order, the profile intro and the footnote. The item exists only for a host that passes the `applications` section: `Default` passes none and draws no such item.",
+			},
+		},
+	},
+	play: async ({ userEvent }) => {
+		const dialog = await dialogIn()
+		const names = within(dialog)
+			.getAllByRole("tab")
+			.map((tab) => tab.textContent)
+		await expect(names.slice(-3)).toEqual(["Skills", "Applications", "History"])
+
+		await userEvent.click(
+			within(dialog).getByRole("tab", { name: "Applications" }),
+		)
+		const panel = await within(dialog).findByRole("tabpanel", {
+			name: "Applications",
+		})
+
+		await expect(
+			within(panel).getByText("What you connect to, in every space."),
+		).toBeVisible()
+	},
+})
+
+export const WithoutApplications = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A host that passes no applications section. Check that the rail draws no Applications item rather than an empty one.",
+			},
+		},
+	},
+	play: async () => {
+		const dialog = await dialogIn()
+
+		await expect(
+			within(dialog).queryByRole("tab", { name: "Applications" }),
+		).toBe(null)
 	},
 })
 

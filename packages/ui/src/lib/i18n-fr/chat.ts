@@ -239,7 +239,7 @@ const chat = {
 			resumeFailed: "Impossible de reprendre la conversation",
 			workingDirectoryRefused: "Impossible de trouver le dossier du compagnon",
 			settingsRejected: "Impossible d'appliquer les réglages du compagnon",
-			serverEnvRejected: "Impossible de démarrer un connecteur",
+			serverEnvRejected: "Impossible de démarrer une application",
 			notAuthenticated: "Vous n'êtes pas connecté",
 			unavailable: "Impossible de joindre l'agent",
 			failed: "Impossible d'envoyer cette demande",
@@ -272,7 +272,7 @@ const chat = {
 			settingsRejected:
 				"Impossible d'appliquer settings.json ({{detail}}). Corrigez-le, puis redémarrez la session.",
 			serverEnvRejected:
-				"{{detail}}. Les autres connecteurs tournent toujours, corrigez celui-ci puis redémarrez la session.",
+				"{{detail}}. Les autres applications tournent toujours, corrigez celui-ci puis redémarrez la session.",
 			notStarted:
 				"Aucune session en cours. Démarrez une session pour continuer.",
 			turnAlreadyRunning:

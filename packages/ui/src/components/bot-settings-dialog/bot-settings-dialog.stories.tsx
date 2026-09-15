@@ -229,7 +229,7 @@ export const Rail = meta.story({
 			"Appearance",
 			"Instructions",
 			"Skills",
-			"Connectors",
+			"Applications",
 			"Secrets",
 			"History",
 			"Approvals",
@@ -775,7 +775,7 @@ export const WithServerOpen = meta.story({
 		const dialog = await dialogIn()
 
 		await userEvent.click(
-			within(dialog).getByRole("tab", { name: "Connectors" }),
+			within(dialog).getByRole("tab", { name: "Applications" }),
 		)
 		await userEvent.click(within(dialog).getByRole("button", { name: /atlas/ }))
 
@@ -784,7 +784,7 @@ export const WithServerOpen = meta.story({
 			.map((tab) => tab.textContent)
 		await expect(sections).toEqual(["Connection", "Secrets", "Advanced"])
 		await expect(
-			within(dialog).getByRole("button", { name: "All connectors" }),
+			within(dialog).getByRole("button", { name: "All applications" }),
 		).toBeVisible()
 	},
 })

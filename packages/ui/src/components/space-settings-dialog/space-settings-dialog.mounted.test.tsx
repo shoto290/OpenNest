@@ -79,7 +79,7 @@ describe("SpaceSettingsDialog connectors", () => {
 	it("lists the servers the space holds", async () => {
 		spaceDialog()
 
-		const panel = await pick("Connectors")
+		const panel = await pick("Applications")
 
 		expect(within(panel).getByText("atlas")).toBeTruthy()
 		expect(within(panel).getByText("ledger")).toBeTruthy()
@@ -88,24 +88,24 @@ describe("SpaceSettingsDialog connectors", () => {
 	it("says the listing failed instead of inviting a first connector", async () => {
 		spaceDialog({ haveMcpServersFailedToLoad: true, mcpServers: [] })
 
-		const panel = await pick("Connectors")
+		const panel = await pick("Applications")
 
 		expect(
 			within(panel).getByText(
-				"Couldn't load connectors. Reopen settings to retry.",
+				"Couldn't load applications. Reopen settings to retry.",
 			),
 		).toBeTruthy()
-		expect(screen.queryByRole("button", { name: "Add connector" })).toBe(null)
+		expect(screen.queryByRole("button", { name: "Add application" })).toBe(null)
 	})
 
 	it("writes a new server under the name it was given", async () => {
 		const onMcpServerCreate = vi.fn()
 		spaceDialog({ mcpServers: [], onMcpServerCreate })
 
-		press("Add connector", await pick("Connectors"))
+		press("Add application", await pick("Applications"))
 		answer("Name", "atlas")
 		answer("Command", "npx")
-		press("Add connector")
+		press("Add application")
 
 		expect(onMcpServerCreate).toHaveBeenCalledWith("atlas", { command: "npx" })
 	})
@@ -114,9 +114,9 @@ describe("SpaceSettingsDialog connectors", () => {
 		const onMcpServerDelete = vi.fn()
 		spaceDialog({ onMcpServerDelete })
 
-		press(/atlas/, await pick("Connectors"))
-		press("Remove connector")
-		press("Remove connector", await screen.findByRole("alertdialog"))
+		press(/atlas/, await pick("Applications"))
+		press("Remove application")
+		press("Remove application", await screen.findByRole("alertdialog"))
 
 		expect(onMcpServerDelete).toHaveBeenCalledWith("atlas")
 	})
@@ -125,7 +125,7 @@ describe("SpaceSettingsDialog connectors", () => {
 		const onMcpServerOpen = vi.fn()
 		spaceDialog({ onMcpServerOpen })
 
-		press(/atlas/, await pick("Connectors"))
+		press(/atlas/, await pick("Applications"))
 
 		expect(onMcpServerOpen).toHaveBeenLastCalledWith("atlas")
 		expect(within(await pick("Secrets")).getByText("LEDGER_KEY")).toBeTruthy()
@@ -135,7 +135,7 @@ describe("SpaceSettingsDialog connectors", () => {
 		const onMcpServerOpen = vi.fn()
 		spaceDialog({ mcpServers: [], onMcpServerOpen })
 
-		press("Add connector", await pick("Connectors"))
+		press("Add application", await pick("Applications"))
 
 		expect(onMcpServerOpen).toHaveBeenLastCalledWith(null)
 		expect(within(await pick("Secrets")).queryByText("LEDGER_KEY")).toBe(null)
