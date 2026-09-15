@@ -78,7 +78,7 @@ const settle = () =>
 const mounted = async (port: FakeConnectorPort) => {
 	render(createElement(SpaceConnectors, { port }))
 	await settle()
-	return screen.getByRole("tabpanel", { name: "Connectors" })
+	return screen.getByRole("tabpanel", { name: "Applications" })
 }
 
 const press = async (name: string, container: HTMLElement = document.body) => {
