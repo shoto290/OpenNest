@@ -16,13 +16,16 @@ const LEARN: &str = "skills/learn/SKILL.md";
 
 const ROUTINES: &str = "skills/routines/SKILL.md";
 
+const MISSIONS: &str = "skills/missions/SKILL.md";
+
 const TRIGGERS: &str = ".triggers.json";
 
-const FILES: [(&str, &[u8]); 7] = [
+const FILES: [(&str, &[u8]); 8] = [
 	(MANIFEST, include_bytes!("../../plugins/kiroshi/.claude-plugin/plugin.json")),
 	(TRIGGERS, include_bytes!("../../plugins/kiroshi/.triggers.json")),
 	(LEARN, include_bytes!("../../plugins/kiroshi/skills/learn/SKILL.md")),
 	(ROUTINES, include_bytes!("../../plugins/kiroshi/skills/routines/SKILL.md")),
+	(MISSIONS, include_bytes!("../../plugins/kiroshi/skills/missions/SKILL.md")),
 	(
 		"skills/learn/references/skills.md",
 		include_bytes!("../../plugins/kiroshi/skills/learn/references/skills.md"),
@@ -135,6 +138,25 @@ mod tests {
 			"never a cron expression",
 			"Routines panel",
 			"works there exactly as anywhere else",
+		] {
+			assert!(text.contains(said), "{said} is missing");
+		}
+	}
+
+	#[test]
+	fn the_missions_skill_is_preloaded_and_says_when_a_mission_closes() {
+		let text = String::from_utf8_lossy(embedded(MISSIONS));
+
+		assert!(text.contains("preload: true"), "got {text}");
+		for state in
+			["`working`", "`waiting_bot`", "`waiting_human`", "`ready_to_merge`", "`failed`", "`done`"]
+		{
+			assert!(text.contains(state), "{state} is missing");
+		}
+		for said in [
+			"A mission you opened is closed by you, once the work is over, and by nobody else.",
+			"A red CI, a failing test and a coding agent that is blocked are work still to do in the",
+			"Ask, never guess.",
 		] {
 			assert!(text.contains(said), "{said} is missing");
 		}
