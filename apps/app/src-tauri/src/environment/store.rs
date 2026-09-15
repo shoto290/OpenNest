@@ -573,16 +573,12 @@ mod tests {
 		);
 	}
 
-	fn a_user() -> EnvScope {
-		EnvScope::User
-	}
-
 	#[test]
 	fn the_base_of_a_bot_lays_the_user_scope_under_its_space_and_the_narrower_value_is_served() {
 		let root = a_root("resolve-user-base-bot");
-		set(&root, &a_user(), "ONLY_USER", "user").expect("the user scope keeps it");
-		set(&root, &a_user(), "SPACE_WINS", "user").expect("the user scope keeps it");
-		set(&root, &a_user(), "BOT_WINS", "user").expect("the user scope keeps it");
+		set(&root, &EnvScope::User, "ONLY_USER", "user").expect("the user scope keeps it");
+		set(&root, &EnvScope::User, "SPACE_WINS", "user").expect("the user scope keeps it");
+		set(&root, &EnvScope::User, "BOT_WINS", "user").expect("the user scope keeps it");
 		set(&root, &a_space(), "SPACE_WINS", "space").expect("the space keeps it");
 		set(&root, &a_bot(), "BOT_WINS", "bot").expect("the bot keeps it");
 
@@ -597,8 +593,8 @@ mod tests {
 	#[test]
 	fn the_base_of_a_space_lays_the_user_scope_under_it_and_the_space_value_is_served() {
 		let root = a_root("resolve-user-base-space");
-		set(&root, &a_user(), "ONLY_USER", "user").expect("the user scope keeps it");
-		set(&root, &a_user(), "SHARED", "user").expect("the user scope keeps it");
+		set(&root, &EnvScope::User, "ONLY_USER", "user").expect("the user scope keeps it");
+		set(&root, &EnvScope::User, "SHARED", "user").expect("the user scope keeps it");
 		set(&root, &a_space(), "SHARED", "space").expect("the space keeps it");
 
 		let resolved =
@@ -608,9 +604,9 @@ mod tests {
 		assert_eq!(
 			names(&list(&root, &a_space()).expect("the chain reads")),
 			vec![
-				("ONLY_USER", &a_user(), &a_user()),
+				("ONLY_USER", &EnvScope::User, &EnvScope::User),
 				("SHARED", &a_space(), &a_space()),
-				("SHARED", &a_user(), &a_space()),
+				("SHARED", &EnvScope::User, &a_space()),
 			]
 		);
 	}
