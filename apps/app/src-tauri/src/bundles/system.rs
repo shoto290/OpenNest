@@ -148,12 +148,13 @@ mod tests {
 		let text = String::from_utf8_lossy(embedded(MISSIONS));
 
 		assert!(text.contains("preload: true"), "got {text}");
-		for state in
-			["`working`", "`waiting_bot`", "`waiting_human`", "`ready_to_merge`", "`failed`", "`done`"]
-		{
-			assert!(text.contains(state), "{state} is missing");
-		}
 		for said in [
+			"`working`",
+			"`waiting_bot`",
+			"`waiting_human`",
+			"`ready_to_merge`",
+			"`failed`",
+			"`done`",
 			"A mission you opened is closed by you, once the work is over, and by nobody else.",
 			"A red CI, a failing test and a coding agent that is blocked are work still to do in the",
 			"Ask, never guess.",
