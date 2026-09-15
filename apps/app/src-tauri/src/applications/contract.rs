@@ -1,5 +1,10 @@
 use serde::{Deserialize, Serialize};
 
+use crate::conversations::contract::TranscriptStoreError;
+use crate::db::DatabaseError;
+use crate::environment::contract::EnvError;
+use crate::mcp_oauth::status::ConnectorStatus;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Application {
@@ -47,6 +52,143 @@ pub enum ApplicationsError {
 	RegistryUnreadable {
 		detail: String,
 	},
+}
+
+pub const INSTALLED_EVENT: &str = "application://installed";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Destination {
+	Companion,
+	Space,
+	User,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApplicationInstalled {
+	pub application: String,
+	pub scope: Destination,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub destination_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectorSearch {
+	pub applications: Vec<Application>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub registry_failure: Option<ApplicationsError>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum InstallCase {
+	Nothing,
+	#[serde(rename_all = "camelCase")]
+	Key {
+		secret: String,
+	},
+	Oauth,
+}
+
+impl From<Install> for InstallCase {
+	fn from(install: Install) -> Self {
+		match install {
+			Install::Nothing => InstallCase::Nothing,
+			Install::Key { secret, .. } => InstallCase::Key { secret },
+			Install::Oauth => InstallCase::Oauth,
+		}
+	}
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "outcome", rename_all = "camelCase")]
+pub enum ConnectorInstall {
+	#[serde(rename_all = "camelCase")]
+	Installed {
+		application: String,
+		scope: Destination,
+		install: InstallCase,
+	},
+	#[serde(rename_all = "camelCase")]
+	AlreadyInstalled {
+		application: String,
+		scope: Destination,
+	},
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "status", rename_all = "camelCase")]
+pub enum ConnectorState {
+	NotInstalled,
+	Connected,
+	NeedsAuthorization,
+	Connecting,
+	Failed {
+		#[serde(skip_serializing_if = "Option::is_none")]
+		reason: Option<String>,
+	},
+	Unknown,
+}
+
+impl From<ConnectorStatus> for ConnectorState {
+	fn from(status: ConnectorStatus) -> Self {
+		match status {
+			ConnectorStatus::Connected => ConnectorState::Connected,
+			ConnectorStatus::NeedsAuthorization => ConnectorState::NeedsAuthorization,
+			ConnectorStatus::Connecting => ConnectorState::Connecting,
+			ConnectorStatus::Failed { reason } => ConnectorState::Failed { reason },
+			ConnectorStatus::Unknown => ConnectorState::Unknown,
+		}
+	}
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum ConnectorError {
+	#[serde(rename_all = "camelCase")]
+	UnknownScope { scope: String },
+	#[serde(rename_all = "camelCase")]
+	UnknownApplication { application: String },
+	#[serde(rename_all = "camelCase")]
+	ConversationWithoutSpace { conversation_id: String },
+	#[serde(rename_all = "camelCase")]
+	Unsearchable { failure: ApplicationsError },
+	#[serde(rename_all = "camelCase")]
+	Store { failure: TranscriptStoreError },
+	#[serde(rename_all = "camelCase")]
+	Environment { failure: EnvError },
+	#[serde(rename_all = "camelCase")]
+	UnreadableRequest { detail: String },
+	#[serde(rename_all = "camelCase")]
+	Undeliverable { detail: String },
+	#[serde(rename_all = "camelCase")]
+	Unexpected { detail: String },
+}
+
+impl From<ApplicationsError> for ConnectorError {
+	fn from(failure: ApplicationsError) -> Self {
+		ConnectorError::Unsearchable { failure }
+	}
+}
+
+impl From<TranscriptStoreError> for ConnectorError {
+	fn from(failure: TranscriptStoreError) -> Self {
+		ConnectorError::Store { failure }
+	}
+}
+
+impl From<DatabaseError> for ConnectorError {
+	fn from(error: DatabaseError) -> Self {
+		ConnectorError::Store { failure: error.into() }
+	}
+}
+
+impl From<EnvError> for ConnectorError {
+	fn from(failure: EnvError) -> Self {
+		ConnectorError::Environment { failure }
+	}
 }
 
 #[cfg(test)]
