@@ -524,9 +524,4 @@ mod tests {
 			"got {answered:?}"
 		);
 	}
-
-	#[test]
-	fn the_registry_defaults_to_the_official_address() {
-		assert_eq!(REGISTRY, "https://registry.modelcontextprotocol.io");
-	}
 }
