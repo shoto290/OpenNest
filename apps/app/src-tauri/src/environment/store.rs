@@ -221,7 +221,8 @@ fn chain(scope: &EnvScope) -> Vec<EnvScope> {
 
 fn broader(scope: &EnvScope) -> Option<EnvScope> {
 	match scope {
-		EnvScope::User | EnvScope::Space { .. } | EnvScope::Person => None,
+		EnvScope::User | EnvScope::Person => None,
+		EnvScope::Space { .. } => Some(EnvScope::User),
 		EnvScope::Bot { space_id, .. } => Some(EnvScope::Space { id: space_id.clone() }),
 		EnvScope::Server { owner, .. } => Some(owner.into()),
 	}
@@ -511,23 +512,23 @@ mod tests {
 		assert_eq!(resolved.per_server["weather"], holding(&[("TOKEN", "space")]));
 	}
 
-	fn a_person_server(name: &str) -> EnvScope {
+	fn a_user_server(name: &str) -> EnvScope {
 		EnvScope::Server { name: name.to_owned(), owner: EnvOwner::User }
 	}
 
 	#[test]
-	fn a_person_server_is_filed_under_a_path_that_names_no_space_and_no_bot() {
-		let root = a_root("person-server-path");
+	fn a_user_server_is_filed_under_a_path_that_names_no_space_and_no_bot() {
+		let root = a_root("user-server-path");
 		assert_eq!(
-			file(&root, &a_person_server("clock")).expect("the path"),
+			file(&root, &a_user_server("clock")).expect("the path"),
 			root.join("server/user/clock/.env")
 		);
 	}
 
 	#[test]
-	fn the_environment_of_a_person_server_reaches_a_bot_whose_space_declares_none_of_that_name() {
-		let root = a_root("resolve-person-servers");
-		set(&root, &a_person_server("granola"), "REGION", "eu").expect("the person keeps it");
+	fn the_environment_of_a_user_server_reaches_a_bot_whose_space_declares_none_of_that_name() {
+		let root = a_root("resolve-user-servers");
+		set(&root, &a_user_server("granola"), "REGION", "eu").expect("the user scope keeps it");
 
 		let resolved = resolve(&root, &an_owner()).expect("the store reads");
 
@@ -535,16 +536,16 @@ mod tests {
 	}
 
 	#[test]
-	fn resolution_lays_the_person_servers_under_the_space_and_the_bot() {
-		let root = a_root("resolve-person-order");
+	fn resolution_lays_the_user_servers_under_the_space_and_the_bot() {
+		let root = a_root("resolve-user-order");
 		let space_clock = EnvScope::Server {
 			name: "clock".to_owned(),
 			owner: EnvOwner::Space { id: "s1".to_owned() },
 		};
-		set(&root, &a_person_server("clock"), "SHARED", "person").expect("the person keeps it");
-		set(&root, &a_person_server("clock"), "SPACE_WINS", "person").expect("the person keeps it");
-		set(&root, &a_person_server("clock"), "ONLY_PERSON", "person")
-			.expect("the person keeps it");
+		set(&root, &a_user_server("clock"), "SHARED", "user").expect("the user scope keeps it");
+		set(&root, &a_user_server("clock"), "SPACE_WINS", "user").expect("the user scope keeps it");
+		set(&root, &a_user_server("clock"), "ONLY_USER", "user")
+			.expect("the user scope keeps it");
 		set(&root, &space_clock, "SPACE_WINS", "space").expect("the space keeps it");
 		set(&root, &space_clock, "SHARED", "space").expect("the space keeps it");
 		set(&root, &a_server(), "SHARED", "bot").expect("the bot keeps it");
@@ -553,14 +554,14 @@ mod tests {
 
 		assert_eq!(
 			resolved.per_server["clock"],
-			holding(&[("ONLY_PERSON", "person"), ("SHARED", "bot"), ("SPACE_WINS", "space")])
+			holding(&[("ONLY_USER", "user"), ("SHARED", "bot"), ("SPACE_WINS", "space")])
 		);
 	}
 
 	#[test]
-	fn the_person_owner_resolves_only_what_the_person_holds() {
-		let root = a_root("resolve-person-owner");
-		set(&root, &a_person_server("clock"), "REGION", "eu").expect("the person keeps it");
+	fn the_user_owner_resolves_only_what_the_user_scope_holds() {
+		let root = a_root("resolve-user-owner");
+		set(&root, &a_user_server("clock"), "REGION", "eu").expect("the user scope keeps it");
 		set(&root, &a_server(), "REGION", "bot").expect("the bot keeps it");
 
 		let resolved = resolve(&root, &EnvOwner::User).expect("the store reads");
@@ -568,7 +569,49 @@ mod tests {
 		assert_eq!(resolved.per_server["clock"], holding(&[("REGION", "eu")]));
 		assert_eq!(
 			server_scopes(&root, &EnvOwner::User).expect("the store reads"),
-			vec![a_person_server("clock")]
+			vec![a_user_server("clock")]
+		);
+	}
+
+	fn a_user() -> EnvScope {
+		EnvScope::User
+	}
+
+	#[test]
+	fn the_base_of_a_bot_lays_the_user_scope_under_its_space_and_the_narrower_value_is_served() {
+		let root = a_root("resolve-user-base-bot");
+		set(&root, &a_user(), "ONLY_USER", "user").expect("the user scope keeps it");
+		set(&root, &a_user(), "SPACE_WINS", "user").expect("the user scope keeps it");
+		set(&root, &a_user(), "BOT_WINS", "user").expect("the user scope keeps it");
+		set(&root, &a_space(), "SPACE_WINS", "space").expect("the space keeps it");
+		set(&root, &a_bot(), "BOT_WINS", "bot").expect("the bot keeps it");
+
+		let resolved = resolve(&root, &an_owner()).expect("the store reads");
+
+		assert_eq!(
+			resolved.base,
+			holding(&[("BOT_WINS", "bot"), ("ONLY_USER", "user"), ("SPACE_WINS", "space")])
+		);
+	}
+
+	#[test]
+	fn the_base_of_a_space_lays_the_user_scope_under_it_and_the_space_value_is_served() {
+		let root = a_root("resolve-user-base-space");
+		set(&root, &a_user(), "ONLY_USER", "user").expect("the user scope keeps it");
+		set(&root, &a_user(), "SHARED", "user").expect("the user scope keeps it");
+		set(&root, &a_space(), "SHARED", "space").expect("the space keeps it");
+
+		let resolved =
+			resolve(&root, &EnvOwner::Space { id: "s1".to_owned() }).expect("the store reads");
+
+		assert_eq!(resolved.base, holding(&[("ONLY_USER", "user"), ("SHARED", "space")]));
+		assert_eq!(
+			names(&list(&root, &a_space()).expect("the chain reads")),
+			vec![
+				("ONLY_USER", &a_user(), &a_user()),
+				("SHARED", &a_space(), &a_space()),
+				("SHARED", &a_user(), &a_space()),
+			]
 		);
 	}
 

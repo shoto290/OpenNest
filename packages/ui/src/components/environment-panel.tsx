@@ -20,7 +20,7 @@ import {
 } from "@workspace/ui/components/ui/dialog"
 import { cn } from "@workspace/ui/lib/utils"
 
-const ENVIRONMENT_SCOPES = ["space", "bot", "server"] as const
+const ENVIRONMENT_SCOPES = ["user", "space", "bot", "server"] as const
 
 type EnvironmentScope = (typeof ENVIRONMENT_SCOPES)[number]
 

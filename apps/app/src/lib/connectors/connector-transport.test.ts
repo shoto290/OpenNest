@@ -48,6 +48,20 @@ describe("connectorTransport", () => {
 		expect(disconnected).toEqual({ revoked: true })
 	})
 
+	it("names the user as the owner of every call", async () => {
+		const user: EnvOwner = { kind: "user" }
+
+		await connectorTransport.status(user)
+		await connectorTransport.connect(user, "atlas", URL)
+		await connectorTransport.disconnect(user, "atlas", URL)
+
+		expect(hostInvoke.mock.calls).toEqual([
+			["mcp_connector_status", { owner: user }],
+			["mcp_oauth_connect", { owner: user, name: "atlas", url: URL }],
+			["mcp_oauth_disconnect", { owner: user, name: "atlas", url: URL }],
+		])
+	})
+
 	it("reads the connector status of an owner", async () => {
 		hostInvoke.mockResolvedValue([{ name: "atlas", status: "connected" }])
 

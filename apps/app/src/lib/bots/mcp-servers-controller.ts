@@ -27,8 +27,10 @@ export const initialMcpServersState: McpServersState = {
 	hasFailedToLoad: false,
 }
 
+const ownerId = (owner: EnvOwner) => (owner.kind === "user" ? null : owner.id)
+
 const isSameOwner = (left: EnvOwner | null, right: EnvOwner) =>
-	left?.kind === right.kind && left?.id === right.id
+	left !== null && left.kind === right.kind && ownerId(left) === ownerId(right)
 
 export const createMcpServersController = (
 	store: TranscriptStore,
@@ -55,24 +57,36 @@ export const createMcpServersController = (
 		}
 	}
 
-	const declared = (owner: EnvOwner) =>
-		owner.kind === "space"
+	const declared = (owner: EnvOwner) => {
+		if (owner.kind === "user") {
+			return store.userPluginMcpServers()
+		}
+		return owner.kind === "space"
 			? store.spaceMcpServers(owner.id)
 			: store.botMcpServers(owner.id)
+	}
 
 	const declare = (
 		owner: EnvOwner,
 		name: string,
 		config: Record<string, unknown>,
-	) =>
-		owner.kind === "space"
+	) => {
+		if (owner.kind === "user") {
+			return store.setUserPluginMcpServer(name, config)
+		}
+		return owner.kind === "space"
 			? store.setSpaceMcpServer(owner.id, name, config)
 			: store.setBotMcpServer(owner.id, name, config)
+	}
 
-	const undeclare = (owner: EnvOwner, name: string) =>
-		owner.kind === "space"
+	const undeclare = (owner: EnvOwner, name: string) => {
+		if (owner.kind === "user") {
+			return store.deleteUserPluginMcpServer(name)
+		}
+		return owner.kind === "space"
 			? store.deleteSpaceMcpServer(owner.id, name)
 			: store.deleteBotMcpServer(owner.id, name)
+	}
 
 	const read = async (owner: EnvOwner) =>
 		applyTo(owner, {

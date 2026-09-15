@@ -164,12 +164,8 @@ async fn disconnected<R: Runtime>(
 	Ok(revocation)
 }
 
-fn held_at(root: &Path, owner: &EnvOwner, name: &str) -> Result<EnvScope, EnvError> {
-	let served = credentials::served(root, owner)?.remove(name);
-	Ok(served.map_or_else(
-		|| EnvScope::Server { name: name.to_owned(), owner: owner.clone() },
-		|grant| grant.scope,
-	))
+fn held_at(_root: &Path, owner: &EnvOwner, name: &str) -> Result<EnvScope, EnvError> {
+	Ok(EnvScope::Server { name: name.to_owned(), owner: owner.clone() })
 }
 
 #[tauri::command]
@@ -270,32 +266,53 @@ mod tests {
 		}
 	}
 
-	#[test]
-	fn a_grant_of_the_person_is_held_under_the_person_and_under_no_bot_of_that_name() {
-		let root = std::env::temp_dir().join("kiroshi-mcp-oauth-person-held");
-		let _ = std::fs::remove_dir_all(&root);
-		let person = EnvScope::Server { name: "granola".to_owned(), owner: EnvOwner::User };
-		credentials::store(&root, &a_server("granola"), &a_live_grant())
-			.expect("the bot grant is written");
-
-		assert_eq!(held_at(&root, &EnvOwner::User, "granola"), Ok(person.clone()));
-
-		credentials::store(&root, &person, &a_live_grant()).expect("the person grant is written");
-
-		assert_eq!(held_at(&root, &EnvOwner::User, "granola"), Ok(person));
-		let _ = std::fs::remove_dir_all(&root);
-	}
-
-	#[tokio::test]
-	async fn the_connectors_of_the_person_are_the_servers_the_person_plugin_declares() {
+	fn a_host(name: &str) -> (tauri::App<tauri::test::MockRuntime>, std::path::PathBuf) {
 		let mut context = mock_context(noop_assets());
 		context.config_mut().identifier =
-			format!("com.kiroshi.mcp-oauth-person-{}", std::process::id()).into();
+			format!("com.kiroshi.mcp-oauth-{name}-{}", std::process::id()).into();
 		let app = mock_builder().build(context).expect("the app builds");
 		let data = app.path().app_data_dir().expect("the data dir is named");
 		let _ = std::fs::remove_dir_all(&data);
 		app.manage(McpOauthState::default());
 		app.manage(ConnectorReports::default());
+		(app, data)
+	}
+
+	#[tokio::test]
+	async fn a_disconnect_of_an_owner_holding_no_grant_forgets_nothing_a_wider_owner_holds() {
+		let (app, data) = a_host("disconnect-wider");
+		let root = writable_root(app.handle()).expect("the store has a home");
+		let of_the_user = EnvScope::Server { name: "granola".to_owned(), owner: EnvOwner::User };
+		credentials::store(&root, &of_the_user, &a_live_grant()).expect("the user grant lands");
+		credentials::store(&root, &granola_of_the_space(), &a_live_grant())
+			.expect("the space grant lands");
+
+		for owner in [a_bot(), EnvOwner::Space { id: "s2".to_owned() }] {
+			let settled = mcp_oauth_disconnect(
+				app.handle().clone(),
+				owner,
+				"granola".to_owned(),
+				"https://mcp.granola.test/mcp".to_owned(),
+			)
+			.await;
+
+			assert_eq!(
+				settled,
+				Ok(Disconnected { revoked: false, detail: Some(NOTHING_STORED.to_owned()) })
+			);
+		}
+
+		for scope in [of_the_user, granola_of_the_space()] {
+			assert!(store::values(&root, &scope)
+				.expect("the scope is readable")
+				.contains_key(OAUTH_ACCESS_TOKEN));
+		}
+		let _ = std::fs::remove_dir_all(&data);
+	}
+
+	#[tokio::test]
+	async fn the_connectors_of_the_user_are_the_servers_the_user_plugin_declares() {
+		let (app, data) = a_host("user-connectors");
 		let path = bundles::user::path(app.handle()).expect("the plugin has a home");
 		bundles::user::lay_down(&path).expect("the plugin is laid down");
 		for name in ["clock", "granola"] {

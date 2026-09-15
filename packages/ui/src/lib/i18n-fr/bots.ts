@@ -524,6 +524,7 @@ const bots = {
 				"Ajoutez un secret pour transmettre une valeur à ce qui tourne ici. Vous ne la reverrez plus.",
 		},
 		scope: {
+			user: "Toi",
 			space: "Espace",
 			bot: "Compagnon",
 			server: "Connecteur",
