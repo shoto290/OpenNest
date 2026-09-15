@@ -98,10 +98,19 @@ pub struct AskedQuestion {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum QuestionSubject {
+	#[serde(rename_all = "camelCase")]
+	ApplicationScope { application: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QuestionRequest {
 	pub id: String,
 	pub questions: Vec<AskedQuestion>,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub subject: Option<QuestionSubject>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

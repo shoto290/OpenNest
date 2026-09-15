@@ -1,3 +1,4 @@
+pub mod application_installs;
 pub mod arrivals;
 pub mod bot_spaces;
 pub mod catalogue;
@@ -12,6 +13,7 @@ pub mod space_settings;
 pub mod spaces;
 pub mod user;
 
+pub use application_installs::ApplicationInstallsRepository;
 pub use catalogue::CatalogueRepository;
 pub use conversations::ConversationsRepository;
 pub use messages::MessagesRepository;

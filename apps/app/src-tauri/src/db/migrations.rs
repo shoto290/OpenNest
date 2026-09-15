@@ -40,6 +40,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 31, statements: SOLO_THREAD_PER_SPACE },
 	Migration { version: 32, statements: MISSION_CHECKS_FAILED },
 	Migration { version: 33, statements: CONVERSATION_ARRIVALS },
+	Migration { version: 34, statements: APPLICATION_INSTALLS },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -757,6 +758,25 @@ CREATE INDEX conversation_arrivals_in_order
 	ON conversation_arrivals (conversation_id, last_message_seq, created_at, id);
 ";
 
+const APPLICATION_INSTALLS: &str = "
+CREATE TABLE application_installs (
+	id TEXT PRIMARY KEY,
+	conversation_id TEXT NOT NULL REFERENCES conversations (id) ON DELETE CASCADE,
+	application TEXT NOT NULL,
+	title TEXT NOT NULL,
+	logo TEXT,
+	scope TEXT NOT NULL CHECK (scope IN ('companion', 'space', 'user')),
+	destination_id TEXT,
+	install_kind TEXT NOT NULL CHECK (install_kind IN ('nothing', 'key', 'oauth')),
+	secret_name TEXT,
+	last_message_seq INTEGER NOT NULL,
+	created_at INTEGER NOT NULL
+);
+
+CREATE INDEX application_installs_in_order
+	ON application_installs (conversation_id, created_at, id);
+";
+
 pub fn latest_version() -> u32 {
 	MIGRATIONS.last().map_or(0, |migration| migration.version)
 }
@@ -845,6 +865,7 @@ mod tests {
 	const BOT_SPACES_STEP: u32 = 30;
 	const SOLO_THREAD_PER_SPACE_STEP: u32 = 31;
 	const MISSION_CHECKS_FAILED_STEP: u32 = 32;
+	const APPLICATION_INSTALLS_STEP: u32 = 34;
 
 	const A_LIVE_SESSION: &str = "INSERT INTO runtime_sessions
 		(id, conversation_id, bot_id, provider_session_id, seq, status, started_at)
@@ -1757,6 +1778,41 @@ mod tests {
 		apply(&mut connection).expect("the file comes up to this build");
 
 		assert!(has_table(&connection, "space_settings"), "the file never gained the table");
+		assert_eq!(version(&connection).expect("version"), latest_version());
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[test]
+	fn a_file_that_missed_the_application_installs_step_gains_the_table_and_keeps_its_rows() {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, shipped_before(APPLICATION_INSTALLS_STEP))
+			.expect("the build that shipped without the installs step installs");
+		write(
+			&connection,
+			"INSERT INTO conversations (id, kind, title, created_at, updated_at)
+				VALUES ('c1', 'main', 'Chat', 1, 1)",
+		)
+		.expect("a conversation of the older build");
+		assert!(!has_table(&connection, "application_installs"), "the file already held the table");
+
+		apply(&mut connection).expect("the file comes up to this build");
+
+		assert!(has_table(&connection, "application_installs"), "the file never gained the table");
+		assert!(
+			has_index(&connection, "application_installs_in_order"),
+			"the read of one conversation is served by no index"
+		);
+		assert_eq!(
+			connection
+				.query_row("SELECT title FROM conversations WHERE id = 'c1'", [], |row| row
+					.get::<_, String>(0))
+				.expect("the conversation of the older build reads back"),
+			"Chat",
+			"the step lost a conversation written before it"
+		);
 		assert_eq!(version(&connection).expect("version"), latest_version());
 
 		drop(connection);

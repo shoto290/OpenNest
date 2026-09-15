@@ -200,6 +200,8 @@ mod tests {
 		for said in [
 			"Search before you install.",
 			"`AskUserQuestion`",
+			"`metadata.source` set to `application-scope:`",
+			"exactly as it answered it",
 			"`companion`, you",
 			"`space`, every companion of",
 			"`user`, the person",

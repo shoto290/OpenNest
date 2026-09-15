@@ -1,4 +1,3 @@
-
 use std::collections::HashMap;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -8,7 +7,7 @@ use serde_json::Value;
 use super::contract::{
 	ActivityEvent, ActivityKind, ActivityStatus, AgentEvent, AskedQuestion, ChatMessage,
 	MessageCompletion, MessageRole, PermissionRequest, QuestionOption, QuestionRequest,
-	TransportError, TurnEnded, TurnOutcome,
+	QuestionSubject, TransportError, TurnEnded, TurnOutcome,
 };
 use super::protocol::{
 	CommandsFrame, ContentBlock, ContentDelta, ControlRequestBody, Frame, RejectionFrame,
@@ -74,6 +73,15 @@ fn asked_question(value: &Value) -> Option<AskedQuestion> {
 		options: read_list(value, "options", question_option),
 		multi_select: value.get("multiSelect").and_then(Value::as_bool).unwrap_or_default(),
 	})
+}
+
+pub const APPLICATION_SCOPE_SOURCE: &str = "application-scope:";
+
+fn question_subject(input: &Value) -> Option<QuestionSubject> {
+	let source = string_field(input.get("metadata")?, "source")?;
+	let application = source.strip_prefix(APPLICATION_SCOPE_SOURCE)?.trim();
+	(!application.is_empty())
+		.then(|| QuestionSubject::ApplicationScope { application: application.to_owned() })
 }
 
 fn question_option(value: &Value) -> Option<QuestionOption> {
@@ -348,6 +356,7 @@ impl Translator {
 		let detail = permission_detail(&tool_name, &input);
 		let questions = (tool_name == ASK_USER_QUESTION)
 			.then(|| read_list(&input, "questions", asked_question));
+		let subject = question_subject(&input);
 		self.pending_permissions.insert(request_id.clone(), input);
 
 		let pending = AgentEvent::Activity {
@@ -361,7 +370,7 @@ impl Translator {
 
 		let asked = match questions {
 			Some(questions) => AgentEvent::QuestionRequested {
-				request: QuestionRequest { id: request_id, questions },
+				request: QuestionRequest { id: request_id, questions, subject },
 			},
 			None => AgentEvent::PermissionRequested {
 				request: PermissionRequest { id: request_id, tool_name, title, detail },
@@ -886,6 +895,84 @@ mod tests {
 
 			assert_eq!(asked(&events).expect("a question request").questions, Vec::new());
 		}
+	}
+
+	fn a_scope_question(source: Value) -> Value {
+		json!({
+			"questions": [{
+				"header": "Where",
+				"question": "Where does it go?",
+				"multiSelect": false,
+				"options": [{ "label": "You alone", "description": "Your companion." }]
+			}],
+			"metadata": { "source": source }
+		})
+	}
+
+	#[test]
+	fn a_question_whose_source_names_an_application_scope_carries_that_subject() {
+		let mut translator = Translator::new(false);
+
+		let events = ingest(
+			&mut translator,
+			vec![control_request(
+				ASK_USER_QUESTION,
+				a_scope_question(json!("application-scope:com.notion/mcp")),
+			)],
+		);
+
+		let request = asked(&events).expect("a question request");
+		assert_eq!(
+			request.subject,
+			Some(QuestionSubject::ApplicationScope { application: "com.notion/mcp".to_owned() })
+		);
+		assert_eq!(request.questions.len(), 1);
+	}
+
+	#[test]
+	fn a_question_whose_source_is_absent_empty_or_of_another_form_carries_no_subject() {
+		let sources = [
+			json!("application-scope:"),
+			json!("application-scope:   "),
+			json!("remember"),
+			json!(""),
+			json!(7),
+		];
+		for source in sources {
+			let mut translator = Translator::new(false);
+
+			let events = ingest(
+				&mut translator,
+				vec![control_request(ASK_USER_QUESTION, a_scope_question(source.clone()))],
+			);
+
+			assert_eq!(asked(&events).expect("a question request").subject, None, "for {source}");
+		}
+
+		let mut translator = Translator::new(false);
+		let events = ingest(
+			&mut translator,
+			vec![control_request(ASK_USER_QUESTION, json!({ "questions": [] }))],
+		);
+		assert_eq!(asked(&events).expect("a question request").subject, None);
+	}
+
+	#[test]
+	fn a_permission_request_and_its_activity_are_left_alone_by_a_scope_source() {
+		let mut translator = Translator::new(false);
+		let input = json!({
+			"file_path": "/tmp/notes.txt",
+			"metadata": { "source": "application-scope:linear" }
+		});
+
+		let events = ingest(&mut translator, vec![control_request("Write", input)]);
+
+		assert_eq!(statuses(&events), [ActivityStatus::Pending]);
+		assert!(events.iter().any(|event| matches!(
+			event,
+			AgentEvent::PermissionRequested { request } if request.tool_name == "Write"
+		)));
+		assert!(asked(&events).is_none());
 	}
 
 	#[test]

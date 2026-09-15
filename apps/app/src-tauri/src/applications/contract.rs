@@ -64,13 +64,86 @@ pub enum Destination {
 	User,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InstallDraft {
+	pub conversation_id: String,
+	pub application: String,
+	pub title: String,
+	pub logo: Option<String>,
+	pub scope: Destination,
+	pub destination_id: Option<String>,
+	pub install: InstallCase,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ApplicationInstalled {
+pub struct ApplicationInstall {
+	pub id: String,
+	pub conversation_id: String,
 	pub application: String,
+	pub title: String,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub logo: Option<String>,
 	pub scope: Destination,
 	#[serde(default, skip_serializing_if = "Option::is_none")]
 	pub destination_id: Option<String>,
+	pub install: InstallCase,
+	pub last_message_seq: i64,
+	pub created_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApplicationInstalled {
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub id: Option<String>,
+	pub conversation_id: String,
+	pub application: String,
+	pub title: String,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub logo: Option<String>,
+	pub scope: Destination,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub destination_id: Option<String>,
+	pub install: InstallCase,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub last_message_seq: Option<i64>,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub created_at: Option<i64>,
+}
+
+impl From<ApplicationInstall> for ApplicationInstalled {
+	fn from(record: ApplicationInstall) -> Self {
+		Self {
+			id: Some(record.id),
+			conversation_id: record.conversation_id,
+			application: record.application,
+			title: record.title,
+			logo: record.logo,
+			scope: record.scope,
+			destination_id: record.destination_id,
+			install: record.install,
+			last_message_seq: Some(record.last_message_seq),
+			created_at: Some(record.created_at),
+		}
+	}
+}
+
+impl From<InstallDraft> for ApplicationInstalled {
+	fn from(draft: InstallDraft) -> Self {
+		Self {
+			id: None,
+			conversation_id: draft.conversation_id,
+			application: draft.application,
+			title: draft.title,
+			logo: draft.logo,
+			scope: draft.scope,
+			destination_id: draft.destination_id,
+			install: draft.install,
+			last_message_seq: None,
+			created_at: None,
+		}
+	}
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -81,7 +154,7 @@ pub struct ConnectorSearch {
 	pub registry_failure: Option<ApplicationsError>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum InstallCase {
 	Nothing,
@@ -106,16 +179,9 @@ impl From<Install> for InstallCase {
 #[serde(tag = "outcome", rename_all = "camelCase")]
 pub enum ConnectorInstall {
 	#[serde(rename_all = "camelCase")]
-	Installed {
-		application: String,
-		scope: Destination,
-		install: InstallCase,
-	},
+	Installed { application: String, scope: Destination, install: InstallCase },
 	#[serde(rename_all = "camelCase")]
-	AlreadyInstalled {
-		application: String,
-		scope: Destination,
-	},
+	AlreadyInstalled { application: String, scope: Destination },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
