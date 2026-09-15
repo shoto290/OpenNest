@@ -5,6 +5,7 @@ import {
 	type ConversationMissions,
 	type Mission,
 	type MissionChanged,
+	type MissionClosing,
 	type MissionDetail,
 	type MissionOnBoard,
 	type MissionOutcome,
@@ -23,7 +24,11 @@ export const missionsTransport = {
 	close: (missionId: string, outcome: MissionOutcome, summary: string) =>
 		invoke<Mission>("mission_close", {
 			missionId,
-			closing: { source: PERSON_SOURCE, outcome, summary },
+			closing: {
+				source: PERSON_SOURCE,
+				outcome,
+				summary,
+			} satisfies MissionClosing,
 		}),
 	detail: (missionId: string) =>
 		invoke<MissionDetail>("mission_detail", { missionId }),
