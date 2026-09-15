@@ -1377,7 +1377,7 @@ describe("createRosterController on conversations", () => {
 		expect(leadIn(room)).toBe(second.id)
 	})
 
-	it("says nothing was seated when a seating fails", async () => {
+	it("seats nobody and names the refused companion when a seating fails", async () => {
 		const store = createFakeTranscriptStore()
 		const reportFailure = vi.fn()
 		const refusing = createRosterController(
@@ -1390,14 +1390,14 @@ describe("createRosterController on conversations", () => {
 		await refusing.load(opening())
 		const created = await refusing.createConversation()
 
-		const isSeated = await refusing.recruitToConversation(
+		const seated = await refusing.recruitToConversation(
 			created?.id ?? "",
 			"default",
 		)
 
-		expect(isSeated).toBe(false)
+		expect(seated).toBeNull()
 		expect(reportFailure).toHaveBeenCalledWith({
-			title: "Couldn't change who is in this conversation. Retry.",
+			title: `Couldn't bring ${refusing.getState().bots[0].name} into this conversation. Retry.`,
 		})
 		expect(seatedIn(refusing.getState().conversations[0])).toEqual([])
 	})

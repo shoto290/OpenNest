@@ -32,6 +32,7 @@ import {
 	type AttachmentsController,
 	createAttachmentsController,
 } from "@/lib/chat/attachments-controller"
+import { createAttachmentsPort } from "@/lib/chat/attachments-port"
 import {
 	type ChatController,
 	createChatController,
@@ -267,6 +268,11 @@ const attachments = createAttachmentsController({
 	store: async () => [],
 	send: () => true,
 })
+
+const NO_BOT_CHAT = {
+	storeAttachments: () => Promise.resolve<string[]>([]),
+	sendTo: () => Promise.resolve(),
+}
 
 const botOf = (id: string, name: string): Bot => ({
 	...botIdentity({ name }),
@@ -2988,7 +2994,7 @@ describe("signing in from a companion's solo thread", () => {
 
 const seatingOf = (
 	bots: Bot[],
-	seat: (conversationId: string, botId: string) => Promise<boolean>,
+	seat: ConversationSeating["seat"],
 ): ConversationSeating => ({
 	seat,
 	botsByPresence: () => Promise.resolve(bots),
@@ -2996,7 +3002,7 @@ const seatingOf = (
 
 const seatlessRoomWith = async (
 	bots: Bot[],
-	seat: (conversationId: string, botId: string) => Promise<boolean>,
+	seat: ConversationSeating["seat"],
 ) => {
 	const room = await roomOf({ names: [] })
 	render(
@@ -3033,7 +3039,7 @@ describe("ThreadScreen on a conversation nobody is in", () => {
 	})
 
 	it("offers the first five companions the presence ranking answers", async () => {
-		const seat = vi.fn(() => Promise.resolve(true))
+		const seat = vi.fn(() => Promise.resolve(null))
 		const ranked = ["Vela", "Orb", "Nyx", "Ada", "Sol", "Wren"]
 		await seatlessRoomWith(
 			ranked.map((name) => botOf(name.toLowerCase(), name)),
@@ -3046,25 +3052,168 @@ describe("ThreadScreen on a conversation nobody is in", () => {
 		expect(screen.queryByRole("button", { name: "Wren" })).toBeNull()
 	})
 
-	it("seats the pressed companion then writes its mention in the prompt", async () => {
-		const seat = vi.fn(() => Promise.resolve(true))
-		const room = await seatlessRoomWith([botOf("vela", "Vela")], seat)
-
-		fireEvent.click(screen.getByRole("button", { name: "Vela" }))
-		await settle()
-
-		expect(seat).toHaveBeenCalledWith(room.thread.conversation.id, "vela")
-		expect(composerValue()).toBe("@Vela ")
-	})
-
-	it("leaves the prompt alone when seating the pressed companion fails", async () => {
-		const seat = vi.fn(() => Promise.resolve(false))
+	it("writes the mention of the pressed companion and seats nobody", async () => {
+		const seat = vi.fn(() => Promise.resolve(null))
 		await seatlessRoomWith([botOf("vela", "Vela")], seat)
 
 		fireEvent.click(screen.getByRole("button", { name: "Vela" }))
 		await settle()
 
-		expect(composerValue()).toBe("")
+		expect(seat).not.toHaveBeenCalled()
+		expect(composerValue()).toBe("@Vela ")
+	})
+})
+
+type SendingRoom = {
+	store: TranscriptStore
+	driver: ScriptedDriver
+	conversationId: string
+	idOf: (name: string) => string
+	seat: ReturnType<typeof vi.fn>
+}
+
+const SENDING_ROOM_NAMES = ["Ada", "Vela", "Orb"]
+
+const sendingRoomWith = async (
+	refuse: ConversationSeating["seat"] | null = null,
+): Promise<SendingRoom> => {
+	const store = createFakeTranscriptStore()
+	const bots = await seatBots(store, SPACE, SENDING_ROOM_NAMES)
+	const [host] = bots
+	const conversation = await store.createConversation({
+		spaceId: SPACE,
+		sectionId: null,
+		title: "Walls",
+		botIds: [host.id],
+	})
+	const driver = createScriptedDriver()
+	const runtimes = createConversationRuntimes(driver, store, {})
+	const seat = vi.fn(
+		refuse ??
+			((conversationId: string, botId: string) =>
+				store.addConversationParticipant(conversationId, botId)),
+	)
+
+	render(
+		createElement(
+			ConversationSeatingContext.Provider,
+			{ value: seatingOf(bots, seat) },
+			createElement(ThreadScreenHarness, {
+				bots,
+				landings: createMessageLandingController(),
+				onOpenMission: () => undefined,
+				staging: createAttachmentsController(
+					createAttachmentsPort({ chat: NO_BOT_CHAT, driver, runtimes }),
+				),
+				thread: {
+					kind: "conversation",
+					conversation,
+					runtimes,
+					isSettingsOpen: false,
+					onOpenSettings: () => undefined,
+				},
+			}),
+		),
+	)
+	await settle()
+
+	return {
+		store,
+		driver,
+		conversationId: conversation.id,
+		idOf: (name) => bots.find((bot) => bot.name === name)?.id ?? name,
+		seat,
+	}
+}
+
+const sendInComposer = async (text: string) => {
+	const field = screen.getByRole("textbox", { name: "Message" })
+	await act(async () => {
+		fireEvent.change(field, { target: { value: text } })
+	})
+	await act(async () => {
+		fireEvent.keyDown(field, { key: "Enter" })
+	})
+	await settle()
+}
+
+const storedTexts = async (room: SendingRoom) => {
+	const page = await room.store.loadPage(room.conversationId, null)
+	return page.messages
+		.filter((held) => held.role === "user")
+		.map((held) => held.content)
+}
+
+const seatedBotIds = (room: SendingRoom) =>
+	room.seat.mock.calls.map(([, botId]) => botId)
+
+const summonedBotIds = (room: SendingRoom) =>
+	room.driver.submissions.map((submission) => submission.scope.botId)
+
+describe("ThreadScreen sending a message that mentions absent companions", () => {
+	let layout: FakeLayout
+
+	beforeEach(() => {
+		layout = fakeLayout()
+		vi.clearAllMocks()
+		listRoutines.mockResolvedValue([])
+		listRuns.mockResolvedValue([])
+		listSources.mockResolvedValue([SCHEDULE_SOURCE])
+		listMissions.mockResolvedValue({ open: [], done: [] })
+		listenToMissions.mockResolvedValue(() => undefined)
+	})
+
+	afterEach(() => {
+		cleanup()
+		layout.restore()
+	})
+
+	it("seats a mentioned companion and stores its mention token", async () => {
+		const room = await sendingRoomWith()
+
+		await sendInComposer("@Vela hold the north wall")
+
+		expect(seatedBotIds(room)).toEqual([room.idOf("Vela")])
+		expect(await storedTexts(room)).toEqual([
+			`<@${room.idOf("Vela")}> hold the north wall`,
+		])
+	})
+
+	it("dispatches the turn to the companion that send seated", async () => {
+		const room = await sendingRoomWith()
+
+		await sendInComposer("@Vela hold the north wall")
+
+		expect(summonedBotIds(room)).toEqual([room.idOf("Vela")])
+	})
+
+	it("seats the mentioned companions in the order their names appear", async () => {
+		const room = await sendingRoomWith()
+
+		await sendInComposer("@Orb then @Vela, hold the wall")
+
+		expect(seatedBotIds(room)).toEqual([room.idOf("Orb"), room.idOf("Vela")])
+	})
+
+	it("seats nobody when every mentioned companion already holds a seat", async () => {
+		const room = await sendingRoomWith()
+
+		await sendInComposer("@Ada hold the north wall")
+
+		expect(seatedBotIds(room)).toEqual([])
+		expect(await storedTexts(room)).toEqual([
+			`<@${room.idOf("Ada")}> hold the north wall`,
+		])
+	})
+
+	it("keeps the text, stores nothing and starts no turn when seating is refused", async () => {
+		const room = await sendingRoomWith(() => Promise.resolve(null))
+
+		await sendInComposer("@Vela hold the north wall")
+
+		expect(composerValue()).toBe("@Vela hold the north wall")
+		expect(await storedTexts(room)).toEqual([])
+		expect(summonedBotIds(room)).toEqual([])
 	})
 })
 

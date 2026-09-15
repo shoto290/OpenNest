@@ -99,28 +99,50 @@ export const promptWithMentionAdded = (
 		: `${spacedEnd(prompt)}${mentionOf(name)}`
 }
 
+const namedBotsIn = (text: string, bots: MentionBot[]): MentionBot[] => {
+	const named: MentionBot[] = []
+	let read = 0
+
+	while (read < text.length) {
+		const at = text.indexOf(ARROBASE, read)
+		if (at < 0) {
+			break
+		}
+		const found = botNamedAt(text, at + 1, bots)
+		if (found) {
+			named.push(found)
+		}
+		read = at + 1 + (found?.name.length ?? 0)
+	}
+
+	return named
+}
+
+const withoutMentionDraft = (prompt: string): string => {
+	const draft = MENTION_DRAFT.exec(prompt)
+	return draft ? prompt.slice(0, prompt.length - draft[1].length - 1) : prompt
+}
+
 export const mentionCountsIn = (
 	prompt: string,
 	bots: MentionBot[],
 ): Record<string, number> => {
-	const draft = MENTION_DRAFT.exec(prompt)
-	const written = draft
-		? prompt.slice(0, prompt.length - draft[1].length - 1)
-		: prompt
 	const counts: Record<string, number> = {}
-	let read = 0
-
-	while (read < written.length) {
-		const at = written.indexOf(ARROBASE, read)
-		if (at < 0) {
-			break
-		}
-		const named = botNamedAt(written, at + 1, bots)
-		if (named) {
-			counts[named.id] = (counts[named.id] ?? 0) + 1
-		}
-		read = at + 1 + (named?.name.length ?? 0)
+	for (const named of namedBotsIn(withoutMentionDraft(prompt), bots)) {
+		counts[named.id] = (counts[named.id] ?? 0) + 1
 	}
-
 	return counts
+}
+
+export const mentionedBotIdsIn = (
+	text: string,
+	bots: MentionBot[],
+): string[] => {
+	const botIds: string[] = []
+	for (const named of namedBotsIn(text, bots)) {
+		if (!botIds.includes(named.id)) {
+			botIds.push(named.id)
+		}
+	}
+	return botIds
 }

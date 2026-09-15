@@ -109,7 +109,7 @@ export type RosterController = {
 	recruitToConversation: (
 		conversationId: string,
 		botId: string,
-	) => Promise<boolean>
+	) => Promise<Conversation | null>
 	dismissFromConversation: (
 		conversationId: string,
 		botId: string,
@@ -569,19 +569,40 @@ export const createRosterController = (
 		onRefused: reload,
 	})
 
-	const refuseSeatMove = async () => {
-		reportFailure({ title: i18n.t("chat:conversationSeating.failed") })
+	const refuseSeatMove = async (title: string) => {
+		reportFailure({ title })
 		await reload()
-		return false
+		return null
 	}
+
+	const seatedBy = (
+		move: (conversationId: string, botId: string) => Promise<Conversation>,
+		conversationId: string,
+		botId: string,
+		refusal: string,
+	) =>
+		enqueue(async () => {
+			const seated = await move(conversationId, botId)
+			applyConversation(seated)
+			return seated
+		}).catch(() => refuseSeatMove(refusal))
 
 	const seatMove =
 		(move: (conversationId: string, botId: string) => Promise<Conversation>) =>
 		(conversationId: string, botId: string) =>
-			enqueue(async () => {
-				applyConversation(await move(conversationId, botId))
-				return true
-			}).catch(refuseSeatMove)
+			seatedBy(
+				move,
+				conversationId,
+				botId,
+				i18n.t("chat:conversationSeating.failed"),
+			).then((seated) => seated !== null)
+
+	const refusedRecruitment = (botId: string) => {
+		const name = held(botId)?.name
+		return name
+			? i18n.t("chat:conversationSeating.refused", { name })
+			: i18n.t("chat:conversationSeating.failed")
+	}
 
 	const conversationWrites = createWriteLoop<
 		ConversationSettingsValue,
@@ -941,7 +962,13 @@ export const createRosterController = (
 
 		setConversationLead: seatMove(store.setConversationLead),
 
-		recruitToConversation: seatMove(store.addConversationParticipant),
+		recruitToConversation: (conversationId: string, botId: string) =>
+			seatedBy(
+				store.addConversationParticipant,
+				conversationId,
+				botId,
+				refusedRecruitment(botId),
+			),
 
 		botsByPresence: (conversationId: string) => {
 			const spaceId = state.spaceId
