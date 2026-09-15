@@ -1,20 +1,21 @@
 "use client"
 
 import { Tabs } from "@base-ui/react/tabs"
-import type { ReactNode } from "react"
+import { type ReactNode, useRef } from "react"
 import { useTranslation } from "react-i18next"
 
 import { type Icon, Icons } from "@workspace/ui/components/icons"
 import { ApplicationMark } from "@workspace/ui/components/plugin-settings/application-mark"
 import {
 	RAIL_ITEM_CLASS,
+	SETTINGS_PANEL_CLASS,
 	SettingsRail,
 	SettingsRailAction,
 	SettingsRailBack,
 	SettingsRailSeparator,
-	SettingsScrollingPanel,
 } from "@workspace/ui/components/settings-rail"
 import { Button } from "@workspace/ui/components/ui/button"
+import { useOverlayScrollbars } from "@workspace/ui/hooks/use-overlay-scrollbars"
 import { cn } from "@workspace/ui/lib/utils"
 
 type ApplicationSetup = "signIn" | "apiKey" | "none"
@@ -34,7 +35,7 @@ type ApplicationCategory = {
 }
 
 const SETUP_ICON = {
-	signIn: Icons.User,
+	signIn: Icons.ExternalLink,
 	apiKey: Icons.Key,
 	none: Icons.Check,
 } as const satisfies Record<ApplicationSetup, Icon>
@@ -49,7 +50,7 @@ const CatalogueCard = ({ application, onPick }: CatalogueCardProps) => {
 	const SetupIcon = SETUP_ICON[application.setup]
 
 	return (
-		<li className="flex min-w-0">
+		<li className="flex w-46.5 shrink-0">
 			<button
 				className="flex w-full min-w-0 cursor-pointer flex-col gap-2 rounded-xl border border-border p-3 text-start outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
 				onClick={onPick}
@@ -61,11 +62,17 @@ const CatalogueCard = ({ application, onPick }: CatalogueCardProps) => {
 						{application.name}
 					</span>
 				</span>
-				<span className="truncate text-muted-foreground text-xs">
+				<span className="wrap-break-word text-muted-foreground text-xs/4">
 					{application.description}
 				</span>
 				<span className="flex min-w-0 items-center gap-1.25 pt-2 text-muted-foreground text-xs">
-					<SetupIcon aria-hidden="true" className="size-3.25 shrink-0" />
+					<SetupIcon
+						aria-hidden="true"
+						className={cn(
+							"size-3.25 shrink-0",
+							application.setup === "none" && "text-state-connected",
+						)}
+					/>
 					<span className="truncate">
 						{t(`applications.catalogue.setup.${application.setup}`)}
 					</span>
@@ -81,7 +88,7 @@ type CatalogueCardsProps = {
 }
 
 const CatalogueCards = ({ applications, onPick }: CatalogueCardsProps) => (
-	<ul className="grid list-none grid-cols-3 gap-3 p-0">
+	<ul className="flex list-none flex-wrap gap-3 p-0">
 		{applications.map((application) => (
 			<CatalogueCard
 				application={application}
@@ -115,12 +122,14 @@ const CatalogueSection = ({
 type CatalogueLineProps = {
 	icon: Icon
 	text: string
+	isAnnounced?: boolean
 	action?: ReactNode
 }
 
 const CatalogueLine = ({
 	icon: LineIcon,
 	text,
+	isAnnounced = false,
 	action,
 }: CatalogueLineProps) => (
 	<div className="flex items-center gap-2.5 rounded-xl border border-border border-dashed px-3 py-2">
@@ -129,8 +138,8 @@ const CatalogueLine = ({
 			className="size-4 shrink-0 text-muted-foreground"
 		/>
 		<p
+			aria-live={isAnnounced ? "polite" : "off"}
 			className="min-w-0 flex-1 wrap-break-word text-muted-foreground text-sm"
-			role="status"
 		>
 			{text}
 		</p>
@@ -147,6 +156,7 @@ type ApplicationsCatalogueProps = {
 	curated: CatalogueApplication[]
 	registry: CatalogueApplication[]
 	publishedCount?: number
+	isRegistrySearching?: boolean
 	hasRegistryFailed?: boolean
 	onRegistryRetry: () => void
 	onPick: (application: CatalogueApplication) => void
@@ -164,6 +174,7 @@ const ApplicationsCatalogue = ({
 	curated,
 	registry,
 	publishedCount,
+	isRegistrySearching = false,
 	hasRegistryFailed = false,
 	onRegistryRetry,
 	onPick,
@@ -172,11 +183,13 @@ const ApplicationsCatalogue = ({
 	className,
 }: ApplicationsCatalogueProps) => {
 	const { t } = useTranslation("bots")
-	const isTyped = query.trim() !== ""
+	const panel = useRef<HTMLDivElement>(null)
+	useOverlayScrollbars(panel)
+	const typed = query.trim()
 	const placeholder = t("applications.catalogue.search.placeholder")
 
 	const registryBody = () => {
-		if (!isTyped) {
+		if (typed === "") {
 			return (
 				<CatalogueLine
 					icon={Icons.Search}
@@ -191,6 +204,16 @@ const ApplicationsCatalogue = ({
 			)
 		}
 
+		if (isRegistrySearching) {
+			return (
+				<CatalogueLine
+					icon={Icons.Search}
+					isAnnounced
+					text={t("applications.catalogue.registry.searching")}
+				/>
+			)
+		}
+
 		if (hasRegistryFailed) {
 			return (
 				<CatalogueLine
@@ -200,6 +223,7 @@ const ApplicationsCatalogue = ({
 						</Button>
 					}
 					icon={Icons.Alert}
+					isAnnounced
 					text={t("applications.catalogue.registry.failed")}
 				/>
 			)
@@ -209,19 +233,18 @@ const ApplicationsCatalogue = ({
 			return <CatalogueCards applications={registry} onPick={onPick} />
 		}
 
-		if (curated.length === 0) {
-			return (
-				<CatalogueLine
-					icon={Icons.Search}
-					text={t("applications.catalogue.nothing", { query: query.trim() })}
-				/>
-			)
-		}
-
-		return null
+		return (
+			<CatalogueLine
+				icon={Icons.Search}
+				isAnnounced
+				text={
+					curated.length === 0
+						? t("applications.catalogue.nothing", { query: typed })
+						: t("applications.catalogue.registry.empty", { query: typed })
+				}
+			/>
+		)
 	}
-
-	const registrySection = registryBody()
 
 	return (
 		<Tabs.Root
@@ -268,48 +291,43 @@ const ApplicationsCatalogue = ({
 				))}
 			</SettingsRail>
 
-			<div className="flex min-h-0 min-w-0 flex-1 flex-col">
-				<div className="flex shrink-0 items-center border-border border-b px-5 py-3">
-					<h2 className="truncate font-medium text-foreground text-sm">
-						{t("applications.catalogue.title")}
-					</h2>
-				</div>
-				<SettingsScrollingPanel value={category}>
-					<label className="flex min-h-9 shrink-0 items-center gap-2 rounded-xl border border-input px-3 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30">
-						<Icons.Search
-							aria-hidden="true"
-							className="size-4 shrink-0 text-muted-foreground"
-						/>
-						<input
-							aria-label={placeholder}
-							className="min-w-0 flex-1 bg-transparent text-foreground text-sm outline-none placeholder:text-muted-foreground"
-							onChange={(event) => onQueryChange(event.target.value)}
-							placeholder={placeholder}
-							type="text"
-							value={query}
-						/>
-						<span className="min-w-0 truncate text-muted-foreground text-xs">
-							{t("applications.catalogue.search.hint")}
-						</span>
-					</label>
-					{curated.length > 0 ? (
-						<CatalogueSection
-							subtitle={t("applications.catalogue.curated.subtitle")}
-							title={t("applications.catalogue.curated.title")}
-						>
-							<CatalogueCards applications={curated} onPick={onPick} />
-						</CatalogueSection>
-					) : null}
-					{registrySection ? (
-						<CatalogueSection
-							subtitle={t("applications.catalogue.registry.subtitle")}
-							title={t("applications.catalogue.registry.title")}
-						>
-							{registrySection}
-						</CatalogueSection>
-					) : null}
-				</SettingsScrollingPanel>
-			</div>
+			<Tabs.Panel
+				className={cn(SETTINGS_PANEL_CLASS, "gap-3.5 overflow-y-auto")}
+				ref={panel}
+				value={category}
+			>
+				<label className="flex min-h-9 shrink-0 items-center gap-2 rounded-xl border border-input px-3 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30">
+					<Icons.Search
+						aria-hidden="true"
+						className="size-4 shrink-0 text-muted-foreground"
+					/>
+					<input
+						aria-label={placeholder}
+						className="min-w-0 flex-1 bg-transparent text-foreground text-sm outline-none placeholder:text-muted-foreground"
+						onChange={(event) => onQueryChange(event.target.value)}
+						placeholder={placeholder}
+						type="text"
+						value={query}
+					/>
+					<span className="min-w-0 truncate text-muted-foreground text-xs">
+						{t("applications.catalogue.search.hint")}
+					</span>
+				</label>
+				{curated.length > 0 ? (
+					<CatalogueSection
+						subtitle={t("applications.catalogue.curated.subtitle")}
+						title={t("applications.catalogue.curated.title")}
+					>
+						<CatalogueCards applications={curated} onPick={onPick} />
+					</CatalogueSection>
+				) : null}
+				<CatalogueSection
+					subtitle={t("applications.catalogue.registry.subtitle")}
+					title={t("applications.catalogue.registry.title")}
+				>
+					{registryBody()}
+				</CatalogueSection>
+			</Tabs.Panel>
 		</Tabs.Root>
 	)
 }

@@ -461,14 +461,13 @@ const bots = {
 			},
 		},
 		catalogue: {
-			title: "Applications",
 			search: {
 				placeholder: "Search applications",
-				hint: "Looks in the MCP registry too.",
+				hint: "Looks in the MCP registry too",
 			},
 			curated: {
 				title: "Kiroshi knows these",
-				subtitle: "Set up in one step, nothing to paste.",
+				subtitle: "Set up in one step, nothing to paste",
 			},
 			registry: {
 				title: "From the MCP registry",
@@ -478,6 +477,8 @@ const bots = {
 					"Type a name above to search {{count}} published application.",
 				restCounted_other:
 					"Type a name above to search {{count}} published applications.",
+				searching: "Searching the MCP registry…",
+				empty: "Nothing in the MCP registry matched {{query}}.",
 				failed: "Couldn’t reach the MCP registry.",
 				retry: "Retry",
 			},

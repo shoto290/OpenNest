@@ -479,7 +479,7 @@ describe("notices", () => {
 				'the server "linear" was left out: LINEAR_KEY is defined by no scope',
 		} as const
 		expect(needsFreshSession(leftOut)).toBe(false)
-		expect(noticeTitleFor(t, leftOut)).toBe("Couldn't start a connector")
+		expect(noticeTitleFor(t, leftOut)).toBe("Couldn't start an application")
 	})
 
 	it("keeps a refused resume out of the session-ending errors", () => {

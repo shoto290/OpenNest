@@ -13,15 +13,25 @@ import { SETTINGS_EMPTY_CLASS } from "@workspace/ui/components/settings-styles"
 import { Button } from "@workspace/ui/components/ui/button"
 import { cn } from "@workspace/ui/lib/utils"
 
+type InheritedApplication = {
+	name: string
+	mark?: string
+}
+
 type ApplicationsInheritance = {
 	spaceName: string
-	fromSpace: number
-	fromProfile: number
+	fromSpace: InheritedApplication[]
+	fromProfile: InheritedApplication[]
 }
 
 type ApplicationsOwner =
 	| { kind: "companion"; name: string; inherited?: ApplicationsInheritance }
-	| { kind: "space"; name: string; companionCount?: number }
+	| {
+			kind: "space"
+			name: string
+			companionCount?: number
+			inherited?: InheritedApplication[]
+	  }
 	| { kind: "profile" }
 
 type OwnerCopy = {
@@ -29,6 +39,7 @@ type OwnerCopy = {
 	emptyTitle: string
 	emptyDescription: string
 	footnote: string | null
+	inherited: InheritedApplication[]
 }
 
 const useOwnerCopy = (owner: ApplicationsOwner): OwnerCopy => {
@@ -40,6 +51,7 @@ const useOwnerCopy = (owner: ApplicationsOwner): OwnerCopy => {
 			emptyTitle: t("applications.empty.title.profile"),
 			emptyDescription: t("applications.empty.description.profile"),
 			footnote: t("applications.footnote.profile"),
+			inherited: [],
 		}
 	}
 
@@ -57,38 +69,41 @@ const useOwnerCopy = (owner: ApplicationsOwner): OwnerCopy => {
 			emptyTitle: t("applications.empty.title.space", { name }),
 			emptyDescription: t("applications.empty.description.space"),
 			footnote: t("applications.footnote.space"),
+			inherited: owner.inherited ?? [],
 		}
 	}
 
 	const { name, inherited } = owner
-	const sources = inherited
-		? [
-				inherited.fromSpace > 0
-					? t("applications.footnote.source.space", {
-							count: inherited.fromSpace,
-							name: inherited.spaceName,
-						})
-					: null,
-				inherited.fromProfile > 0
-					? t("applications.footnote.source.profile", {
-							count: inherited.fromProfile,
-						})
-					: null,
-			].filter((source) => source !== null)
-		: []
+	const fromSpace = inherited?.fromSpace ?? []
+	const fromProfile = inherited?.fromProfile ?? []
+	const sources = [
+		fromSpace.length > 0
+			? t("applications.footnote.source.space", {
+					count: fromSpace.length,
+					name: inherited?.spaceName ?? "",
+				})
+			: null,
+		fromProfile.length > 0
+			? t("applications.footnote.source.profile", {
+					count: fromProfile.length,
+				})
+			: null,
+	].filter((source) => source !== null)
+	const inheritedApplications = [...fromSpace, ...fromProfile]
 
 	return {
 		intro: t("applications.intro.companion", { name }),
 		emptyTitle: t("applications.empty.title.companion"),
 		emptyDescription: t("applications.empty.description.companion"),
 		footnote:
-			inherited && sources.length > 0
+			inheritedApplications.length > 0
 				? t("applications.footnote.companion", {
 						name,
-						count: inherited.fromSpace + inherited.fromProfile,
+						count: inheritedApplications.length,
 						sources: sources.join(", "),
 					})
 				: null,
+		inherited: inheritedApplications,
 	}
 }
 
@@ -210,9 +225,9 @@ const ApplicationsPanel = ({
 		return (
 			<div className={SETTINGS_EMPTY_CLASS}>
 				<span className="flex items-center gap-2 opacity-45">
-					<ApplicationMark size="sm" />
+					<ApplicationMark isBlank size="sm" />
 					<ApplicationMark />
-					<ApplicationMark size="sm" />
+					<ApplicationMark isBlank size="sm" />
 				</span>
 				<div className="flex flex-col items-center gap-1">
 					<span className="wrap-break-word font-medium text-foreground text-sm">
@@ -224,7 +239,11 @@ const ApplicationsPanel = ({
 				</div>
 				<div className="flex flex-wrap items-center justify-center gap-2">
 					<Button onClick={onAdd} size="sm">
-						<Icons.Add aria-hidden="true" className="size-3.5" />
+						<Icons.Add
+							aria-hidden="true"
+							className="size-3.5"
+							data-icon="inline-start"
+						/>
 						{t("applications.add")}
 					</Button>
 					<Button onClick={onPaste} size="sm" variant="outline">
@@ -242,7 +261,11 @@ const ApplicationsPanel = ({
 					{copy.intro}
 				</p>
 				<Button onClick={onAdd} size="sm" variant="outline">
-					<Icons.Add aria-hidden="true" className="size-3.5" />
+					<Icons.Add
+						aria-hidden="true"
+						className="size-3.5"
+						data-icon="inline-start"
+					/>
 					{t("applications.add")}
 				</Button>
 			</div>
@@ -257,9 +280,25 @@ const ApplicationsPanel = ({
 				))}
 			</ul>
 			{copy.footnote ? (
-				<p className="shrink-0 wrap-break-word border-border border-t pt-3 text-muted-foreground text-xs">
-					{copy.footnote}
-				</p>
+				<div className="flex shrink-0 items-center gap-3 border-border border-t pt-3">
+					<p className="min-w-0 grow wrap-break-word text-muted-foreground text-xs">
+						{copy.footnote}
+					</p>
+					{copy.inherited.length > 0 ? (
+						<span
+							className="flex shrink-0 items-center gap-1.5"
+							data-slot="inherited-marks"
+						>
+							{copy.inherited.map((application) => (
+								<ApplicationMark
+									key={application.name}
+									mark={application.mark}
+									size="xs"
+								/>
+							))}
+						</span>
+					) : null}
+				</div>
 			) : null}
 		</>
 	)
@@ -270,4 +309,5 @@ export {
 	type ApplicationsOwner,
 	ApplicationsPanel,
 	type ApplicationsPanelProps,
+	type InheritedApplication,
 }

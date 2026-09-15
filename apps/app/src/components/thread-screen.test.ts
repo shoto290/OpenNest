@@ -2176,7 +2176,7 @@ const VARIABLE_REFUSED = leftOutError(
 
 const UNNAMED_REFUSED = leftOutError("the connector settings were refused")
 
-const CONNECTOR_REFUSED_TITLE = "Couldn't start a connector"
+const CONNECTOR_REFUSED_TITLE = "Couldn't start an application"
 
 const LEFT_OUT_TITLE = "atlas was left out"
 
@@ -2246,7 +2246,7 @@ describe("ThreadScreen connector left out of a session", () => {
 		render(refusedConnectorScreen(port, onOpen))
 		await settle()
 
-		await pressInNotice(LEFT_OUT_TITLE, "Open Connectors")
+		await pressInNotice(LEFT_OUT_TITLE, "Open Applications")
 
 		expect(onOpen).toHaveBeenCalledWith(SPEAKER_SPACE)
 	})
@@ -2272,7 +2272,7 @@ describe("ThreadScreen connector left out of a session", () => {
 		expect(raisedNotices(LEFT_OUT_TITLE)).toHaveLength(1)
 		expect(raisedNotices("ledger was left out")).toHaveLength(0)
 
-		await pressInNotice(LEFT_OUT_TITLE, "Open Connectors")
+		await pressInNotice(LEFT_OUT_TITLE, "Open Applications")
 
 		expect(onOpen).toHaveBeenCalledWith(SPEAKER_SPACE)
 	})

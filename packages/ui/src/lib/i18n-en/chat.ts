@@ -226,7 +226,7 @@ const chat = {
 			resumeFailed: "Couldn't resume the conversation",
 			workingDirectoryRefused: "Couldn't find the companion's folder",
 			settingsRejected: "Couldn't apply the companion's settings",
-			serverEnvRejected: "Couldn't start a connector",
+			serverEnvRejected: "Couldn't start an application",
 			notAuthenticated: "You're not signed in",
 			unavailable: "Couldn't reach the agent",
 			failed: "Couldn't send that request",
@@ -259,7 +259,7 @@ const chat = {
 			settingsRejected:
 				"Couldn't apply settings.json ({{detail}}). Fix it, then restart the session.",
 			serverEnvRejected:
-				"{{detail}}. The other connectors still run, so fix this one and restart the session.",
+				"{{detail}}. The other applications still run, so fix this one and restart the session.",
 			notStarted: "No session is running. Start a session to continue.",
 			turnAlreadyRunning: "A turn is already running. Wait for it or stop it.",
 			transitionInProgress: "The session is already changing. Wait a moment.",

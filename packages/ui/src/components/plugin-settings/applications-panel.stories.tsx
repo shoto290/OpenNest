@@ -6,7 +6,10 @@ import {
 	BOT_MCP_SERVERS,
 	LONG_MCP_SERVER,
 } from "@workspace/ui/components/bot-settings-dialog/mcp-servers.fixtures"
-import { MARKED_APPLICATIONS } from "@workspace/ui/components/plugin-settings/applications.fixtures"
+import {
+	CURATED_APPLICATIONS,
+	MARKED_APPLICATIONS,
+} from "@workspace/ui/components/plugin-settings/applications.fixtures"
 import {
 	type ApplicationsOwner,
 	ApplicationsPanel,
@@ -14,18 +17,29 @@ import {
 
 const [LINEAR, GITHUB] = MARKED_APPLICATIONS
 const [LOCAL, REMOTE] = BOT_MCP_SERVERS
+const [, , NOTION, SENTRY, FIGMA] = CURATED_APPLICATIONS
 
 const COMPANION = {
 	kind: "companion",
 	name: "Repository archivist",
-	inherited: { spaceName: "Release desk", fromSpace: 2, fromProfile: 1 },
+	inherited: {
+		spaceName: "Release desk",
+		fromSpace: [NOTION, SENTRY],
+		fromProfile: [FIGMA],
+	},
 } satisfies ApplicationsOwner
 
 const SPACE = {
 	kind: "space",
 	name: "Release desk",
 	companionCount: 4,
+	inherited: [FIGMA],
 } satisfies ApplicationsOwner
+
+const inheritedMarksBeside = (footnote: HTMLElement) =>
+	footnote.parentElement?.querySelectorAll(
+		'[data-slot="inherited-marks"] [data-slot="application-mark"]',
+	) ?? []
 
 const PROFILE = { kind: "profile" } satisfies ApplicationsOwner
 
@@ -96,11 +110,11 @@ export const Companion = meta.story({
 				"What Repository archivist connects to for tools it doesn’t have on its own.",
 			),
 		).toBeVisible()
-		await expect(
-			canvas.getByText(
-				"Repository archivist also gets 3 applications it didn’t add: 2 from Release desk, 1 from your profile.",
-			),
-		).toBeVisible()
+		const footnote = canvas.getByText(
+			"Repository archivist also gets 3 applications it didn’t add: 2 from Release desk, 1 from your profile.",
+		)
+		await expect(footnote).toBeVisible()
+		await expect(inheritedMarksBeside(footnote)).toHaveLength(3)
 		await expect(canvas.queryByRole("link")).not.toBeInTheDocument()
 		await expect(canvas.queryByText(/mcp\.linear\.app/)).not.toBeInTheDocument()
 
@@ -114,7 +128,11 @@ export const CompanionFromProfileOnly = meta.story({
 	args: {
 		owner: {
 			...COMPANION,
-			inherited: { spaceName: "Release desk", fromSpace: 0, fromProfile: 1 },
+			inherited: {
+				spaceName: "Release desk",
+				fromSpace: [],
+				fromProfile: [FIGMA],
+			},
 		},
 	},
 	parameters: {
@@ -163,11 +181,11 @@ export const Space = meta.story({
 		await expect(
 			canvas.getByText("What all 4 companions in Release desk connect to."),
 		).toBeVisible()
-		await expect(
-			canvas.getByText(
-				"Each companion here can add applications of its own, and you can add some for every space.",
-			),
-		).toBeVisible()
+		const footnote = canvas.getByText(
+			"Each companion here can add applications of its own, and you can add some for every space.",
+		)
+		await expect(footnote).toBeVisible()
+		await expect(inheritedMarksBeside(footnote)).toHaveLength(1)
 	},
 })
 

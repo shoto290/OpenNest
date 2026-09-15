@@ -84,7 +84,7 @@ export const AtRest = meta.story({
 		docs: {
 			description: {
 				story:
-					"The catalogue as it opens. Check the back item, the open category on muted with its count, the curated cards in three equal columns, and the registry at rest counting what it can search.",
+					"The catalogue as it opens. Check the back item, the open category on muted with its count, the curated cards at their drawn width, wrapping by row, and the registry at rest counting what it can search.",
 			},
 		},
 	},
@@ -95,10 +95,19 @@ export const AtRest = meta.story({
 		await expect(canvas.getByRole("tab", { name: "Design" })).toHaveTextContent(
 			/^Design$/,
 		)
+		const rest = canvas.getByText(
+			/Type a name above to search 1,?284 published applications\./,
+		)
+		await expect(rest).toBeVisible()
+		await expect(rest).toHaveAttribute("aria-live", "off")
 		await expect(
-			canvas.getByText(
-				/Type a name above to search 1,?284 published applications\./,
-			),
+			canvas.getAllByRole("listitem")[0].getBoundingClientRect().width,
+		).toBe(186)
+		await expect(
+			canvas.getByText("Set up in one step, nothing to paste"),
+		).toBeVisible()
+		await expect(
+			canvas.getByText("Looks in the MCP registry too"),
 		).toBeVisible()
 
 		await userEvent.click(canvas.getByRole("tab", { name: "Design" }))
@@ -170,10 +179,46 @@ export const NothingMatched = meta.story({
 		},
 	},
 	play: async ({ canvas }) => {
+		const nothing = canvas.getByText(
+			"Nothing matched zebra. Try another name, or paste a configuration.",
+		)
+		await expect(nothing).toBeVisible()
+		await expect(nothing).toHaveAttribute("aria-live", "polite")
+	},
+})
+
+export const RegistrySearching = meta.story({
+	args: { query: "zebra", isRegistrySearching: true },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A registry search still in flight. Check that the registry section says the search is running, politely announced, rather than claiming nothing matched.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const searching = canvas.getByText("Searching the MCP registry…")
+		await expect(searching).toBeVisible()
+		await expect(searching).toHaveAttribute("aria-live", "polite")
+		await expect(canvas.queryByText(/Nothing matched/)).not.toBeInTheDocument()
+	},
+})
+
+export const RegistryEmptyBesideCurated = meta.story({
+	args: { query: "lin", registry: [] },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A search the curated list answers and the registry does not. Check that the registry section stays, saying the registry returned nothing for the words typed.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(canvas.getByText("Linear")).toBeVisible()
 		await expect(
-			canvas.getByText(
-				"Nothing matched zebra. Try another name, or paste a configuration.",
-			),
+			canvas.getByText("Nothing in the MCP registry matched lin."),
 		).toBeVisible()
 	},
 })
@@ -202,7 +247,7 @@ export const RegistryUnreadable = meta.story({
 export const NarrowDialog = meta.story({
 	decorators: [
 		(Story) => (
-			<div className="flex h-full w-[26rem]">
+			<div className="flex h-full w-[40rem]">
 				<Story />
 			</div>
 		),
@@ -211,11 +256,17 @@ export const NarrowDialog = meta.story({
 		docs: {
 			description: {
 				story:
-					"The catalogue in a dialog squeezed narrow. Check that the category rail keeps its labels, unlike the settings rail that folds to icons, since a category has no icon to fold to.",
+					"The catalogue in a dialog squeezed narrow. Check that the category rail keeps its labels, unlike the settings rail that folds to icons, and that the cards keep their width and reflow to two per line.",
 			},
 		},
 	},
 	play: async ({ canvas }) => {
+		const [first, second, third] = canvas
+			.getAllByRole("listitem")
+			.map((card) => card.getBoundingClientRect())
+		await expect(first.width).toBe(186)
+		await expect(second.top).toBe(first.top)
+		await expect(third.top).toBeGreaterThan(first.top)
 		await expect(canvas.getByText("Work tracking")).toBeVisible()
 		await expect(canvas.getByText("All applications")).not.toHaveClass(
 			"sr-only",
