@@ -7,7 +7,11 @@ import { i18n } from "@workspace/ui/lib/i18n"
 
 import type { Application, ApplicationPort } from "./application-port"
 
-import { declareServer, undeclareServer } from "../bots/mcp-server-writes"
+import {
+	declaredServers,
+	declareServer,
+	undeclareServer,
+} from "../bots/mcp-server-writes"
 import type { EnvOwner, EnvScope } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
 
@@ -20,12 +24,12 @@ export type ApplicationsState = {
 	hasSearchFailed: boolean
 	picked: Application | null
 	installing: string | null
-	installed: string[]
 	failure: string | null
 }
 
 export type InstallTarget = {
 	owner: EnvOwner
+	declared: string[]
 	connect: (name: string, url: string) => Promise<void>
 	settle: () => Promise<void>
 }
@@ -50,7 +54,6 @@ export const initialApplicationsState: ApplicationsState = {
 	hasSearchFailed: false,
 	picked: null,
 	installing: null,
-	installed: [],
 	failure: null,
 }
 
@@ -77,18 +80,6 @@ export const serverScopeOf = (owner: EnvOwner, name: string): EnvScope => ({
 	name,
 	owner,
 })
-
-const ownerKeyOf = (owner: EnvOwner) =>
-	owner.kind === "user" ? "user" : `${owner.kind}:${owner.id}`
-
-const installKeyOf = (owner: EnvOwner, name: string) =>
-	`${ownerKeyOf(owner)}/${name}`
-
-export const isInstalledUnder = (
-	state: ApplicationsState,
-	owner: EnvOwner,
-	name: string,
-) => state.installed.includes(installKeyOf(owner, name))
 
 const urlOf = (application: Application) =>
 	readMcpServerLaunch(application.config).url ?? ""
@@ -144,6 +135,19 @@ export const createApplicationsController = (
 		[...state.curated, ...state.registry].find((held) => held.name === id) ??
 		null
 
+	const rollBackDeclaration = async (owner: EnvOwner, name: string) => {
+		try {
+			await undeclareServer(store, owner, name)
+		} catch (refusal) {
+			reportFailure({
+				title: i18n.t("bots:applications.install.rollback.title", { name }),
+				description: i18n.t("bots:applications.install.rollback.description", {
+					reason: refusalTextOf(refusal),
+				}),
+			})
+		}
+	}
+
 	const writeKey = async (
 		owner: EnvOwner,
 		application: Application,
@@ -153,16 +157,16 @@ export const createApplicationsController = (
 		if (install.kind !== "key") {
 			return
 		}
-		try {
-			await store.setEnvironmentVariable(
-				serverScopeOf(owner, application.name),
-				install.secret,
-				key,
-			)
-		} catch (refusal) {
-			await undeclareServer(store, owner, application.name)
-			throw refusal
-		}
+		await store.setEnvironmentVariable(
+			serverScopeOf(owner, application.name),
+			install.secret,
+			key,
+		)
+	}
+
+	const isDeclaredUnder = async (owner: EnvOwner, name: string) => {
+		const held = await declaredServers(store, owner)
+		return held.some((server) => server.name === name)
 	}
 
 	const runInstall = async (
@@ -170,13 +174,17 @@ export const createApplicationsController = (
 		target: InstallTarget,
 		key: string,
 	) => {
-		await declareServer(
-			store,
-			target.owner,
-			application.name,
-			application.config,
-		)
-		await writeKey(target.owner, application, key)
+		const { owner } = target
+		const wasDeclared = await isDeclaredUnder(owner, application.name)
+		await declareServer(store, owner, application.name, application.config)
+		try {
+			await writeKey(owner, application, key)
+		} catch (refusal) {
+			if (!wasDeclared) {
+				await rollBackDeclaration(owner, application.name)
+			}
+			throw refusal
+		}
 		if (application.install.kind === "oauth") {
 			await target.connect(application.name, urlOf(application))
 		}
@@ -225,7 +233,7 @@ export const createApplicationsController = (
 			if (
 				!application ||
 				state.installing !== null ||
-				isInstalledUnder(state, target.owner, application.name)
+				target.declared.includes(application.name)
 			) {
 				return
 			}
@@ -241,14 +249,8 @@ export const createApplicationsController = (
 				})
 				return
 			}
-			set({
-				installing: null,
-				installed: [
-					...state.installed,
-					installKeyOf(target.owner, application.name),
-				],
-			})
 			await target.settle()
+			set({ installing: null })
 		},
 	}
 }

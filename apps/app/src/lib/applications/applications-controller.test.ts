@@ -4,7 +4,6 @@ import type { Application } from "./application-port"
 import {
 	createApplicationsController,
 	type InstallTarget,
-	isInstalledUnder,
 } from "./applications-controller"
 import { createFakeApplicationPort } from "./fake-application-port"
 
@@ -44,6 +43,7 @@ const LINEAR: Application = {
 
 const targetOf = (overrides: Partial<InstallTarget> = {}): InstallTarget => ({
 	owner: USER,
+	declared: [],
 	connect: async () => undefined,
 	settle: async () => undefined,
 	...overrides,
@@ -178,7 +178,6 @@ describe("applications controller", () => {
 		expect(await store.userPluginMcpServers()).toEqual([
 			{ name: "paper", config: PAPER.config },
 		])
-		expect(isInstalledUnder(controller.getState(), USER, "paper")).toBe(true)
 	})
 
 	it("writes the typed key under the secrets of the declared server", async () => {
@@ -228,7 +227,7 @@ describe("applications controller", () => {
 
 		expect(controller.getState().failure).toContain("the bundle is read only")
 		expect(controller.getState().picked).toEqual(PAPER)
-		expect(isInstalledUnder(controller.getState(), USER, "paper")).toBe(false)
+		expect(await store.userPluginMcpServers()).toEqual([])
 	})
 
 	it("refuses a second add of the application it is installing", async () => {
@@ -247,7 +246,7 @@ describe("applications controller", () => {
 		expect(declare).toHaveBeenCalledTimes(1)
 	})
 
-	it("offers an application installed elsewhere to a scope of its own", async () => {
+	it("installs under a scope of its own what another scope already declares", async () => {
 		const port = createFakeApplicationPort()
 		port.curated = [PAPER]
 		const store = createFakeTranscriptStore()
@@ -256,32 +255,30 @@ describe("applications controller", () => {
 		controller.pick("paper")
 		await controller.install(targetOf())
 
-		await controller.install(targetOf({ owner: COMPANION }))
+		await controller.install(
+			targetOf({ owner: COMPANION, declared: ["ledger"] }),
+		)
 
 		expect(await store.botMcpServers("default")).toEqual([
 			{ name: "paper", config: PAPER.config },
 		])
-		expect(isInstalledUnder(controller.getState(), COMPANION, "paper")).toBe(
-			true,
-		)
-		expect(isInstalledUnder(controller.getState(), USER, "paper")).toBe(true)
 	})
 
-	it("holds an install under the owner it ran for", async () => {
+	it("refuses an add of an application the owner already declares", async () => {
 		const port = createFakeApplicationPort()
 		port.curated = [PAPER]
-		const controller = controllerOn(port)
+		const store = createFakeTranscriptStore()
+		const declare = vi.spyOn(store, "setUserPluginMcpServer")
+		const controller = controllerOn(port, store)
 		await controller.open()
 		controller.pick("paper")
 
-		await controller.install(targetOf())
+		await controller.install(targetOf({ declared: ["paper"] }))
 
-		expect(isInstalledUnder(controller.getState(), COMPANION, "paper")).toBe(
-			false,
-		)
+		expect(declare).not.toHaveBeenCalled()
 	})
 
-	it("undeclares the server when the key refuses to be written", async () => {
+	it("undeclares what the install declared when the key is refused", async () => {
 		const port = createFakeApplicationPort()
 		port.curated = [SUPERSET]
 		const store = createFakeTranscriptStore()
@@ -297,9 +294,52 @@ describe("applications controller", () => {
 
 		expect(await store.userPluginMcpServers()).toEqual([])
 		expect(controller.getState().failure).toContain("the keyring is locked")
-		expect(isInstalledUnder(controller.getState(), USER, "superset")).toBe(
-			false,
-		)
+	})
+
+	it("leaves a declaration it found in place when the key is refused", async () => {
+		const port = createFakeApplicationPort()
+		port.curated = [SUPERSET]
+		const store = createFakeTranscriptStore()
+		await store.setUserPluginMcpServer("superset", { type: "http" })
+		vi.spyOn(store, "setEnvironmentVariable").mockRejectedValue({
+			kind: "env",
+			detail: "the keyring is locked",
+		})
+		const controller = controllerOn(port, store)
+		await controller.open()
+		controller.pick("superset")
+
+		await controller.install(targetOf(), "sk-typed")
+
+		expect(await store.userPluginMcpServers()).toEqual([
+			{ name: "superset", config: SUPERSET.config },
+		])
+		expect(controller.getState().failure).toContain("the keyring is locked")
+	})
+
+	it("reports the key refusal even when the undeclaring is refused too", async () => {
+		const port = createFakeApplicationPort()
+		port.curated = [SUPERSET]
+		const store = createFakeTranscriptStore()
+		vi.spyOn(store, "setEnvironmentVariable").mockRejectedValue({
+			kind: "env",
+			detail: "the keyring is locked",
+		})
+		vi.spyOn(store, "deleteUserPluginMcpServer").mockRejectedValue({
+			kind: "store",
+			detail: "the bundle is read only",
+		})
+		const reportFailure = vi.fn()
+		const controller = createApplicationsController(port, store, {
+			reportFailure,
+		})
+		await controller.open()
+		controller.pick("superset")
+
+		await controller.install(targetOf(), "sk-typed")
+
+		expect(controller.getState().failure).toContain("the keyring is locked")
+		expect(reportFailure).toHaveBeenCalledTimes(1)
 	})
 
 	it("settles the scope once the install lands", async () => {

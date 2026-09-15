@@ -521,6 +521,11 @@ const bots = {
 			},
 			done: "Ajoutée",
 			failed: "Impossible de l’ajouter : {{reason}}",
+			rollback: {
+				title: "{{name}} est restée dans la liste",
+				description:
+					"Sa clé n’a pas été écrite, et son retrait a été refusé lui aussi : {{reason}}.",
+			},
 		},
 		notice:
 			"Ce compagnon lance ses applications sur votre machine, sous votre compte. Ajoutez seulement ceux en qui vous avez confiance.",

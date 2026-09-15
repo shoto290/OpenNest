@@ -508,6 +508,11 @@ const bots = {
 			},
 			done: "Added",
 			failed: "Couldn’t add it: {{reason}}",
+			rollback: {
+				title: "{{name}} was left in the list",
+				description:
+					"Its key wasn’t written, and removing it again was refused too: {{reason}}.",
+			},
 		},
 		notice:
 			"This companion runs applications on your machine, under your account. Only add ones you trust.",

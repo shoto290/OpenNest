@@ -16,7 +16,7 @@ import {
 
 import type { McpServers } from "../bots/use-mcp-servers"
 import type { Connectors } from "../connectors/use-connectors"
-import type { EnvOwner } from "../conversations/store-contract"
+import type { BotMcpServer, EnvOwner } from "../conversations/store-contract"
 
 const USER: EnvOwner = { kind: "user" }
 
@@ -50,8 +50,11 @@ const applicationsWith = (state: Partial<ApplicationsState>) => ({
 	} as unknown as ApplicationsController,
 })
 
-const serversWith = (owner: EnvOwner | null): McpServers => ({
-	state: { owner, servers: [], hasFailedToLoad: false },
+const serversWith = (
+	owner: EnvOwner | null,
+	servers: BotMcpServer[] = [],
+): McpServers => ({
+	state: { owner, servers, hasFailedToLoad: false },
 	controller: {
 		create: vi.fn(async () => true),
 		rename: vi.fn(async () => true),
@@ -190,6 +193,24 @@ describe("toApplicationScope", () => {
 		)
 
 		expect(scope.mcpCatalogue).toBeUndefined()
+	})
+
+	it("reads the installed state off what the owner already declares", () => {
+		const { scope } = scopeOf(
+			applicationsWith({ curated: [LINEAR], picked: LINEAR }),
+			serversWith(USER, [{ name: "linear", config: {} }]),
+		)
+
+		expect(scope.mcpCatalogue?.install?.isInstalled).toBe(true)
+	})
+
+	it("offers an application no declaration of this owner names", () => {
+		const { scope } = scopeOf(
+			applicationsWith({ curated: [LINEAR], picked: LINEAR }),
+			serversWith(USER, [{ name: "atlas", config: {} }]),
+		)
+
+		expect(scope.mcpCatalogue?.install?.isInstalled).toBe(false)
 	})
 
 	it("pushes the install page of the picked application", () => {

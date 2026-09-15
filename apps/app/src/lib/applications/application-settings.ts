@@ -14,7 +14,6 @@ import {
 	type ApplicationsController,
 	type ApplicationsState,
 	type InstallTarget,
-	isInstalledUnder,
 	serverScopeOf,
 } from "./applications-controller"
 import { type SessionReopener, scopeOfOwner } from "./session-reopening"
@@ -131,7 +130,7 @@ const toApplicationsCatalogue = ({
 			? {
 					application: toInstallableApplication(picked),
 					isInstalling: state.installing === picked.name,
-					isInstalled: isInstalledUnder(state, target.owner, picked.name),
+					isInstalled: target.declared.includes(picked.name),
 					failure: state.failure ?? undefined,
 					onInstall: (key) => {
 						void controller.install(target, key)
@@ -242,6 +241,7 @@ export const toApplicationScope = ({
 
 	const installTarget = (owned: EnvOwner): InstallTarget => ({
 		owner: owned,
+		declared: servers.state.servers.map((server) => server.name),
 		connect: connectFor(connectors),
 		settle: async () => {
 			await servers.controller.reload()
