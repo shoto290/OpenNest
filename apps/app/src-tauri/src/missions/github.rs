@@ -524,7 +524,7 @@ fn token() -> Option<String> {
 		.filter(|held| !held.trim().is_empty())
 }
 
-fn installed_tls_provider() {
+pub(crate) fn installed_tls_provider() {
 	static ONCE: std::sync::Once = std::sync::Once::new();
 	ONCE.call_once(|| {
 		if rustls::crypto::ring::default_provider().install_default().is_err() {

@@ -1,3 +1,4 @@
+pub mod applications;
 pub mod attachments;
 pub mod avatars;
 pub mod agent;

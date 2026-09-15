@@ -1,13 +1,15 @@
 use tauri::Runtime;
 
 use crate::{
-	agent, attachments, companions, conversations, environment, mcp_oauth, missions, notifications,
-	routines, search, sections, spaces, user,
+	agent, applications, attachments, companions, conversations, environment, mcp_oauth, missions,
+	notifications, routines, search, sections, spaces, user,
 };
 
 pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Send + Sync + 'static
 {
 	tauri::generate_handler![
+		applications::commands::application_catalogue,
+		applications::commands::application_search,
 		attachments::commands::chat_store_attachments,
 		agent::commands::agent_check,
 		agent::sign_in::agent_sign_in,
