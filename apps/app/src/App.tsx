@@ -67,6 +67,7 @@ import {
 	toRosterConversations,
 } from "@/lib/conversations/roster-conversations"
 import type { EnvOwner, EnvScope } from "@/lib/conversations/store-contract"
+import { useCompanionArrivals } from "@/lib/conversations/use-companion-arrivals"
 import {
 	useConversationPreviews,
 	useConversationWorkers,
@@ -397,6 +398,10 @@ export function App() {
 			}
 		},
 		onFirstRunDone: () => void user.controller.load(),
+	})
+
+	useCompanionArrivals(() => {
+		void roster.controller.reload()
 	})
 
 	useEffect(() => {
