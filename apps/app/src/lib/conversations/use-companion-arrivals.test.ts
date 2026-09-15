@@ -6,8 +6,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { createFakeTranscriptStore } from "./fake-transcript-store"
 import type { TranscriptStore } from "./store-port"
-import type { CompanionArrival } from "./transcript-contract"
-import { COMPANION_ARRIVED_EVENT } from "./transcript-contract"
+import {
+	COMPANION_ARRIVED_EVENT,
+	type CompanionArrival,
+} from "./transcript-contract"
 import { useCompanionArrivals } from "./use-companion-arrivals"
 
 import { newBotIdentity } from "../bots/bot-settings"
@@ -115,6 +117,14 @@ const participantsOf = ({
 		.find((conversation) => conversation.id === conversationId)
 		?.participants.map((participant) => participant.botId) ?? []
 
+const firstBotOf = (controller: RosterController) => {
+	const bot = controller.getState().bots[0]
+	if (!bot) {
+		throw new Error("the roster holds no companion")
+	}
+	return bot.id
+}
+
 describe("useCompanionArrivals", () => {
 	it("carries the invited companion in the conversation roster of another space", async () => {
 		const away = await anAwayConversation()
@@ -128,9 +138,9 @@ describe("useCompanionArrivals", () => {
 	})
 
 	it("leaves the selected row and the open settings dialog as they were", async () => {
-		const { store, controller, conversationId, invitedBotId } =
-			await anAwayConversation()
-		const selectedBotId = controller.getState().bots[0]?.id ?? ""
+		const away = await anAwayConversation()
+		const { store, controller, conversationId, invitedBotId } = away
+		const selectedBotId = firstBotOf(controller)
 		controller.select(selectedBotId)
 		controller.edit(selectedBotId)
 		await listening(controller)
@@ -144,8 +154,8 @@ describe("useCompanionArrivals", () => {
 	})
 
 	it("re-reads the roster once when the same arrival is announced twice", async () => {
-		const { store, controller, conversationId, invitedBotId } =
-			await anAwayConversation()
+		const away = await anAwayConversation()
+		const { store, controller, spaceId, conversationId, invitedBotId } = away
 		await listening(controller)
 		const reading = vi.spyOn(store, "conversations")
 
@@ -153,7 +163,7 @@ describe("useCompanionArrivals", () => {
 		await announcing(arrival)
 		await announcing(arrival)
 
-		expect(reading).toHaveBeenCalledTimes(2)
+		expect(reading.mock.calls.filter(([id]) => id === spaceId)).toHaveLength(1)
 	})
 
 	it("marks the roster as failed and holds the known conversations when the re-read fails", async () => {
