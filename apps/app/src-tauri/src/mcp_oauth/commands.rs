@@ -261,6 +261,7 @@ async fn revoked<R: Runtime>(app: &AppHandle<R>, url: &str, held: &Values) -> Di
 mod tests {
 	use super::*;
 	use crate::mcp_oauth::status::ConnectorStatus;
+	use tauri::test::{mock_builder, mock_context, noop_assets};
 
 	fn a_server(name: &str) -> EnvScope {
 		EnvScope::Server {
@@ -287,8 +288,6 @@ mod tests {
 
 	#[tokio::test]
 	async fn the_connectors_of_the_person_are_the_servers_the_person_plugin_declares() {
-		use tauri::test::{mock_builder, mock_context, noop_assets};
-
 		let mut context = mock_context(noop_assets());
 		context.config_mut().identifier =
 			format!("com.kiroshi.mcp-oauth-person-{}", std::process::id()).into();

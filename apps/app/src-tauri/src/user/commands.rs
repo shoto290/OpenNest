@@ -225,8 +225,7 @@ mod tests {
 	use super::*;
 	use crate::environment::contract::EnvScope;
 	use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
-	use tauri::App;
-	use tauri::Manager;
+	use tauri::{App, Manager};
 
 	fn a_host(name: &str) -> App<MockRuntime> {
 		let mut context = mock_context(noop_assets());
