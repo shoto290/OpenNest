@@ -86,7 +86,7 @@ const bots = {
 			appearance: "Apparence",
 			instructions: "Instructions",
 			skills: "Compétences",
-			connectors: "Connecteurs",
+			applications: "Applications",
 			secrets: "Secrets",
 			history: "Historique",
 			approvals: "Autorisations",
@@ -372,15 +372,41 @@ const bots = {
 			},
 		},
 	},
-	connectors: {
-		untitled: "Connecteur sans titre",
-		add: "Ajouter un connecteur",
-		create: "Ajouter le connecteur",
+	applications: {
+		untitled: "Application sans titre",
+		add: "Ajouter une application",
+		create: "Ajouter l'application",
 		save: "Enregistrer les modifications",
 		unsaved: "Modifications non enregistrées",
-		back: "Tous les connecteurs",
-		intro:
-			"Ce à quoi ce compagnon se connecte pour les outils qu'il n'a pas seul.",
+		back: "Toutes les applications",
+		paste: "Coller une configuration",
+		intro: {
+			companion:
+				"Ce à quoi {{name}} se connecte pour les outils qu'il n'a pas seul.",
+			space: "Ce à quoi chaque compagnon de {{name}} se connecte.",
+			spaceCounted_one: "Ce à quoi le seul compagnon de {{name}} se connecte.",
+			spaceCounted_many:
+				"Ce à quoi les {{count}} compagnons de {{name}} se connectent.",
+			spaceCounted_other:
+				"Ce à quoi les {{count}} compagnons de {{name}} se connectent.",
+			profile: "Ce à quoi vous vous connectez, dans chaque espace.",
+		},
+		footnote: {
+			companion_one:
+				"{{name}} reçoit aussi {{count}} application qu'il n'a pas ajoutée : {{sources}}.",
+			companion_many:
+				"{{name}} reçoit aussi {{count}} applications qu'il n'a pas ajoutées : {{sources}}.",
+			companion_other:
+				"{{name}} reçoit aussi {{count}} applications qu'il n'a pas ajoutées : {{sources}}.",
+			source: {
+				space: "{{count}} depuis {{name}}",
+				profile: "{{count}} depuis votre profil",
+			},
+			space:
+				"Chaque compagnon d'ici peut ajouter ses propres applications, et vous pouvez en ajouter pour tous les espaces.",
+			profile:
+				"Elles parviennent à chacun de vos compagnons, dans chaque espace.",
+		},
 		open: "Ouvrir {{name}}",
 		section: {
 			connection: "Connexion",
@@ -406,12 +432,12 @@ const bots = {
 			waiting: "En attente de votre navigateur",
 			description: {
 				needsAuthorization:
-					"{{name}} vous identifie via votre navigateur. Kiroshi garde le jeton avec les secrets de ce connecteur, jamais dans la configuration ci-dessous.",
+					"{{name}} vous identifie via votre navigateur. Kiroshi garde le jeton avec les secrets de cette application, jamais dans la configuration ci-dessous.",
 				connecting:
 					"Un onglet est ouvert sur {{host}}. Autorisez Kiroshi là-bas et cet écran se met à jour tout seul.",
 				connected:
 					"Autorisé le {{date}}. Kiroshi renouvelle le jeton tout seul, et le dit ici si cela venait à ne plus fonctionner.",
-				unsaved: "Disponible une fois ce connecteur enregistré.",
+				unsaved: "Disponible une fois cette application enregistrée.",
 			},
 			confirm: {
 				title: "Déconnecter {{name}} ?",
@@ -422,34 +448,76 @@ const bots = {
 				title: "{{name}} a été laissé de côté",
 				description:
 					"Il attend votre autorisation, cette session s'est donc déroulée sans ses outils.",
-				action: "Ouvrir les connecteurs",
+				action: "Ouvrir les applications",
 			},
 		},
 		notice:
-			"Ce compagnon lance ses connecteurs sur votre machine, sous votre compte. Ajoutez seulement ceux en qui vous avez confiance.",
+			"Ce compagnon lance ses applications sur votre machine, sous votre compte. Ajoutez seulement ceux en qui vous avez confiance.",
 		empty: {
-			title: "Aucun connecteur",
-			description:
-				"Ajoutez un connecteur MCP pour donner de nouveaux outils à ce compagnon. Il tourne sur votre machine.",
+			title: {
+				companion: "Aucune application à lui",
+				space: "Rien de partagé dans {{name}} pour l'instant",
+				profile: "Aucune application à vous",
+			},
+			description: {
+				companion:
+					"Ajoutez-en une ici et ce compagnon reçoit des outils qu'il n'a pas seul. Elle tourne sur votre machine.",
+				space:
+					"Ajoutez-en une ici et chaque compagnon de cet espace reçoit ses outils.",
+				profile:
+					"Ajoutez-en une ici et chacun de vos compagnons reçoit ses outils, dans chaque espace. Idéal pour ce qui est à vous plutôt qu'à un projet.",
+			},
+		},
+		catalogue: {
+			title: "Applications",
+			search: {
+				placeholder: "Rechercher des applications",
+				hint: "Cherche aussi dans le registre MCP.",
+			},
+			curated: {
+				title: "Kiroshi les connaît",
+				subtitle: "Configurées en une étape, rien à coller.",
+			},
+			registry: {
+				title: "Depuis le registre MCP",
+				subtitle:
+					"Publiées par leurs auteurs, quels qu'ils soient. Lisez avant d'ajouter.",
+				rest: "Tapez un nom ci-dessus pour chercher parmi les applications publiées.",
+				restCounted_one:
+					"Tapez un nom ci-dessus pour chercher parmi {{count}} application publiée.",
+				restCounted_many:
+					"Tapez un nom ci-dessus pour chercher parmi {{count}} applications publiées.",
+				restCounted_other:
+					"Tapez un nom ci-dessus pour chercher parmi {{count}} applications publiées.",
+				failed: "Impossible de joindre le registre MCP.",
+				retry: "Réessayer",
+			},
+			nothing:
+				"Aucun résultat pour {{query}}. Essayez un autre nom, ou collez une configuration.",
+			setup: {
+				signIn: "Vous connecte",
+				apiKey: "Demande une clé d'API",
+				none: "Rien à configurer",
+			},
 		},
 		unavailable:
-			"Impossible de charger les connecteurs. Rouvrez les réglages pour réessayer.",
+			"Impossible de charger les applications. Rouvrez les réglages pour réessayer.",
 		name: {
 			label: "Nom",
 			placeholder: "atlas",
-			hint: "Minuscules, chiffres et traits d'union. Le compagnon connaît le connecteur sous ce nom.",
+			hint: "Minuscules, chiffres et traits d'union. Le compagnon connaît l'application sous ce nom.",
 		},
 		config: {
 			label: "Configuration",
 			placeholder:
 				'{\n  "command": "npx",\n  "args": ["-y", "@scope/server"]\n}',
-			hint: "Collez le JSON des instructions du connecteur. Un connecteur local nomme une commande, un connecteur distant une URL.",
+			hint: "Collez le JSON des instructions de l'application. Une application locale nomme une commande, une application distante une URL.",
 			invalid:
 				"Ce n'est pas un objet JSON. Vérifiez les accolades, les virgules et les guillemets.",
 		},
 		transport: {
 			label: "Transport",
-			hint: "Un connecteur local lance une commande. Un connecteur distant se connecte à une URL.",
+			hint: "Une application locale lance une commande. Une application distante se connecte à une URL.",
 			option: {
 				local: "Démarré sur cette machine",
 				remote: "Joint par le réseau",
@@ -482,17 +550,17 @@ const bots = {
 		headers: {
 			label: "En-têtes",
 			placeholder: "Authorization: Bearer jeton",
-			hint: "Un en-tête par ligne, nom et valeur. Mettez ici la clé du connecteur.",
+			hint: "Un en-tête par ligne, nom et valeur. Mettez ici la clé de l'application.",
 		},
 		secrets: {
 			label: "Secrets",
 			placeholder: "ATLAS_TOKEN=sk-...",
-			hint: "Un nom et une valeur par ligne. Le connecteur reçoit ces secrets et aucun autre.",
+			hint: "Un nom et une valeur par ligne. L'application reçoit ces secrets et aucun autre.",
 		},
 		leave: {
 			title: "Partir sans enregistrer ?",
 			description:
-				"Vous perdrez vos modifications non enregistrées. Le connecteur enregistré reste tel quel.",
+				"Vous perdrez vos modifications non enregistrées. L'application enregistrée reste telle quelle.",
 			action: "Partir",
 		},
 		launch: {
@@ -503,7 +571,7 @@ const bots = {
 			conceal: "Masquer la valeur de {{name}}",
 		},
 		delete: {
-			action: "Retirer le connecteur",
+			action: "Retirer l'application",
 			description: "Ce compagnon cesse de le démarrer. C'est irréversible.",
 			confirm: {
 				title: "Retirer {{name}} ?",
@@ -526,7 +594,7 @@ const bots = {
 		scope: {
 			space: "Espace",
 			bot: "Compagnon",
-			server: "Connecteur",
+			server: "Application",
 		},
 		row: {
 			scopes: "Défini dans {{defined}} · Servi depuis {{served}}",

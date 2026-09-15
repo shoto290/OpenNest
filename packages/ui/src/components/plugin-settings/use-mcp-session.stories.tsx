@@ -5,11 +5,21 @@ import { A11Y_CONTRAST_AWAITING_DESIGN_DECISION } from "@workspace/storybook/sto
 import type { BotMcpServerItem } from "@workspace/ui/components/bot-settings"
 import { BOT_MCP_SERVERS } from "@workspace/ui/components/bot-settings-dialog/mcp-servers.fixtures"
 import {
+	CATALOGUE_CATEGORIES,
+	CURATED_APPLICATIONS,
+} from "@workspace/ui/components/plugin-settings/applications.fixtures"
+import type { ApplicationsOwner } from "@workspace/ui/components/plugin-settings/applications-panel"
+import {
 	type McpSessionProps,
 	useMcpSession,
 } from "@workspace/ui/components/plugin-settings/use-mcp-session"
 
 const [LOCAL, REMOTE] = BOT_MCP_SERVERS
+
+const COMPANION = {
+	kind: "companion",
+	name: "Repository archivist",
+} satisfies ApplicationsOwner
 
 const NEEDS_AUTHORIZATION = {
 	...LOCAL,
@@ -49,11 +59,55 @@ const meta = preview.meta({
 		),
 	],
 	args: {
+		owner: COMPANION,
 		servers: BOT_MCP_SERVERS,
 		onServerCreate: fn(),
 		onServerChange: fn(),
 		onServerDelete: fn(),
 		onServerOpen: fn(),
+	},
+})
+
+export const AddingPushesTheCatalogue = meta.story({
+	args: {
+		catalogue: {
+			categories: CATALOGUE_CATEGORIES,
+			category: "everything",
+			onCategoryChange: fn(),
+			query: "",
+			onQueryChange: fn(),
+			curated: CURATED_APPLICATIONS,
+			registry: [],
+			onRegistryRetry: fn(),
+			onPick: fn(),
+		},
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Add application with a catalogue handed in. Check that the catalogue replaces the whole body, rail included, that All applications brings the list back, and that Paste a configuration opens a blank editor the way Add did before a catalogue existed.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Add application" }),
+		)
+		await userEvent.click(
+			canvas.getByRole("button", { name: "All applications" }),
+		)
+		await expect(
+			canvas.getByRole("button", { name: "Open atlas" }),
+		).toBeVisible()
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Add application" }),
+		)
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Paste a configuration" }),
+		)
+		await expect(canvas.getByRole("tab", { name: "Connection" })).toBeVisible()
 	},
 })
 

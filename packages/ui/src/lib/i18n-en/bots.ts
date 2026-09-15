@@ -94,7 +94,7 @@ const bots = {
 			appearance: "Appearance",
 			instructions: "Instructions",
 			skills: "Skills",
-			connectors: "Connectors",
+			applications: "Applications",
 			secrets: "Secrets",
 			history: "History",
 			approvals: "Approvals",
@@ -370,15 +370,36 @@ const bots = {
 			},
 		},
 	},
-	connectors: {
-		untitled: "Untitled connector",
-		add: "Add connector",
-		create: "Add connector",
+	applications: {
+		untitled: "Untitled application",
+		add: "Add application",
+		create: "Add application",
 		save: "Save changes",
 		unsaved: "Unsaved changes",
-		back: "All connectors",
-		intro:
-			"What this companion connects to for tools it doesn’t have on its own.",
+		back: "All applications",
+		paste: "Paste a configuration",
+		intro: {
+			companion:
+				"What {{name}} connects to for tools it doesn’t have on its own.",
+			space: "What every companion in {{name}} connects to.",
+			spaceCounted_one: "What the one companion in {{name}} connects to.",
+			spaceCounted_other:
+				"What all {{count}} companions in {{name}} connect to.",
+			profile: "What you connect to, in every space.",
+		},
+		footnote: {
+			companion_one:
+				"{{name}} also gets {{count}} application it didn’t add: {{sources}}.",
+			companion_other:
+				"{{name}} also gets {{count}} applications it didn’t add: {{sources}}.",
+			source: {
+				space: "{{count}} from {{name}}",
+				profile: "{{count}} from your profile",
+			},
+			space:
+				"Each companion here can add applications of its own, and you can add some for every space.",
+			profile: "These reach every companion you have, in every space.",
+		},
 		open: "Open {{name}}",
 		section: {
 			connection: "Connection",
@@ -404,12 +425,12 @@ const bots = {
 			waiting: "Waiting for your browser",
 			description: {
 				needsAuthorization:
-					"{{name}} signs you in through your browser. Kiroshi keeps the token with this connector’s secrets, never in the configuration below.",
+					"{{name}} signs you in through your browser. Kiroshi keeps the token with this application’s secrets, never in the configuration below.",
 				connecting:
 					"A tab is open at {{host}}. Authorize Kiroshi there and this screen catches up on its own.",
 				connected:
 					"Authorized on {{date}}. Kiroshi refreshes the token on its own, and says so here if that ever stops working.",
-				unsaved: "Available once this connector is saved.",
+				unsaved: "Available once this application is saved.",
 			},
 			confirm: {
 				title: "Disconnect {{name}}?",
@@ -420,32 +441,70 @@ const bots = {
 				title: "{{name}} was left out",
 				description:
 					"It’s waiting for your authorization, so this session ran without its tools.",
-				action: "Open Connectors",
+				action: "Open Applications",
 			},
 		},
 		notice:
-			"This companion runs connectors on your machine, under your account. Only add ones you trust.",
+			"This companion runs applications on your machine, under your account. Only add ones you trust.",
 		empty: {
-			title: "No connectors yet",
-			description:
-				"Add an MCP connector to give this companion new tools. It runs on your machine.",
+			title: {
+				companion: "No applications of its own",
+				space: "Nothing shared in {{name}} yet",
+				profile: "No applications of your own",
+			},
+			description: {
+				companion:
+					"Add one here and this companion gets tools it doesn’t have on its own. It runs on your machine.",
+				space: "Add one here and every companion in this space gets its tools.",
+				profile:
+					"Add one here and every companion you have gets its tools, in every space. Good for what is yours rather than a project’s.",
+			},
 		},
-		unavailable: "Couldn't load connectors. Reopen settings to retry.",
+		catalogue: {
+			title: "Applications",
+			search: {
+				placeholder: "Search applications",
+				hint: "Looks in the MCP registry too.",
+			},
+			curated: {
+				title: "Kiroshi knows these",
+				subtitle: "Set up in one step, nothing to paste.",
+			},
+			registry: {
+				title: "From the MCP registry",
+				subtitle: "Published by whoever wrote them. Read before you add.",
+				rest: "Type a name above to search the published applications.",
+				restCounted_one:
+					"Type a name above to search {{count}} published application.",
+				restCounted_other:
+					"Type a name above to search {{count}} published applications.",
+				failed: "Couldn’t reach the MCP registry.",
+				retry: "Retry",
+			},
+			nothing:
+				"Nothing matched {{query}}. Try another name, or paste a configuration.",
+			setup: {
+				signIn: "Signs you in",
+				apiKey: "Needs an API key",
+				none: "Nothing to set up",
+			},
+		},
+		unavailable: "Couldn't load applications. Reopen settings to retry.",
 		name: {
 			label: "Name",
 			placeholder: "atlas",
-			hint: "Lowercase letters, numbers and hyphens. The companion knows the connector by this name.",
+			hint: "Lowercase letters, numbers and hyphens. The companion knows the application by this name.",
 		},
 		config: {
 			label: "Configuration",
 			placeholder:
 				'{\n  "command": "npx",\n  "args": ["-y", "@scope/server"]\n}',
-			hint: "Paste the JSON from the connector's instructions. A local connector names a command, a remote one a URL.",
+			hint: "Paste the JSON from the application's instructions. A local application names a command, a remote one a URL.",
 			invalid: "This isn't a JSON object. Check the braces, commas and quotes.",
 		},
 		transport: {
 			label: "Transport",
-			hint: "A local connector runs a command. A remote one connects to a URL.",
+			hint: "A local application runs a command. A remote one connects to a URL.",
 			option: {
 				local: "Started on this machine",
 				remote: "Reached over the network",
@@ -478,17 +537,17 @@ const bots = {
 		headers: {
 			label: "Headers",
 			placeholder: "Authorization: Bearer token",
-			hint: "One header per line, as name and value. Put the connector's key here.",
+			hint: "One header per line, as name and value. Put the application's key here.",
 		},
 		secrets: {
 			label: "Secrets",
 			placeholder: "ATLAS_TOKEN=sk-...",
-			hint: "One name and value per line. The connector gets these secrets and no others.",
+			hint: "One name and value per line. The application gets these secrets and no others.",
 		},
 		leave: {
 			title: "Leave without saving?",
 			description:
-				"You'll lose your unsaved changes. The saved connector stays as it is.",
+				"You'll lose your unsaved changes. The saved application stays as it is.",
 			action: "Leave",
 		},
 		launch: {
@@ -499,7 +558,7 @@ const bots = {
 			conceal: "Hide the value of {{name}}",
 		},
 		delete: {
-			action: "Remove connector",
+			action: "Remove application",
 			description: "This companion stops starting it. This can't be undone.",
 			confirm: {
 				title: "Remove {{name}}?",
@@ -522,7 +581,7 @@ const bots = {
 		scope: {
 			space: "Space",
 			bot: "Companion",
-			server: "Connector",
+			server: "Application",
 		},
 		row: {
 			scopes: "Defined in {{defined}} · Served from {{served}}",

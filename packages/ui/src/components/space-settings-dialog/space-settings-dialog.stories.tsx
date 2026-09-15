@@ -211,19 +211,21 @@ export const McpServers = meta.story({
 		const dialog = await dialogIn()
 
 		await userEvent.click(
-			within(dialog).getByRole("tab", { name: "Connectors" }),
+			within(dialog).getByRole("tab", { name: "Applications" }),
 		)
 		const panel = await within(dialog).findByRole("tabpanel", {
-			name: "Connectors",
+			name: "Applications",
 		})
 
 		await userEvent.click(within(panel).getByRole("button", { name: /atlas/ }))
-		const back = within(dialog).getByRole("button", { name: "All connectors" })
+		const back = within(dialog).getByRole("button", {
+			name: "All applications",
+		})
 		await expect(back).toBeVisible()
 
 		await userEvent.click(back)
 		await expect(
-			within(dialog).getByRole("tab", { name: "Connectors" }),
+			within(dialog).getByRole("tab", { name: "Applications" }),
 		).toBeVisible()
 	},
 })
@@ -242,19 +244,19 @@ export const McpServersUnavailable = meta.story({
 		const dialog = await dialogIn()
 
 		await userEvent.click(
-			within(dialog).getByRole("tab", { name: "Connectors" }),
+			within(dialog).getByRole("tab", { name: "Applications" }),
 		)
 		const panel = await within(dialog).findByRole("tabpanel", {
-			name: "Connectors",
+			name: "Applications",
 		})
 
 		await expect(
 			within(panel).getByText(
-				"Couldn't load connectors. Reopen settings to retry.",
+				"Couldn't load applications. Reopen settings to retry.",
 			),
 		).toBeVisible()
 		await expect(
-			within(panel).queryByRole("button", { name: "Add connector" }),
+			within(panel).queryByRole("button", { name: "Add application" }),
 		).toBe(null)
 	},
 })

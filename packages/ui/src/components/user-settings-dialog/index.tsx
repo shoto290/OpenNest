@@ -21,6 +21,10 @@ import {
 	HISTORY_TAB,
 	useHistorySession,
 } from "@workspace/ui/components/plugin-settings/use-history-session"
+import {
+	type ApplicationsSection,
+	useMcpSession,
+} from "@workspace/ui/components/plugin-settings/use-mcp-session"
 import { useSkillSession } from "@workspace/ui/components/plugin-settings/use-skill-session"
 import { ProfilePictureField } from "@workspace/ui/components/profile-picture-field"
 import { SettingsField } from "@workspace/ui/components/settings-field"
@@ -49,6 +53,15 @@ const FIRST_TAB = "profile"
 
 const BREADCRUMB_AVATAR_SIZE = 32
 
+const APPLICATIONS_TAB = "mcp"
+
+const NO_APPLICATIONS: ApplicationsSection = {
+	servers: [],
+	onServerCreate: () => undefined,
+	onServerChange: () => undefined,
+	onServerDelete: () => undefined,
+}
+
 type UserSettingsDialogProps = {
 	open: boolean
 	onClose: () => void
@@ -64,6 +77,7 @@ type UserSettingsDialogProps = {
 	onSkillPreloadedChange: (id: string, isPreloaded: boolean) => void
 	onSkillDelete: (id: string) => void
 	skillFiles?: PluginSkillFiles
+	applications?: ApplicationsSection
 	history: PluginHistory
 	className?: string
 }
@@ -83,6 +97,7 @@ const UserSettingsDialog = ({
 	onSkillPreloadedChange,
 	onSkillDelete,
 	skillFiles,
+	applications,
 	history,
 	className,
 }: UserSettingsDialogProps) => {
@@ -98,6 +113,10 @@ const UserSettingsDialog = ({
 		onSkillCreate,
 		onSkillDelete,
 		onSkillPreloadedChange,
+	})
+	const mcpSession = useMcpSession({
+		...(applications ?? NO_APPLICATIONS),
+		owner: { kind: "profile" },
 	})
 	const historySession = useHistorySession({
 		history,
@@ -117,11 +136,25 @@ const UserSettingsDialog = ({
 
 	const leave = () => {
 		skillSession.discard()
+		mcpSession.discard()
 		historySession.discard()
 		onClose()
 	}
 
-	const close = () => (skillSession.isUnsaved ? setLeaving(true) : leave())
+	const close = () =>
+		skillSession.isUnsaved || mcpSession.isUnsaved ? setLeaving(true) : leave()
+
+	const leaveCopy = mcpSession.isOpen
+		? {
+				title: t("applications.leave.title", { ns: "bots" }),
+				description: t("applications.leave.description", { ns: "bots" }),
+				action: t("applications.leave.action", { ns: "bots" }),
+			}
+		: {
+				title: t("skills.leave.title", { ns: "bots" }),
+				description: t("skills.leave.description", { ns: "bots" }),
+				action: t("skills.leave.action", { ns: "bots" }),
+			}
 
 	return (
 		<Dialog onOpenChange={(next) => !next && close()} open={open}>
@@ -149,7 +182,7 @@ const UserSettingsDialog = ({
 					</DialogTitle>
 				</header>
 
-				{skillSession.editor ?? historySession.page ?? (
+				{skillSession.editor ?? mcpSession.editor ?? historySession.page ?? (
 					<Tabs.Root
 						className="flex min-h-0 flex-1"
 						onValueChange={activeTab.onValueChange}
@@ -188,6 +221,14 @@ const UserSettingsDialog = ({
 								label={t("rail.skills")}
 								value="skills"
 							/>
+							{applications ? (
+								<SettingsRailItem
+									icon={Icons.Server}
+									iconsOnly={iconsOnly}
+									label={t("rail.applications")}
+									value={APPLICATIONS_TAB}
+								/>
+							) : null}
 							<SettingsRailItem
 								icon={Icons.History}
 								iconsOnly={iconsOnly}
@@ -245,6 +286,15 @@ const UserSettingsDialog = ({
 							{skillSession.panel}
 						</Tabs.Panel>
 
+						{applications ? (
+							<Tabs.Panel
+								className={SETTINGS_PANEL_CLASS}
+								value={APPLICATIONS_TAB}
+							>
+								{mcpSession.panel}
+							</Tabs.Panel>
+						) : null}
+
 						<SettingsScrollingPanel isFlush value={HISTORY_TAB}>
 							{historySession.panel}
 						</SettingsScrollingPanel>
@@ -252,12 +302,12 @@ const UserSettingsDialog = ({
 				)}
 
 				<ConfirmDialog
-					confirmLabel={t("skills.leave.action", { ns: "bots" })}
-					description={t("skills.leave.description", { ns: "bots" })}
+					confirmLabel={leaveCopy.action}
+					description={leaveCopy.description}
 					onConfirm={leave}
 					onOpenChange={setLeaving}
 					open={isLeaving}
-					title={t("skills.leave.title", { ns: "bots" })}
+					title={leaveCopy.title}
 				/>
 			</DialogSurface>
 		</Dialog>

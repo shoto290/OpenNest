@@ -42,13 +42,13 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"A companion seen from its own scope, holding all four kinds of row at once: inherited from the space, overriding the space, its own alone, and its own but beaten by a server. Check that the two marks read in opposite directions — `Overrides Space` on the row that wins, `Overridden by Connector` on the row that loses — and that the inherited row offers neither replace nor remove, since a companion cannot delete what the space defines. Removing names the key before it reports anything.",
+					"A companion seen from its own scope, holding all four kinds of row at once: inherited from the space, overriding the space, its own alone, and its own but beaten by a server. Check that the two marks read in opposite directions — `Overrides Space` on the row that wins, `Overridden by Application` on the row that loses — and that the inherited row offers neither replace nor remove, since a companion cannot delete what the space defines. Removing names the key before it reports anything.",
 			},
 		},
 	},
 	play: async ({ args, canvas, userEvent }) => {
 		await expect(canvas.getByText("Overrides Space")).toBeVisible()
-		await expect(canvas.getByText("Overridden by Connector")).toBeVisible()
+		await expect(canvas.getByText("Overridden by Application")).toBeVisible()
 		await expect(
 			canvas.getByText("Defined in Space · Served from Space"),
 		).toBeVisible()

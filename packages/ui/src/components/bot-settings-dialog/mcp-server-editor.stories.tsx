@@ -275,7 +275,7 @@ export const Empty = meta.story({
 		},
 	},
 	play: async ({ args, canvas, userEvent }) => {
-		const create = canvas.getByRole("button", { name: "Add connector" })
+		const create = canvas.getByRole("button", { name: "Add application" })
 
 		await expect(create).toBeDisabled()
 		await userEvent.type(canvas.getByLabelText("Name"), "Atlas Docs")
@@ -341,15 +341,15 @@ export const IconRail = meta.story({
 	},
 	play: async ({ canvas, userEvent }) => {
 		await waitFor(
-			() => expect(canvas.getByText("All connectors")).toHaveClass("sr-only"),
+			() => expect(canvas.getByText("All applications")).toHaveClass("sr-only"),
 			FRAME_POLL,
 		)
 
 		await userEvent.hover(
-			canvas.getByRole("button", { name: "All connectors" }),
+			canvas.getByRole("button", { name: "All applications" }),
 		)
 		await expect(await screen.findByRole("tooltip")).toHaveTextContent(
-			"All connectors",
+			"All applications",
 		)
 	},
 })
@@ -391,7 +391,7 @@ export const WithConfirmation = meta.story({
 
 		await expect(popup).toHaveTextContent(`Remove ${LOCAL.name}?`)
 		await userEvent.click(
-			within(popup).getByRole("button", { name: "Remove connector" }),
+			within(popup).getByRole("button", { name: "Remove application" }),
 		)
 
 		await waitFor(() => expect(screen.queryByRole("alertdialog")).toBe(null))
@@ -510,7 +510,7 @@ export const UnsavedConnection = meta.story({
 	},
 	play: async ({ canvas }) => {
 		await expect(
-			canvas.getByText("Available once this connector is saved."),
+			canvas.getByText("Available once this application is saved."),
 		).toBeVisible()
 		await expect(canvas.getByRole("button", { name: "Connect" })).toBeDisabled()
 	},

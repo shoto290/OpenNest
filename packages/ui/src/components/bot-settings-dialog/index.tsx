@@ -34,13 +34,17 @@ import {
 	type EnvironmentWrite,
 } from "@workspace/ui/components/environment-panel"
 import { Icons } from "@workspace/ui/components/icons"
+import type { ApplicationsInheritance } from "@workspace/ui/components/plugin-settings/applications-panel"
 import type { PluginHistory } from "@workspace/ui/components/plugin-settings/history-panel"
 import type { PluginSkillFiles } from "@workspace/ui/components/plugin-settings/skill-files-panel"
 import {
 	HISTORY_TAB,
 	useHistorySession,
 } from "@workspace/ui/components/plugin-settings/use-history-session"
-import { useMcpSession } from "@workspace/ui/components/plugin-settings/use-mcp-session"
+import {
+	type ApplicationsCatalogueSection,
+	useMcpSession,
+} from "@workspace/ui/components/plugin-settings/use-mcp-session"
 import { useSkillSession } from "@workspace/ui/components/plugin-settings/use-skill-session"
 import { SettingsField } from "@workspace/ui/components/settings-field"
 import {
@@ -90,6 +94,8 @@ type BotSettingsDialogProps = {
 		config: Record<string, unknown>,
 	) => void
 	onMcpServerDelete: (name: string) => void
+	mcpServersInherited?: ApplicationsInheritance
+	mcpCatalogue?: ApplicationsCatalogueSection
 	environment: EnvironmentEntry[]
 	hasEnvironmentFailedToRead?: boolean
 	onEnvironmentSet: (write: EnvironmentWrite) => void | Promise<void>
@@ -131,6 +137,8 @@ const BotSettingsDialog = ({
 	onMcpServerCreate,
 	onMcpServerChange,
 	onMcpServerDelete,
+	mcpServersInherited,
+	mcpCatalogue,
 	environment,
 	hasEnvironmentFailedToRead,
 	onEnvironmentSet,
@@ -162,6 +170,8 @@ const BotSettingsDialog = ({
 		onSkillPreloadedChange,
 	})
 	const mcpSession = useMcpSession({
+		owner: { kind: "companion", name: botName, inherited: mcpServersInherited },
+		catalogue: mcpCatalogue,
 		servers: mcpServers,
 		haveFailedToLoad: haveMcpServersFailedToLoad,
 		onServerChange: onMcpServerChange,
@@ -197,9 +207,9 @@ const BotSettingsDialog = ({
 
 	const leaveCopy = mcpSession.isOpen
 		? {
-				title: t("connectors.leave.title"),
-				description: t("connectors.leave.description"),
-				action: t("connectors.leave.action"),
+				title: t("applications.leave.title"),
+				description: t("applications.leave.description"),
+				action: t("applications.leave.action"),
 			}
 		: {
 				title: t("skills.leave.title"),
@@ -276,7 +286,7 @@ const BotSettingsDialog = ({
 							<SettingsRailItem
 								icon={Icons.Server}
 								iconsOnly={iconsOnly}
-								label={t("dialog.tab.connectors")}
+								label={t("dialog.tab.applications")}
 								value="mcp"
 							/>
 							<SettingsRailItem

@@ -201,11 +201,11 @@ const LeftOutNotice = () => {
 	return (
 		<Notice
 			action={{
-				label: t("connectors.connection.session.action"),
+				label: t("applications.connection.session.action"),
 				onClick: OPEN_CONNECTORS,
 			}}
-			description={t("connectors.connection.session.description")}
-			title={t("connectors.connection.session.title", { name: "atlas" })}
+			description={t("applications.connection.session.description")}
+			title={t("applications.connection.session.title", { name: "atlas" })}
 			tone="warning"
 		/>
 	)
@@ -225,7 +225,7 @@ export const ConnectorLeftOut = meta.story({
 		await expect(canvas.getByRole("status")).toBeVisible()
 
 		await userEvent.click(
-			canvas.getByRole("button", { name: "Open Connectors" }),
+			canvas.getByRole("button", { name: "Open Applications" }),
 		)
 
 		await expect(OPEN_CONNECTORS).toHaveBeenCalled()
