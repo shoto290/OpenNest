@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tauri::{AppHandle, Emitter, Manager, Runtime};
+use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 
 use super::contract::{
 	Application, ApplicationInstalled, ConnectorError, ConnectorInstall, ConnectorSearch,
@@ -11,7 +11,7 @@ use crate::agent::protocol::HostAnswer;
 use crate::agent::session::{Answering, HostRequests};
 use crate::conversations::commands::{
 	conversation_bot_mcp_servers, conversation_set_bot_mcp_server,
-	conversation_set_space_mcp_server, conversation_space_mcp_servers,
+	conversation_set_space_mcp_server, conversation_space_mcp_servers, ready,
 };
 use crate::conversations::contract::McpServer;
 use crate::db;
@@ -153,21 +153,15 @@ impl<R: Runtime> ApplicationHost<R> {
 				conversation_set_space_mcp_server(app, id.clone(), name, config).await?
 			}
 			EnvOwner::Bot { id, .. } => {
-				let state = self
-					.app
-					.try_state::<db::DatabaseState>()
-					.ok_or_else(|| ConnectorError::Unexpected { detail: NO_DATABASE.to_owned() })?;
-				conversation_set_bot_mcp_server(app, state, id.clone(), name, config).await?
+				conversation_set_bot_mcp_server(app, self.state()?, id.clone(), name, config)
+					.await?
 			}
 		})
 	}
 
 	async fn space(&self) -> Result<String, ConnectorError> {
-		let state = self
-			.app
-			.try_state::<db::DatabaseState>()
-			.ok_or_else(|| ConnectorError::Unexpected { detail: NO_DATABASE.to_owned() })?;
-		let database = crate::conversations::commands::ready(&state)?;
+		let state = self.state()?;
+		let database = ready(&state)?;
 		database.conversations().space(self.conversation_id.clone()).await?.ok_or_else(|| {
 			ConnectorError::ConversationWithoutSpace {
 				conversation_id: self.conversation_id.clone(),
@@ -179,6 +173,12 @@ impl<R: Runtime> ApplicationHost<R> {
 		self.app
 			.emit(INSTALLED_EVENT, installed)
 			.map_err(|error| ConnectorError::Undeliverable { detail: error.to_string() })
+	}
+
+	fn state(&self) -> Result<State<'_, db::DatabaseState>, ConnectorError> {
+		self.app
+			.try_state::<db::DatabaseState>()
+			.ok_or_else(|| ConnectorError::Unexpected { detail: NO_DATABASE.to_owned() })
 	}
 }
 
@@ -270,7 +270,6 @@ mod tests {
 	use super::*;
 	use crate::applications::registry::tests::{holding, serving};
 	use crate::bundles;
-	use crate::conversations::commands::ready;
 	use crate::mcp_oauth::commands::McpOauthState;
 	use crate::mcp_oauth::reports::{ConnectorReports, Standing};
 
