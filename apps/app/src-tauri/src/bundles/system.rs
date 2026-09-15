@@ -155,7 +155,9 @@ mod tests {
 			"`ready_to_merge`",
 			"`failed`",
 			"`done`",
-			"A mission you opened is closed by you, once the work is over, and by nobody else.",
+			"Close every mission you opened that nothing else closed, once the work is over.",
+			"When the pull request of a watched mission is merged, the mission closes as done on its",
+			"A mission reaches `ready_to_merge` and `done` from its checkout only while its branch is",
 			"A red CI, a failing test and a coding agent that is blocked are work still to do in the",
 			"Ask, never guess.",
 		] {
