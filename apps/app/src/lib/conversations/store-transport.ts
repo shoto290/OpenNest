@@ -289,6 +289,14 @@ export const conversationStore: TranscriptStore = {
 	deleteUserPluginSkillFile: (skillId: string, path: string) =>
 		invoke<void>("user_plugin_delete_skill_file", { skillId, path }),
 
+	userPluginMcpServers: () => invoke<BotMcpServer[]>("user_plugin_mcp_servers"),
+
+	setUserPluginMcpServer: (name: string, config: Record<string, unknown>) =>
+		invoke<BotMcpServer>("user_plugin_set_mcp_server", { name, config }),
+
+	deleteUserPluginMcpServer: (name: string) =>
+		invoke<void>("user_plugin_delete_mcp_server", { name }),
+
 	userPluginHistory: () => invoke<BotHistoryEntry[]>("user_plugin_history"),
 
 	userPluginHistoryDiff: (oldestCommitId: string, newestCommitId: string) =>

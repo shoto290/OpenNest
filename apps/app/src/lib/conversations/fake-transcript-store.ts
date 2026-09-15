@@ -1307,6 +1307,13 @@ export const createFakeTranscriptStore = (
 		deleteUserPluginSkillFile: (skillId: string, path: string) =>
 			dropSkillFile(USER_PLUGIN, skillId, path),
 
+		userPluginMcpServers: () => listServers(USER_PLUGIN),
+
+		setUserPluginMcpServer: (name: string, config: Record<string, unknown>) =>
+			putServer(USER_PLUGIN, name, config),
+
+		deleteUserPluginMcpServer: (name: string) => dropServer(USER_PLUGIN, name),
+
 		userPluginHistory: () => Promise.resolve(historyOf(USER_PLUGIN)),
 
 		userPluginHistoryDiff: (oldestCommitId: string, newestCommitId: string) =>
