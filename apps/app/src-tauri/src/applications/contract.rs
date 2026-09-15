@@ -75,40 +75,40 @@ pub struct InstallDraft {
 	pub install: InstallCase,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ApplicationInstall {
 	pub id: String,
 	pub conversation_id: String,
 	pub application: String,
 	pub title: String,
-	#[serde(default, skip_serializing_if = "Option::is_none")]
+	#[serde(skip_serializing_if = "Option::is_none")]
 	pub logo: Option<String>,
 	pub scope: Destination,
-	#[serde(default, skip_serializing_if = "Option::is_none")]
+	#[serde(skip_serializing_if = "Option::is_none")]
 	pub destination_id: Option<String>,
 	pub install: InstallCase,
 	pub last_message_seq: i64,
 	pub created_at: i64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ApplicationInstalled {
-	#[serde(default, skip_serializing_if = "Option::is_none")]
+	#[serde(skip_serializing_if = "Option::is_none")]
 	pub id: Option<String>,
 	pub conversation_id: String,
 	pub application: String,
 	pub title: String,
-	#[serde(default, skip_serializing_if = "Option::is_none")]
+	#[serde(skip_serializing_if = "Option::is_none")]
 	pub logo: Option<String>,
 	pub scope: Destination,
-	#[serde(default, skip_serializing_if = "Option::is_none")]
+	#[serde(skip_serializing_if = "Option::is_none")]
 	pub destination_id: Option<String>,
 	pub install: InstallCase,
-	#[serde(default, skip_serializing_if = "Option::is_none")]
+	#[serde(skip_serializing_if = "Option::is_none")]
 	pub last_message_seq: Option<i64>,
-	#[serde(default, skip_serializing_if = "Option::is_none")]
+	#[serde(skip_serializing_if = "Option::is_none")]
 	pub created_at: Option<i64>,
 }
 
@@ -154,7 +154,7 @@ pub struct ConnectorSearch {
 	pub registry_failure: Option<ApplicationsError>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum InstallCase {
 	Nothing,

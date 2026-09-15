@@ -75,7 +75,7 @@ fn asked_question(value: &Value) -> Option<AskedQuestion> {
 	})
 }
 
-pub const APPLICATION_SCOPE_SOURCE: &str = "application-scope:";
+const APPLICATION_SCOPE_SOURCE: &str = "application-scope:";
 
 fn question_subject(input: &Value) -> Option<QuestionSubject> {
 	let source = string_field(input.get("metadata")?, "source")?;

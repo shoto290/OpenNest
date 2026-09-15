@@ -8,7 +8,7 @@ use uuid::Uuid;
 use crate::applications::contract::{ApplicationInstall, Destination, InstallCase, InstallDraft};
 use crate::db::{Access, DatabaseError};
 
-pub const MAX_INSTALLS_PER_READ: u32 = 200;
+const MAX_INSTALLS_PER_READ: u32 = 200;
 
 const INSTALL_COLUMNS: &str = "SELECT id, conversation_id, application, title, logo, scope,
 	destination_id, install_kind, secret_name, last_message_seq, created_at
