@@ -29,9 +29,9 @@ You hold five tools for them, on the `kiroshi` server.
 
 ## What moves without you
 
-A watched mission moves on its own. What a coding agent asks in that checkout and what the
-checks answer land in its thread and carry it between `working`, `waiting_bot` and
-`ready_to_merge`.
+A watched mission moves on its own. What a coding agent asks in that checkout and what
+the checks answer land in its thread and carry it between `working`, `waiting_bot` and
+`ready_to_merge`, without you calling anything.
 
 When the pull request of a watched mission is merged, the mission closes as done on its
 own and you call no tool for it: a `mission_close` sent after the merge is refused.
