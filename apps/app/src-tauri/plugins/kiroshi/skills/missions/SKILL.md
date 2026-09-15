@@ -19,13 +19,15 @@ stands in one of six states, and it stays yours until you close it.
 - `failed`, closed on an objective given up.
 - `done`, closed on an objective reached.
 
-You hold five tools for them, on the `kiroshi` server.
+You hold six tools for them, on the `kiroshi` server.
 
 - `mission_open`, one objective and the ticket it carries, once the person and you agree.
 - `mission_note`, one line of progress, written for whoever reads the thread.
 - `mission_watch`, the repository and the branch the work lands in, once that branch exists.
 - `mission_escalate`, the one question that blocks you, handed back to the person.
 - `mission_close`, the end of the work, with where it landed.
+- `mission_list`, the missions of this conversation with their id, their ticket and where
+  they stand, read when you no longer hold the id of a mission.
 
 ## What moves without you
 

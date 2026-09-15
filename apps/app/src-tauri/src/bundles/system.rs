@@ -155,6 +155,7 @@ mod tests {
 			"`ready_to_merge`",
 			"`failed`",
 			"`done`",
+			"- `mission_list`, the missions of this conversation with their id, their ticket and where",
 			"Close every mission you opened that nothing else closed, once the work is over.",
 			"When the pull request of a watched mission is merged, the mission closes as done on its",
 			"A mission reaches `ready_to_merge` and `done` from its checkout only while its branch is",
