@@ -237,12 +237,11 @@ fn headed_config(remote: &Remote) -> Value {
 }
 
 fn header_value(header: &Input) -> String {
-	let reference = reference(&header.name);
-	header
-		.value
-		.as_deref()
-		.and_then(|template| substituted(template, &reference))
-		.unwrap_or(reference)
+	filled_value(header).unwrap_or_else(|| reference(&header.name))
+}
+
+fn filled_value(header: &Input) -> Option<String> {
+	substituted(header.value.as_deref()?, &reference(&header.name))
 }
 
 fn substituted(template: &str, reference: &str) -> Option<String> {
@@ -278,19 +277,11 @@ fn asked(inputs: &[Input]) -> Option<Install> {
 }
 
 fn asked_header(headers: &[Input]) -> Option<Install> {
-	headers.iter().find(|header| required_secret(header) || carries_placeholder(header)).map(key)
+	headers.iter().find(|header| required_secret(header) || filled_value(header).is_some()).map(key)
 }
 
 fn required_secret(input: &Input) -> bool {
 	input.is_required && input.is_secret
-}
-
-fn carries_placeholder(header: &Input) -> bool {
-	header
-		.value
-		.as_deref()
-		.and_then(|template| template.split_once('{'))
-		.is_some_and(|(_, opened)| opened.contains('}'))
 }
 
 fn key(input: &Input) -> Install {
