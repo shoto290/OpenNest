@@ -197,6 +197,10 @@ const chat = {
 		copyFailed:
 			"Copie impossible. Sélectionnez le lien et copiez-le vous-même.",
 	},
+	applicationInstall: {
+		address: "Adresse de connexion",
+		copyFailed: "Copie impossible",
+	},
 	code: {
 		snippet: "Extrait de code",
 		namedSnippet: "Extrait de code, {{name}}",

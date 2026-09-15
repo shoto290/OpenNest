@@ -9,7 +9,8 @@ import {
 } from "react"
 import { useTranslation } from "react-i18next"
 
-import { Icons } from "@workspace/ui/components/icons"
+import { type Icon, Icons } from "@workspace/ui/components/icons"
+import { ApplicationMark } from "@workspace/ui/components/plugin-settings/application-mark"
 import { SettingsField } from "@workspace/ui/components/settings-field"
 import {
 	FIELD_CONTROL_CLASS,
@@ -69,14 +70,22 @@ export type ToolQuestionExit = {
 	onSelect: () => void
 }
 
+export type ToolQuestionAction = {
+	label: string
+	icon: Icon
+	onSelect: () => void
+}
+
 export type ToolQuestionItem = {
 	question: string
 	header: string
+	mark?: string
 	multiSelect?: boolean
 	options: ToolQuestionOption[]
 	optionsOnly?: boolean
 	link?: ToolQuestionLink
 	entry?: ToolQuestionEntry
+	action?: ToolQuestionAction
 	exit?: ToolQuestionExit
 	failure?: ToolQuestionFailure
 }
@@ -164,6 +173,8 @@ const ToolQuestion = ({
 
 	const isAnswered = answers[item.question] !== ""
 	const waiting = waitingAfter(item)
+	const isFailureOnly =
+		Boolean(item.failure) && item.options.length === 0 && !item.entry
 
 	const sendOrAdvance = () => {
 		if (!isAnswered) return
@@ -191,8 +202,8 @@ const ToolQuestion = ({
 
 	return (
 		<form
-			aria-describedby={item.failure ? failureId : undefined}
-			aria-labelledby={askedId}
+			aria-describedby={item.failure && !isFailureOnly ? failureId : undefined}
+			aria-labelledby={isFailureOnly ? failureId : askedId}
 			className={cn(QUESTION_FORM_CLASS, className)}
 			onKeyDown={readKey}
 			onSubmit={submitForm}
@@ -221,13 +232,24 @@ const ToolQuestion = ({
 					<FailureBlock failure={item.failure} titleId={failureId} />
 				) : null}
 
-				<p className="font-medium text-foreground" id={askedId}>
-					{item.question}
-				</p>
+				{isFailureOnly ? null : (
+					<p
+						className={cn(
+							"font-medium text-foreground",
+							item.mark && "flex items-center gap-2",
+						)}
+						id={askedId}
+					>
+						{item.mark ? (
+							<ApplicationMark mark={item.mark} size="inline" />
+						) : null}
+						{item.question}
+					</p>
+				)}
 
 				{item.link ? <LinkField link={item.link} /> : null}
 
-				{item.entry ? (
+				{isFailureOnly ? null : item.entry ? (
 					<EntryField
 						entry={item.entry}
 						onSubmit={sendOrAdvance}
@@ -261,19 +283,25 @@ const ToolQuestion = ({
 			</div>
 
 			<div className="flex flex-wrap items-center gap-2">
-				<Button disabled={!isAnswered} size="sm" type="submit">
-					{waiting ? (
-						<>
-							{t("toolQuestion.next")}
-							<Icons.Next data-icon="inline-end" />
-						</>
-					) : (
-						<>
-							<Icons.Send data-icon="inline-start" />
-							{t(item.entry ? "toolQuestion.continue" : "toolQuestion.submit")}
-						</>
-					)}
-				</Button>
+				{item.action ? (
+					<ActionButton action={item.action} />
+				) : (
+					<Button disabled={!isAnswered} size="sm" type="submit">
+						{waiting ? (
+							<>
+								{t("toolQuestion.next")}
+								<Icons.Next data-icon="inline-end" />
+							</>
+						) : (
+							<>
+								<Icons.Send data-icon="inline-start" />
+								{t(
+									item.entry ? "toolQuestion.continue" : "toolQuestion.submit",
+								)}
+							</>
+						)}
+					</Button>
+				)}
 				{item.exit ? (
 					<Button
 						className="text-muted-foreground leading-5"
@@ -295,6 +323,19 @@ const ToolQuestion = ({
 		</form>
 	)
 }
+
+type ActionButtonProps = {
+	action: ToolQuestionAction
+}
+
+const ActionButton = ({
+	action: { label, icon: Glyph, onSelect },
+}: ActionButtonProps) => (
+	<Button onClick={onSelect} size="sm" type="button">
+		<Glyph data-icon="inline-start" />
+		{label}
+	</Button>
+)
 
 type FailureBlockProps = {
 	failure: ToolQuestionFailure
