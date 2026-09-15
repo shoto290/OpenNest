@@ -21,6 +21,8 @@ type McpConnectionSection = {
 const MCP_ATTENTION_FIELD =
 	"border-bot-badge-attention/45 bg-bot-badge-attention/8"
 
+const MCP_DESTRUCTIVE_SURFACE = "border-destructive/22 bg-destructive/6"
+
 const MCP_CONNECTION_DOT = {
 	connected: "bg-emerald-500",
 	needsAuthorization: "bg-bot-badge-attention",
@@ -31,6 +33,7 @@ const MCP_CONNECTION_DOT = {
 export {
 	MCP_ATTENTION_FIELD,
 	MCP_CONNECTION_DOT,
+	MCP_DESTRUCTIVE_SURFACE,
 	type McpConnectionSection,
 	type McpRefusedRefresh,
 }

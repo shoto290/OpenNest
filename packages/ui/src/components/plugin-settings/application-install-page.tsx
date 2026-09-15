@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next"
 import {
 	MCP_ATTENTION_FIELD,
 	MCP_CONNECTION_DOT,
+	MCP_DESTRUCTIVE_SURFACE,
 } from "@workspace/ui/components/bot-settings-dialog/mcp-connection"
 import { Icons } from "@workspace/ui/components/icons"
 import { ApplicationMark } from "@workspace/ui/components/plugin-settings/application-mark"
@@ -183,7 +184,12 @@ const UnreviewedNotice = ({ publication, canWrite }: UnreviewedNoticeProps) => {
 	const { t } = useTranslation("bots")
 
 	return (
-		<div className="flex items-start gap-2.5 rounded-xl border border-destructive/22 bg-destructive/6 p-3.5">
+		<div
+			className={cn(
+				"flex items-start gap-2.5 rounded-xl border p-3.5",
+				MCP_DESTRUCTIVE_SURFACE,
+			)}
+		>
 			<Icons.Alert
 				aria-hidden="true"
 				className="mt-0.5 size-4 shrink-0 text-destructive"
@@ -256,6 +262,7 @@ const InstallAction = ({
 	onInstall,
 }: InstallActionProps) => {
 	const { t } = useTranslation("bots")
+	const isUnavailable = isInstalling || isInstalled
 
 	const readGlyph = () => {
 		if (isInstalled) return Icons.Check
@@ -275,9 +282,11 @@ const InstallAction = ({
 	return (
 		<Button
 			aria-busy={isInstalling}
-			className="rounded-full"
-			disabled={isInstalling || isInstalled}
-			onClick={onInstall}
+			aria-disabled={isUnavailable}
+			className="rounded-full pr-3.5 has-data-[icon=inline-start]:pl-3 aria-disabled:pointer-events-none aria-disabled:opacity-50"
+			onClick={() => {
+				if (!isUnavailable) onInstall()
+			}}
 		>
 			{Glyph ? (
 				<Glyph
@@ -415,5 +424,6 @@ const ApplicationInstallPage = ({
 export {
 	ApplicationInstallPage,
 	type ApplicationInstallPageProps,
+	type ApplicationPublication,
 	type InstallableApplication,
 }

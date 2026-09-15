@@ -25,6 +25,7 @@ import {
 import {
 	MCP_ATTENTION_FIELD,
 	MCP_CONNECTION_DOT,
+	MCP_DESTRUCTIVE_SURFACE,
 	type McpConnectionSection,
 	type McpRefusedRefresh,
 } from "@workspace/ui/components/bot-settings-dialog/mcp-connection"
@@ -117,7 +118,7 @@ const McpRefusedRefreshBlock = ({
 		<div
 			className={cn(
 				"flex shrink-0 items-start gap-2.5 rounded-xl border p-3.5",
-				AUTHORIZATION_FIELD.failed,
+				MCP_DESTRUCTIVE_SURFACE,
 			)}
 		>
 			<span className="mt-0.75 flex size-4 shrink-0 items-center justify-center">

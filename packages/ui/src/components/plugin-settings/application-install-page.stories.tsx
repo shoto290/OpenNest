@@ -21,16 +21,30 @@ const COMPANION: ApplicationsOwner = { kind: "companion", name: "Rei" }
 
 const SPACE: ApplicationsOwner = { kind: "space", name: "Atlas" }
 
-const FailingInstallHost = (props: ApplicationInstallPageProps) => {
+type InstallOutcome = "refused" | "added"
+
+const pendingInstall: { settle?: (outcome: InstallOutcome) => void } = {}
+
+const InstallFlowHost = (props: ApplicationInstallPageProps) => {
+	const [isInstalling, setInstalling] = useState(false)
+	const [isInstalled, setInstalled] = useState(false)
 	const [failure, setFailure] = useState<string>()
 
 	return (
 		<ApplicationInstallPage
 			{...props}
 			failure={failure}
+			isInstalled={isInstalled}
+			isInstalling={isInstalling}
 			onInstall={(key) => {
 				props.onInstall(key)
-				setFailure(INSTALL_FAILURE)
+				setFailure(undefined)
+				setInstalling(true)
+				pendingInstall.settle = (outcome) => {
+					setInstalling(false)
+					if (outcome === "added") setInstalled(true)
+					else setFailure(INSTALL_FAILURE)
+				}
 			}}
 		/>
 	)
@@ -89,6 +103,8 @@ export const SignsYouIn = meta.story({
 
 		const action = canvas.getByRole("button", { name: "Add and sign in" })
 		await expect(action.querySelector("svg")).not.toBeNull()
+		await expect(getComputedStyle(action).paddingInlineStart).toBe("12px")
+		await expect(getComputedStyle(action).paddingInlineEnd).toBe("14px")
 		await userEvent.click(action)
 		await expect(args.onInstall).toHaveBeenCalledWith(undefined)
 
@@ -173,14 +189,18 @@ export const InstallRunning = meta.story({
 		docs: {
 			description: {
 				story:
-					"The install in flight. Check that the action is disabled and busy for assistive technology while the key field and the rest of the page stay usable.",
+					"The install in flight. Check that the action reads as busy and unavailable to assistive technology, stays focusable, calls nothing when pressed, and that the key field and the rest of the page stay usable.",
 			},
 		},
 	},
-	play: async ({ canvas, userEvent }) => {
+	play: async ({ args, canvas, userEvent }) => {
 		const action = canvas.getByRole("button", { name: "Add application" })
-		await expect(action).toBeDisabled()
 		await expect(action).toHaveAttribute("aria-busy", "true")
+		await expect(action).toHaveAttribute("aria-disabled", "true")
+		action.focus()
+		await expect(action).toHaveFocus()
+		await userEvent.keyboard("{Enter}")
+		await expect(args.onInstall).not.toHaveBeenCalled()
 
 		const field = canvas.getByLabelText("Sentry needs an API key")
 		await userEvent.type(field, "sntryu_")
@@ -188,45 +208,71 @@ export const InstallRunning = meta.story({
 	},
 })
 
-export const InstallFailed = meta.story({
+export const InstallFailedFromKeyboard = meta.story({
 	args: { application: API_KEY_INSTALL },
-	render: (args) => <FailingInstallHost {...args} />,
+	render: (args) => <InstallFlowHost {...args} />,
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The install came back refused. Check that the reason lands under the key panel as an alert in the destructive colour, that the action stays enabled, and that the typed key is still there.",
+					"The action pressed from the keyboard, run, then refused. Check that focus never leaves the action, that a second press while running calls nothing, that the reason lands under the key panel as an alert in the destructive colour, that the action is available again, and that the typed key is still there.",
 			},
 		},
 	},
-	play: async ({ canvas, userEvent }) => {
+	play: async ({ args, canvas, userEvent }) => {
 		const field = canvas.getByLabelText("Sentry needs an API key")
 		await userEvent.type(field, "sntryu_wrong")
+		await userEvent.tab()
+		await userEvent.tab()
 		const action = canvas.getByRole("button", { name: "Add application" })
-		await userEvent.click(action)
+		await expect(action).toHaveFocus()
 
-		const alert = canvas.getByRole("alert")
+		await userEvent.keyboard("{Enter}")
+		await expect(action).toHaveAttribute("aria-busy", "true")
+		await expect(action).toHaveAttribute("aria-disabled", "true")
+		await expect(action).toHaveFocus()
+		await userEvent.keyboard("{Enter}")
+		await expect(args.onInstall).toHaveBeenCalledTimes(1)
+		await expect(args.onInstall).toHaveBeenCalledWith("sntryu_wrong")
+
+		pendingInstall.settle?.("refused")
+		const alert = await canvas.findByRole("alert")
 		await expect(alert).toHaveTextContent(INSTALL_FAILURE)
 		await expect(alert).toHaveClass("text-destructive")
-		await expect(action).toBeEnabled()
+		await expect(action).toHaveFocus()
+		await expect(action).not.toHaveAttribute("aria-disabled", "true")
 		await expect(field).toHaveValue("sntryu_wrong")
 	},
 })
 
-export const InstallSucceeded = meta.story({
-	args: { isInstalled: true },
+export const InstallAddedFromKeyboard = meta.story({
+	render: (args) => <InstallFlowHost {...args} />,
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The install is done. Check that the action says Added with a check glyph and can no longer be pressed.",
+					"The action pressed from the keyboard, run, then added. Check that focus never leaves the action, that it ends on Added with a check glyph, reachable but unavailable to assistive technology, and that pressing it again calls nothing.",
 			},
 		},
 	},
-	play: async ({ canvas }) => {
-		const action = canvas.getByRole("button", { name: "Added" })
-		await expect(action).toBeDisabled()
+	play: async ({ args, canvas, userEvent }) => {
+		const action = canvas.getByRole("button", { name: "Add and sign in" })
+		action.focus()
+		await userEvent.keyboard("{Enter}")
+		await expect(action).toHaveAttribute("aria-busy", "true")
+		await expect(action).toHaveFocus()
+
+		pendingInstall.settle?.("added")
+		await expect(await canvas.findByRole("button", { name: "Added" })).toBe(
+			action,
+		)
+		await expect(action).toHaveFocus()
+		await expect(action).toHaveAttribute("aria-disabled", "true")
+		await expect(action).not.toHaveAttribute("aria-busy", "true")
 		await expect(action.querySelector("svg")).not.toBeNull()
+
+		await userEvent.keyboard("{Enter}")
+		await expect(args.onInstall).toHaveBeenCalledTimes(1)
 	},
 })
 
