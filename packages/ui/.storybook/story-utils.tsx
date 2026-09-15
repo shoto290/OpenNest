@@ -104,6 +104,21 @@ export const tokenLengthOf = (token: string) => {
 	return length
 }
 
+type ProbedProperty =
+	| "color"
+	| "backgroundColor"
+	| "borderTopColor"
+	| "fontFamily"
+
+export const probedStyleOf = (className: string, property: ProbedProperty) => {
+	const probe = document.createElement("span")
+	probe.className = className
+	document.body.append(probe)
+	const value = getComputedStyle(probe)[property]
+	probe.remove()
+	return value
+}
+
 export const botIdentityAvatars = (canvasElement: HTMLElement) =>
 	slotsIn(canvasElement, "bot-identity-avatar")
 

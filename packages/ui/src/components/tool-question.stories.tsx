@@ -3,6 +3,7 @@ import { expect, fireEvent, fn, spyOn, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import { slotIn } from "@workspace/storybook/story-utils"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
+import { Icons } from "@workspace/ui/components/icons"
 import {
 	Message,
 	MessageAuthor,
@@ -13,10 +14,12 @@ import {
 	MessageBubble,
 	MessageBubbleContent,
 } from "@workspace/ui/components/message-bubble"
+import { CURATED_APPLICATIONS } from "@workspace/ui/components/plugin-settings/applications.fixtures"
 import {
 	ToolQuestion,
 	type ToolQuestionAnswers,
 	type ToolQuestionItem,
+	type ToolQuestionNotice,
 	type ToolQuestionProps,
 } from "@workspace/ui/components/tool-question"
 import { chat } from "@workspace/ui/lib/i18n-en/chat"
@@ -1115,6 +1118,147 @@ export const EntryComposingLegacyKeyCodeOnKey = meta.story({
 			composingEvent: { keyCode: 229 },
 			onAnswer: args.onAnswer,
 			answer: { [KEY_STEP.question]: "sk-ant-0f3c1a" },
+		})
+	},
+})
+
+const APPLICATION_SCOPE_STEP: ToolQuestionItem = {
+	question: "Who should get Linear?",
+	header: "Linear",
+	mark: CURATED_APPLICATIONS.find(({ id }) => id === "linear")?.mark,
+	optionsOnly: true,
+	options: [
+		{
+			label: "Only Shoto",
+			description:
+				"Shoto reads and files Linear issues. No other companion does.",
+		},
+		{
+			label: "Every companion",
+			description: "Linear joins every companion, and every one you add later.",
+		},
+		{
+			label: "Don't install",
+			description: "Nothing is added. Shoto carries on without Linear.",
+		},
+	],
+}
+
+const verticalCentreOf = (element: Element) => {
+	const { top, height } = element.getBoundingClientRect()
+	return top + height / 2
+}
+
+export const ApplicationScope = meta.story({
+	args: { questions: [APPLICATION_SCOPE_STEP] },
+	render: askedByShoto,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard E9: the one place in the product where an application's scope is picked. The question carries the application mark on its own line, centred with the text, and answers with three options and no free text. Send stays disabled until an option is picked, and the controls keep the size every other question ships with. Pick `FailureWithAction` for a question that only reports a failure.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		const mark = slotIn(canvasElement, "application-mark")
+		const question = canvas.getByText(APPLICATION_SCOPE_STEP.question)
+		const send = canvas.getByRole("button", { name: chat.toolQuestion.submit })
+
+		await expect(mark.getBoundingClientRect().width).toBe(22)
+		await expect(question.firstElementChild).toBe(mark)
+		await expect(question.getBoundingClientRect().height).toBeLessThanOrEqual(
+			24,
+		)
+		await expect(
+			Math.abs(verticalCentreOf(mark) - verticalCentreOf(question)),
+		).toBeLessThanOrEqual(1)
+
+		await expect(canvas.getAllByRole("radio")).toHaveLength(3)
+		await expect(canvas.queryByRole("textbox")).not.toBeInTheDocument()
+		await expect(send).toBeDisabled()
+		await expect(send.getBoundingClientRect().height).toBe(28)
+
+		await userEvent.click(
+			canvas.getByRole("radio", { name: /Every companion/ }),
+		)
+		await expect(send).toBeEnabled()
+	},
+})
+
+const KEY_REFUSED_NOTICE: ToolQuestionNotice = {
+	isNotice: true,
+	header: "Sentry",
+	failure: {
+		title: "Sentry refused the key",
+		detail: "401 Unauthorized: invalid auth token",
+	},
+	action: {
+		label: "Open Settings",
+		icon: Icons.Settings,
+		onSelect: fn(),
+	},
+	exit: { label: "Not now", onSelect: fn() },
+}
+
+export const FailureWithAction = meta.story({
+	args: { questions: [KEY_REFUSED_NOTICE] },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The upper bubble of artboard E11: an item declared a notice, a failure with nothing to answer. A notice takes no question text, so no option, no free text and no question line are drawn, the failure title names the form, and the primary action replaces Send, enabled without any answer, with its own label and leading glyph. Pick `Failure` when the failure still asks a question below it, and `NoticeInQueue` for a notice beside a question.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const action = canvas.getByRole("button", { name: "Open Settings" })
+
+		await expect(canvas.getByRole("form")).toHaveAccessibleName(
+			"Sentry refused the key",
+		)
+		await expect(canvas.queryByRole("radio")).not.toBeInTheDocument()
+		await expect(canvas.queryByRole("textbox")).not.toBeInTheDocument()
+		await expect(
+			canvas.queryByRole("button", { name: chat.toolQuestion.submit }),
+		).not.toBeInTheDocument()
+		await expect(action.querySelector("svg")).not.toBeNull()
+		await expect(action).toBeEnabled()
+
+		action.click()
+		await expect(KEY_REFUSED_NOTICE.action?.onSelect).toHaveBeenCalledTimes(1)
+	},
+})
+
+export const NoticeInQueue = meta.story({
+	args: { questions: [RELEASE_QUESTION, KEY_REFUSED_NOTICE] },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A question queued beside a notice. The notice has nothing to answer, so it never waits: picking the question's option keeps the card on the question, the primary control reads `Send answers` rather than `Next question`, and sending reports the question's answer alone. Pick `FailureWithAction` for a notice on its own.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		await userEvent.click(canvas.getByRole("radio", { name: /^Now/ }))
+
+		await expect(canvas.getByRole("tab", { name: "Release" })).toHaveAttribute(
+			"aria-selected",
+			"true",
+		)
+		await expect(canvas.getByRole("tab", { name: "Sentry" })).toHaveAttribute(
+			"aria-selected",
+			"false",
+		)
+
+		const send = canvas.getByRole("button", { name: chat.toolQuestion.submit })
+		await expect(send).toBeEnabled()
+		await userEvent.click(send)
+
+		await expect(args.onAnswer).toHaveBeenCalledTimes(1)
+		await expect(args.onAnswer).toHaveBeenCalledWith({
+			[RELEASE_QUESTION.question]: "Now",
 		})
 	},
 })

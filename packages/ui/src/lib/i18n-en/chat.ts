@@ -184,6 +184,10 @@ const chat = {
 		copyAnnounced: "Link copied to clipboard",
 		copyFailed: "Couldn't copy. Select the link and copy it yourself.",
 	},
+	applicationInstall: {
+		address: "Sign-in address",
+		copyFailed: "Couldn't copy",
+	},
 	code: {
 		snippet: "Code snippet",
 		namedSnippet: "Code snippet, {{name}}",
