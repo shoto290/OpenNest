@@ -415,6 +415,5 @@ const ApplicationInstallPage = ({
 export {
 	ApplicationInstallPage,
 	type ApplicationInstallPageProps,
-	type ApplicationPublication,
 	type InstallableApplication,
 }
