@@ -304,7 +304,7 @@ fn variable(declared: &str) -> String {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
 	use std::collections::HashMap;
 	use std::net::{Ipv4Addr, SocketAddr};
 	use std::sync::{Arc, Mutex};
@@ -554,7 +554,7 @@ mod tests {
 		assert!(descriptor(server).is_none());
 	}
 
-	struct Held {
+	pub(crate) struct Held {
 		list_status: StatusCode,
 		listed: Vec<&'static str>,
 		details: HashMap<String, Value>,
@@ -562,7 +562,7 @@ mod tests {
 		detailed: Mutex<Vec<String>>,
 	}
 
-	async fn serving(held: Held) -> (String, Arc<Held>) {
+	pub(crate) async fn serving(held: Held) -> (String, Arc<Held>) {
 		let held = Arc::new(held);
 		let listener =
 			tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.expect("the stub binds");
@@ -604,7 +604,7 @@ mod tests {
 			.expect("the stub answers with a body")
 	}
 
-	fn holding(listed: Vec<&'static str>) -> Held {
+	pub(crate) fn holding(listed: Vec<&'static str>) -> Held {
 		let details = [a_remote_without_headers(), an_npm_package_with_a_required_plain_variable()]
 			.into_iter()
 			.map(|detail| (detail["name"].as_str().expect("named").to_owned(), detail))

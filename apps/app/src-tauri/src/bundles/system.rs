@@ -18,15 +18,18 @@ const ROUTINES: &str = "skills/routines/SKILL.md";
 
 const MISSIONS: &str = "skills/missions/SKILL.md";
 
+const INSTALLS: &str = "skills/applications/SKILL.md";
+
 const TRIGGERS: &str = ".triggers.json";
 
 pub(crate) const APPLICATIONS: &str = "applications/catalogue.json";
 
-const FILES: [(&str, &[u8]); 13] = [
+const FILES: [(&str, &[u8]); 14] = [
 	(MANIFEST, include_bytes!("../../plugins/kiroshi/.claude-plugin/plugin.json")),
 	(TRIGGERS, include_bytes!("../../plugins/kiroshi/.triggers.json")),
 	(LEARN, include_bytes!("../../plugins/kiroshi/skills/learn/SKILL.md")),
 	(ROUTINES, include_bytes!("../../plugins/kiroshi/skills/routines/SKILL.md")),
+	(INSTALLS, include_bytes!("../../plugins/kiroshi/skills/applications/SKILL.md")),
 	(MISSIONS, include_bytes!("../../plugins/kiroshi/skills/missions/SKILL.md")),
 	(
 		"skills/learn/references/skills.md",
@@ -184,6 +187,29 @@ mod tests {
 			"A mission reaches `ready_to_merge` and `done` from its checkout only while its branch is",
 			"A red CI, a failing test and a coding agent that is blocked are work still to do in the",
 			"Ask, never guess.",
+		] {
+			assert!(text.contains(said), "{said} is missing");
+		}
+	}
+
+	#[test]
+	fn the_applications_skill_is_preloaded_and_says_where_an_install_goes_and_what_follows() {
+		let text = String::from_utf8_lossy(embedded(INSTALLS));
+
+		assert!(text.contains("preload: true"), "got {text}");
+		for said in [
+			"Search before you install.",
+			"`AskUserQuestion`",
+			"`companion`, you",
+			"`space`, every companion of",
+			"`user`, the person",
+			"Install only in the destination the person picked",
+			"Never ask for a key",
+			"never repeat one",
+			"there is nothing left to do",
+			"the name of the secret",
+			"Settings panel of that destination",
+			"Connect lives in the Settings panel of that destination",
 		] {
 			assert!(text.contains(said), "{said} is missing");
 		}

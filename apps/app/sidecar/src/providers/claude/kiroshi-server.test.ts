@@ -9,6 +9,8 @@ import {
 
 const scope = { cwd: "/tmp", managedSettings: {}, session: "k1" }
 
+const NAMES_A_SECRET = /key|secret|token|password|credential|value|header/i
+
 describe("kiroshiServer", () => {
 	it("bridges one in-process server under the name its tools answer to", () => {
 		const servers = kiroshiServer(scope)
@@ -18,7 +20,24 @@ describe("kiroshiServer", () => {
 		expect(DELEGATE_TOOL).toBe(`mcp__${KIROSHI_SERVER}__delegate`)
 	})
 
-	it("carries the delegate tool and every routine, mission and companion tool of the session", () => {
+	it("carries the three connector tools and none of them takes a secret value", () => {
+		const connectors = kiroshiTools(scope).filter((held) =>
+			held.name.startsWith("connector_"),
+		)
+
+		expect(connectors.map((held) => held.name)).toEqual([
+			"connector_search",
+			"connector_install",
+			"connector_status",
+		])
+		for (const held of connectors) {
+			for (const field of Object.keys(held.inputSchema)) {
+				expect(field).not.toMatch(NAMES_A_SECRET)
+			}
+		}
+	})
+
+	it("carries the delegate tool and every routine, mission, connector and companion tool of the session", () => {
 		expect(kiroshiTools(scope).map((held) => held.name)).toEqual([
 			"delegate",
 			"routine_list",
@@ -33,6 +52,9 @@ describe("kiroshiServer", () => {
 			"mission_close",
 			"mission_watch",
 			"mission_list",
+			"connector_search",
+			"connector_install",
+			"connector_status",
 			"companion_suggestions",
 			"companion_create",
 			"companion_first_run_done",

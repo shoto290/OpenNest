@@ -14,6 +14,7 @@ use super::redact;
 use super::session::{Bundle, EventSink, GatedSink, Session, SessionOptions};
 use super::sidecar::{self, Sidecar, SidecarOptions};
 use super::translate::now_ms;
+use crate::applications::host::ApplicationHost;
 use crate::bundles;
 use crate::companions::host::CompanionHost;
 use crate::conversations::commands::space_of_the_conversation;
@@ -701,6 +702,11 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 			scope.bot_id.clone(),
 		)))
 		.hosting(Arc::new(ConnectorHost::new(app.clone(), scope.bot_id.clone())))
+		.hosting(Arc::new(ApplicationHost::new(
+			app.clone(),
+			scope.conversation_id.clone(),
+			scope.bot_id.clone(),
+		)))
 		.answering(output_schema);
 
 	let refused_id = resume.clone();
