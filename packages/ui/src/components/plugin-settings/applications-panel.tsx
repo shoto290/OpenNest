@@ -42,6 +42,12 @@ type OwnerCopy = {
 	inherited: InheritedApplication[]
 }
 
+const NO_INHERITANCE: ApplicationsInheritance = {
+	spaceName: "",
+	fromSpace: [],
+	fromProfile: [],
+}
+
 const useOwnerCopy = (owner: ApplicationsOwner): OwnerCopy => {
 	const { t } = useTranslation("bots")
 
@@ -73,14 +79,14 @@ const useOwnerCopy = (owner: ApplicationsOwner): OwnerCopy => {
 		}
 	}
 
-	const { name, inherited } = owner
-	const fromSpace = inherited?.fromSpace ?? []
-	const fromProfile = inherited?.fromProfile ?? []
+	const { name } = owner
+	const { spaceName, fromSpace, fromProfile } =
+		owner.inherited ?? NO_INHERITANCE
 	const sources = [
 		fromSpace.length > 0
 			? t("applications.footnote.source.space", {
 					count: fromSpace.length,
-					name: inherited?.spaceName ?? "",
+					name: spaceName,
 				})
 			: null,
 		fromProfile.length > 0
