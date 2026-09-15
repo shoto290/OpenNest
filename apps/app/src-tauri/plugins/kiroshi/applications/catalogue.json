@@ -1,0 +1,179 @@
+[
+	{
+		"name": "github",
+		"title": "GitHub",
+		"description": "Read and change repositories, issues and pull requests.",
+		"config": { "type": "http", "url": "https://api.githubcopilot.com/mcp/" },
+		"tools": [
+			"get_me",
+			"search_repositories",
+			"get_file_contents",
+			"list_branches",
+			"list_commits",
+			"create_branch",
+			"create_or_update_file",
+			"push_files",
+			"search_code",
+			"list_issues",
+			"search_issues",
+			"issue_read",
+			"issue_write",
+			"add_issue_comment",
+			"list_pull_requests",
+			"search_pull_requests",
+			"pull_request_read",
+			"create_pull_request",
+			"update_pull_request",
+			"merge_pull_request"
+		],
+		"logo": "applications/logos/github.svg",
+		"install": { "kind": "oauth" }
+	},
+	{
+		"name": "linear",
+		"title": "Linear",
+		"description": "Plan and track issues, projects and cycles.",
+		"config": { "type": "http", "url": "https://mcp.linear.app/mcp" },
+		"tools": [
+			"list_issues",
+			"get_issue",
+			"save_issue",
+			"list_comments",
+			"save_comment",
+			"list_projects",
+			"get_project",
+			"save_project",
+			"list_teams",
+			"list_users",
+			"list_issue_statuses",
+			"list_issue_labels",
+			"list_milestones",
+			"list_documents"
+		],
+		"logo": "applications/logos/linear.svg",
+		"install": { "kind": "oauth" }
+	},
+	{
+		"name": "notion",
+		"title": "Notion",
+		"description": "Search, read and write pages and databases.",
+		"config": { "type": "http", "url": "https://mcp.notion.com/mcp" },
+		"tools": [
+			"notion-search",
+			"notion-fetch",
+			"notion-create-pages",
+			"notion-update-page",
+			"notion-move-pages",
+			"notion-duplicate-page",
+			"notion-create-database",
+			"notion-update-database",
+			"notion-create-comment",
+			"notion-get-comments",
+			"notion-get-teams",
+			"notion-get-users"
+		],
+		"install": { "kind": "oauth" }
+	},
+	{
+		"name": "granola",
+		"title": "Granola",
+		"description": "Read meeting notes and transcripts.",
+		"config": { "type": "http", "url": "https://mcp.granola.ai/mcp" },
+		"tools": [
+			"query_granola_meetings",
+			"list_meetings",
+			"get_meetings",
+			"get_meeting_transcript"
+		],
+		"install": { "kind": "oauth" }
+	},
+	{
+		"name": "sentry",
+		"title": "Sentry",
+		"description": "Investigate errors, issues and traces.",
+		"config": { "type": "http", "url": "https://mcp.sentry.dev/mcp" },
+		"tools": [
+			"whoami",
+			"find_organizations",
+			"find_teams",
+			"find_projects",
+			"find_releases",
+			"search_issues",
+			"search_events",
+			"get_issue_details",
+			"get_trace_details",
+			"update_issue",
+			"analyze_issue_with_seer",
+			"search_docs"
+		],
+		"install": { "kind": "oauth" }
+	},
+	{
+		"name": "superset",
+		"title": "Superset",
+		"description": "Run workspaces, terminals, agents and tasks.",
+		"config": {
+			"type": "http",
+			"url": "https://api.superset.sh/mcp",
+			"headers": { "Authorization": "Bearer ${SUPERSET_API_KEY}" }
+		},
+		"tools": [
+			"projects_list",
+			"hosts_list",
+			"workspaces_list",
+			"workspaces_create",
+			"workspaces_update",
+			"workspaces_delete",
+			"terminals_list",
+			"terminals_create",
+			"terminals_read",
+			"terminals_send",
+			"terminals_close",
+			"agents_list",
+			"agents_create",
+			"tasks_list",
+			"tasks_get",
+			"tasks_create",
+			"tasks_update",
+			"tasks_delete",
+			"tasks_statuses_list"
+		],
+		"logo": "applications/logos/superset.svg",
+		"install": {
+			"kind": "key",
+			"name": "Authorization",
+			"secret": "SUPERSET_API_KEY",
+			"description": "A Superset API key."
+		}
+	},
+	{
+		"name": "paper",
+		"title": "Paper",
+		"description": "Read and write designs in the Paper desktop app.",
+		"config": { "type": "http", "url": "http://127.0.0.1:29979/mcp" },
+		"tools": [
+			"get_basic_info",
+			"get_selection",
+			"get_tree_summary",
+			"get_children",
+			"get_node_info",
+			"find_nodes",
+			"get_screenshot",
+			"get_jsx",
+			"get_computed_styles",
+			"get_font_family_info",
+			"get_guide",
+			"write_html",
+			"create_artboard",
+			"duplicate_nodes",
+			"update_styles",
+			"set_text_content",
+			"rename_nodes",
+			"move_nodes",
+			"delete_nodes",
+			"finish_working_on_nodes"
+		],
+		"logo": "applications/logos/paper.svg",
+		"install": { "kind": "nothing" }
+	}
+]
