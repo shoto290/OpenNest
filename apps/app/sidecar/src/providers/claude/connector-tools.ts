@@ -30,7 +30,7 @@ const SEARCHED: ToolInput = {
 
 const NAMED: ToolInput = {
 	application: z.string().describe(APPLICATION),
-	scope: z.string().describe(SCOPE),
+	scope: z.enum(["companion", "space", "user"]).describe(SCOPE),
 }
 
 const asked = carriedTo(SUBTYPE)

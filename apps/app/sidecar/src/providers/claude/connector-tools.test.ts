@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test"
 
+import type { z } from "zod"
+
 import { connectorTools } from "./connector-tools"
 
 import type { SessionFrame } from "../provider"
@@ -82,6 +84,15 @@ describe("connectorTools", () => {
 				"application",
 				"scope",
 			])
+		}
+	})
+
+	it("declares the scope as the three destinations and nothing else", () => {
+		for (const name of ["connector_install", "connector_status"]) {
+			const scope = toolNamed(name).inputSchema.scope as z.ZodEnum
+
+			expect(scope.options).toEqual(["companion", "space", "user"])
+			expect(scope.safeParse("team").success).toBe(false)
 		}
 	})
 

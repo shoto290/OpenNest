@@ -91,20 +91,39 @@ enum Transport<'a> {
 }
 
 pub async fn search(base: &str, query: &str) -> Result<Vec<Application>, ApplicationsError> {
-	let base = Url::parse(base)
-		.map_err(|error| ApplicationsError::RegistryUnreached { detail: error.to_string() })?;
+	let base = parsed(base)?;
 	let client = client()?;
 	let mut list = endpoint(&base, &[API_VERSION, "servers"])?;
 	list.query_pairs_mut().append_pair("search", query).append_pair("limit", BOUND);
 	let listed: Listed = read(&client, list).await?;
 	let mut details = JoinSet::new();
 	for (at, name) in distinct(listed.servers).into_iter().enumerate() {
-		let url = endpoint(&base, &[API_VERSION, "servers", &name, "versions", "latest"])?;
+		let url = detail_endpoint(&base, &name)?;
 		let client = client.clone();
 		details.spawn(async move { (at, name, read::<Entry>(&client, url).await) });
 	}
 	let servers = answered(details).await?;
 	Ok(servers.into_iter().filter_map(descriptor).collect())
+}
+
+pub async fn detail(base: &str, name: &str) -> Result<Option<Application>, ApplicationsError> {
+	let url = detail_endpoint(&parsed(base)?, name)?;
+	match read::<Entry>(&client()?, url).await {
+		Ok(entry) => Ok(descriptor(entry.server)),
+		Err(ApplicationsError::RegistryRefused { status }) if status == StatusCode::NOT_FOUND => {
+			Ok(None)
+		}
+		Err(failure) => Err(failure),
+	}
+}
+
+fn parsed(base: &str) -> Result<Url, ApplicationsError> {
+	Url::parse(base)
+		.map_err(|error| ApplicationsError::RegistryUnreached { detail: error.to_string() })
+}
+
+fn detail_endpoint(base: &Url, name: &str) -> Result<Url, ApplicationsError> {
+	endpoint(base, &[API_VERSION, "servers", name, "versions", "latest"])
 }
 
 fn distinct(entries: Vec<Entry>) -> Vec<String> {
@@ -558,8 +577,8 @@ pub(crate) mod tests {
 		list_status: StatusCode,
 		listed: Vec<&'static str>,
 		details: HashMap<String, Value>,
-		asked: Mutex<Vec<String>>,
-		detailed: Mutex<Vec<String>>,
+		pub(crate) asked: Mutex<Vec<String>>,
+		pub(crate) detailed: Mutex<Vec<String>>,
 	}
 
 	pub(crate) async fn serving(held: Held) -> (String, Arc<Held>) {
@@ -592,7 +611,10 @@ pub(crate) mod tests {
 		held.detailed.lock().expect("the stub records").push(name.clone());
 		match held.details.get(&name) {
 			Some(detail) => as_json(&json!({ "server": detail })),
-			None => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+			None if held.listed.contains(&name.as_str()) => {
+				StatusCode::INTERNAL_SERVER_ERROR.into_response()
+			}
+			None => StatusCode::NOT_FOUND.into_response(),
 		}
 	}
 

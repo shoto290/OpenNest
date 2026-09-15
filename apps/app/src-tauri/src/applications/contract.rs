@@ -69,6 +69,8 @@ pub enum Destination {
 pub struct ApplicationInstalled {
 	pub application: String,
 	pub scope: Destination,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub destination_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

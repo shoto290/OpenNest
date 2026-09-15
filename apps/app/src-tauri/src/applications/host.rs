@@ -23,6 +23,8 @@ const SUBTYPE: &str = "application";
 
 const NO_DATABASE: &str = "the store this session writes to is not open";
 
+const SHORTEST_TERM: usize = 3;
+
 #[derive(Debug)]
 pub struct ApplicationHost<R: Runtime> {
 	app: AppHandle<R>,
@@ -92,7 +94,11 @@ impl<R: Runtime> ApplicationHost<R> {
 		}
 		let application = self.application(&asked.application).await?;
 		self.declare(&owner, &application).await?;
-		self.announce(ApplicationInstalled { application: application.name.clone(), scope })?;
+		self.announce(ApplicationInstalled {
+			application: application.name.clone(),
+			scope,
+			destination_id: destination_id(&owner),
+		})?;
 		Ok(ConnectorInstall::Installed {
 			application: application.name,
 			scope,
@@ -113,10 +119,8 @@ impl<R: Runtime> ApplicationHost<R> {
 		if let Some(curated) = catalogue::curated()?.into_iter().find(|held| held.name == name) {
 			return Ok(curated);
 		}
-		registry::search(&self.registry, name)
+		registry::detail(&self.registry, name)
 			.await?
-			.into_iter()
-			.find(|held| held.name == name)
 			.ok_or_else(|| ConnectorError::UnknownApplication { application: name.to_owned() })
 	}
 
@@ -229,14 +233,26 @@ fn destination(scope: &str) -> Result<Destination, ConnectorError> {
 	}
 }
 
+fn destination_id(owner: &EnvOwner) -> Option<String> {
+	match owner {
+		EnvOwner::Bot { id, .. } | EnvOwner::Space { id } => Some(id.clone()),
+		EnvOwner::User => None,
+	}
+}
+
 fn matching(curated: Vec<Application>, query: &str) -> Vec<Application> {
-	let terms: Vec<String> = query.split_whitespace().map(str::to_lowercase).collect();
-	curated.into_iter().filter(|held| terms.iter().any(|term| answers_to(held, term))).collect()
+	let terms: Vec<String> = query
+		.split_whitespace()
+		.filter(|term| term.chars().count() >= SHORTEST_TERM)
+		.map(str::to_lowercase)
+		.collect();
+	curated.into_iter().filter(|held| terms.iter().all(|term| answers_to(held, term))).collect()
 }
 
 fn answers_to(application: &Application, term: &str) -> bool {
-	application.name.to_lowercase().contains(term)
-		|| application.title.to_lowercase().contains(term)
+	[&application.name, &application.title, &application.description]
+		.iter()
+		.any(|read| read.to_lowercase().contains(term))
 }
 
 fn read<T: serde::de::DeserializeOwned>(payload: Value) -> Result<T, ConnectorError> {
@@ -477,21 +493,85 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn an_install_announces_the_application_and_the_scope_it_landed_in() {
+	async fn an_install_announces_the_application_the_scope_and_the_id_of_its_destination() {
 		let app = a_host("announced").await;
 		let arriving = heard(&app);
+		let host = serving_in(&app, "c1", unreached().await);
 
-		serving_in(&app, "c1", unreached().await)
-			.answer(an_install("superset", "space"))
+		let mut announced = Vec::new();
+		for scope in SCOPES {
+			host.answer(an_install("superset", scope)).await.expect("the install answers");
+			let payload =
+				arriving.recv_timeout(Duration::from_secs(5)).expect("the event is announced");
+			announced.push(serde_json::from_str::<Value>(&payload).expect("the event is JSON"));
+		}
+
+		assert_eq!(
+			announced,
+			[
+				json!({ "application": "superset", "scope": "companion", "destinationId": "b1" }),
+				json!({ "application": "superset", "scope": "space", "destinationId": "personal" }),
+				json!({ "application": "superset", "scope": "user" }),
+			]
+		);
+		cleaned(&app);
+	}
+
+	async fn searched(app: &App<MockRuntime>, query: &str) -> Value {
+		let (base, _) = serving(holding(Vec::new())).await;
+		serving_in(app, "c1", base)
+			.answer(asking("search", json!({ "query": query })))
+			.await
+			.expect("the search answers")
+	}
+
+	#[tokio::test]
+	async fn a_query_naming_what_an_application_does_answers_it_through_its_description() {
+		let app = a_host("described").await;
+
+		assert_eq!(names(&searched(&app, "meeting notes").await), ["granola"]);
+		cleaned(&app);
+	}
+
+	#[tokio::test]
+	async fn a_query_answers_only_the_applications_matching_every_term_of_three_characters_or_more()
+	{
+		let app = a_host("every-term").await;
+
+		assert_eq!(names(&searched(&app, "my issues").await), ["github", "linear", "sentry"]);
+		assert_eq!(names(&searched(&app, "issues projects").await), ["linear"]);
+		cleaned(&app);
+	}
+
+	#[tokio::test]
+	async fn a_query_whose_every_term_is_discarded_answers_the_whole_catalogue() {
+		let app = a_host("all-discarded").await;
+		let everything: Vec<String> = catalogue::curated()
+			.expect("the catalogue reads")
+			.into_iter()
+			.map(|held| held.name)
+			.collect();
+
+		assert_eq!(names(&searched(&app, "an my").await), everything);
+		assert_eq!(names(&searched(&app, "").await), everything);
+		cleaned(&app);
+	}
+
+	#[tokio::test]
+	async fn a_registry_install_reads_the_one_detail_and_runs_no_search() {
+		let app = a_host("registry-install").await;
+		let (base, held) = serving(holding(Vec::new())).await;
+
+		let answer = serving_in(&app, "c1", base)
+			.answer(an_install("com.notion/mcp", "space"))
 			.await
 			.expect("the install answers");
 
-		let payload =
-			arriving.recv_timeout(Duration::from_secs(5)).expect("the event is announced");
-		assert_eq!(
-			serde_json::from_str::<Value>(&payload).expect("the event is JSON"),
-			json!({ "application": "superset", "scope": "space" })
-		);
+		assert_eq!(answer["outcome"], "installed");
+		assert_eq!(answer["install"], json!({ "kind": "oauth" }));
+		assert_eq!(declarations(&app)[1][0].0, "com.notion/mcp");
+		assert!(held.asked.lock().expect("the stub records").is_empty(), "a search ran");
+		assert_eq!(*held.detailed.lock().expect("the stub records"), ["com.notion/mcp"]);
 		cleaned(&app);
 	}
 
@@ -534,7 +614,7 @@ mod tests {
 	#[tokio::test]
 	async fn an_application_neither_the_catalogue_nor_the_registry_answers_is_refused() {
 		let app = a_host("unknown-application").await;
-		let (base, _) = serving(holding(vec!["com.notion/mcp"])).await;
+		let (base, held) = serving(holding(vec!["com.notion/mcp"])).await;
 
 		for scope in SCOPES {
 			let refusal = serving_in(&app, "c1", base.clone())
@@ -548,6 +628,7 @@ mod tests {
 			);
 		}
 		assert_eq!(declarations(&app), [Vec::new(), Vec::new(), Vec::new()]);
+		assert!(held.asked.lock().expect("the stub records").is_empty(), "a search ran");
 		cleaned(&app);
 	}
 
