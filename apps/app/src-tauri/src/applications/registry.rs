@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::time::Duration;
 
 use reqwest::header::{HeaderMap, HeaderValue, USER_AGENT};
@@ -11,6 +12,8 @@ use super::contract::{Application, ApplicationsError, Install};
 use crate::missions::github::installed_tls_provider;
 
 pub const REGISTRY: &str = "https://registry.modelcontextprotocol.io";
+
+const API_VERSION: &str = "v0.1";
 
 const BOUND: &str = "10";
 
@@ -76,7 +79,11 @@ struct Input {
 	is_required: bool,
 	#[serde(default)]
 	is_secret: bool,
+	#[serde(default)]
+	value: Option<String>,
 }
+
+type DetailRead = (usize, String, Result<Entry, ApplicationsError>);
 
 enum Transport<'a> {
 	Remote(&'a Remote),
@@ -87,27 +94,53 @@ pub async fn search(base: &str, query: &str) -> Result<Vec<Application>, Applica
 	let base = Url::parse(base)
 		.map_err(|error| ApplicationsError::RegistryUnreached { detail: error.to_string() })?;
 	let client = client()?;
-	let mut list = endpoint(&base, &["v0", "servers"])?;
+	let mut list = endpoint(&base, &[API_VERSION, "servers"])?;
 	list.query_pairs_mut().append_pair("search", query).append_pair("limit", BOUND);
 	let listed: Listed = read(&client, list).await?;
 	let mut details = JoinSet::new();
-	for (at, entry) in listed.servers.into_iter().enumerate() {
-		let url = endpoint(&base, &["v0", "servers", &entry.server.name, "versions", "latest"])?;
+	for (at, name) in distinct(listed.servers).into_iter().enumerate() {
+		let url = endpoint(&base, &[API_VERSION, "servers", &name, "versions", "latest"])?;
 		let client = client.clone();
-		details.spawn(async move { (at, entry.server.name, read::<Entry>(&client, url).await) });
+		details.spawn(async move { (at, name, read::<Entry>(&client, url).await) });
 	}
-	let mut answered = Vec::new();
+	let servers = answered(details).await?;
+	Ok(servers.into_iter().filter_map(descriptor).collect())
+}
+
+fn distinct(entries: Vec<Entry>) -> Vec<String> {
+	let mut seen = HashSet::new();
+	entries
+		.into_iter()
+		.map(|entry| entry.server.name)
+		.filter(|name| seen.insert(name.clone()))
+		.collect()
+}
+
+async fn answered(mut details: JoinSet<DetailRead>) -> Result<Vec<Server>, ApplicationsError> {
+	let mut outcomes = Vec::new();
 	while let Some(joined) = details.join_next().await {
-		match joined {
-			Ok((at, _, Ok(detail))) => answered.push((at, detail.server)),
-			Ok((_, name, Err(failure))) => {
-				eprintln!("the registry entry {name} was left out: {failure:?}")
-			}
-			Err(failure) => eprintln!("a registry entry was left out: {failure}"),
-		}
+		outcomes.push(match joined {
+			Ok((at, name, outcome)) => (
+				at,
+				outcome.inspect_err(|failure| {
+					eprintln!("the registry entry {name} was left out: {failure:?}")
+				}),
+			),
+			Err(stopped) => (
+				usize::MAX,
+				Err(ApplicationsError::RegistryUnreadable {
+					detail: format!("a detail read stopped: {stopped}"),
+				}),
+			),
+		});
 	}
-	answered.sort_by_key(|(at, _)| *at);
-	Ok(answered.into_iter().filter_map(|(_, server)| descriptor(server)).collect())
+	outcomes.sort_by_key(|(at, _)| *at);
+	let (read, failed): (Vec<_>, Vec<_>) =
+		outcomes.into_iter().map(|(_, outcome)| outcome).partition(Result::is_ok);
+	if let (true, Some(Err(failure))) = (read.is_empty(), failed.into_iter().next()) {
+		return Err(failure);
+	}
+	Ok(read.into_iter().flatten().map(|entry| entry.server).collect())
 }
 
 fn client() -> Result<Client, ApplicationsError> {
@@ -152,9 +185,10 @@ fn unreached(error: reqwest::Error) -> ApplicationsError {
 
 fn descriptor(server: Server) -> Option<Application> {
 	let (config, install) = match transport(&server)? {
-		Transport::Remote(remote) => {
-			(remote_config(remote), asked(&remote.headers).unwrap_or(Install::Oauth))
-		}
+		Transport::Remote(remote) => match asked(&remote.headers) {
+			Some(key) => (headed_config(remote), key),
+			None => (remote_config(remote), Install::Oauth),
+		},
 		Transport::Npm(package) => (
 			package_config(package),
 			asked(&package.environment_variables).unwrap_or(Install::Nothing),
@@ -179,11 +213,35 @@ fn transport(server: &Server) -> Option<Transport<'_>> {
 }
 
 fn remote_config(remote: &Remote) -> Value {
-	let mut config = json!({ "type": "http", "url": remote.url });
-	if !remote.headers.is_empty() {
-		config["headers"] = placeholders(remote.headers.iter());
-	}
+	json!({ "type": "http", "url": remote.url })
+}
+
+fn headed_config(remote: &Remote) -> Value {
+	let mut config = remote_config(remote);
+	config["headers"] = Value::Object(
+		remote
+			.headers
+			.iter()
+			.map(|header| (header.name.clone(), Value::String(header_value(header))))
+			.collect(),
+	);
 	config
+}
+
+fn header_value(header: &Input) -> String {
+	let reference = reference(&header.name);
+	header
+		.value
+		.as_deref()
+		.and_then(|template| substituted(template, &reference))
+		.unwrap_or(reference)
+}
+
+fn substituted(template: &str, reference: &str) -> Option<String> {
+	let (before, opened) = template.split_once('{')?;
+	let (_, after) = opened.split_once('}')?;
+	let rest = substituted(after, reference).unwrap_or_else(|| after.to_owned());
+	Some(format!("{before}{reference}{rest}"))
 }
 
 fn package_config(package: &Package) -> Value {
@@ -199,12 +257,12 @@ fn package_config(package: &Package) -> Value {
 
 fn placeholders<'a>(inputs: impl Iterator<Item = &'a Input>) -> Value {
 	Value::Object(
-		inputs
-			.map(|input| {
-				(input.name.clone(), Value::String(format!("${{{}}}", variable(&input.name))))
-			})
-			.collect(),
+		inputs.map(|input| (input.name.clone(), Value::String(reference(&input.name)))).collect(),
 	)
+}
+
+fn reference(declared: &str) -> String {
+	format!("${{{}}}", variable(declared))
 }
 
 fn asked(inputs: &[Input]) -> Option<Install> {
@@ -321,10 +379,24 @@ mod tests {
 			json!({
 				"type": "http",
 				"url": "https://server.smithery.test/notion/mcp",
-				"headers": { "Authorization": "${AUTHORIZATION}" },
+				"headers": { "Authorization": "Bearer ${AUTHORIZATION}" },
 			})
 		);
 		assert_eq!(application.title, "ai.smithery/smithery-notion");
+	}
+
+	#[test]
+	fn a_declared_value_with_no_part_to_fill_answers_the_bare_reference() {
+		let application = described(json!({
+			"name": "io.test/fixed",
+			"remotes": [{
+				"type": "streamable-http",
+				"url": "https://fixed.test/mcp",
+				"headers": [{ "name": "X-Api-Key", "isRequired": true, "isSecret": true, "value": "fixed" }],
+			}],
+		}));
+
+		assert_eq!(application.config["headers"], json!({ "X-Api-Key": "${X_API_KEY}" }));
 	}
 
 	#[test]
@@ -356,7 +428,11 @@ mod tests {
 		}));
 
 		assert_eq!(application.install, Install::Oauth);
-		assert_eq!(application.config["headers"], json!({ "Authorization": "${AUTHORIZATION}" }));
+		assert_eq!(
+			application.config,
+			json!({ "type": "http", "url": "https://api.github.test/mcp/" })
+		);
+		assert!(application.config.get("headers").is_none());
 	}
 
 	#[test]
@@ -421,6 +497,7 @@ mod tests {
 		listed: Vec<&'static str>,
 		details: HashMap<String, Value>,
 		asked: Mutex<Vec<String>>,
+		detailed: Mutex<Vec<String>>,
 	}
 
 	async fn serving(held: Held) -> (String, Arc<Held>) {
@@ -429,8 +506,8 @@ mod tests {
 			tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.expect("the stub binds");
 		let address: SocketAddr = listener.local_addr().expect("the stub is named");
 		let router = Router::new()
-			.route("/v0/servers", get(list_of))
-			.route("/v0/servers/{name}/versions/latest", get(detail_of))
+			.route("/v0.1/servers", get(list_of))
+			.route("/v0.1/servers/{name}/versions/latest", get(detail_of))
 			.with_state(held.clone());
 		tokio::spawn(async move { axum::serve(listener, router).await.expect("the stub serves") });
 		(format!("http://{address}"), held)
@@ -450,6 +527,7 @@ mod tests {
 		Extracted(held): Extracted<Arc<Held>>,
 		AxumPath(name): AxumPath<String>,
 	) -> Answered {
+		held.detailed.lock().expect("the stub records").push(name.clone());
 		match held.details.get(&name) {
 			Some(detail) => as_json(&json!({ "server": detail })),
 			None => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
@@ -469,7 +547,13 @@ mod tests {
 			.into_iter()
 			.map(|detail| (detail["name"].as_str().expect("named").to_owned(), detail))
 			.collect();
-		Held { list_status: StatusCode::OK, listed, details, asked: Mutex::new(Vec::new()) }
+		Held {
+			list_status: StatusCode::OK,
+			listed,
+			details,
+			asked: Mutex::new(Vec::new()),
+			detailed: Mutex::new(Vec::new()),
+		}
 	}
 
 	#[tokio::test]
@@ -488,7 +572,29 @@ mod tests {
 		assert_eq!(found[0].install, Install::Oauth);
 		assert_eq!(found[1].install, Install::Nothing);
 		let asked = held.asked.lock().expect("the stub records").clone();
-		assert_eq!(asked, ["/v0/servers?search=notion+files&limit=10"]);
+		assert_eq!(asked, ["/v0.1/servers?search=notion+files&limit=10"]);
+	}
+
+	#[tokio::test]
+	async fn a_search_whose_every_detail_is_refused_answers_the_refusal() {
+		let (base, held) =
+			serving(holding(vec![BROKEN, "io.test/also-broken", "io.test/still-broken"])).await;
+
+		let answered = search(&base, "broken").await;
+
+		assert_eq!(answered, Err(ApplicationsError::RegistryRefused { status: 500 }));
+		assert_eq!(held.detailed.lock().expect("the stub records").len(), 3);
+	}
+
+	#[tokio::test]
+	async fn a_server_listed_twice_is_read_once_and_answered_once() {
+		let (base, held) = serving(holding(vec!["com.notion/mcp", "com.notion/mcp"])).await;
+
+		let found = search(&base, "notion").await.expect("the search answers");
+
+		let names: Vec<&str> = found.iter().map(|held| held.name.as_str()).collect();
+		assert_eq!(names, ["com.notion/mcp"]);
+		assert_eq!(*held.detailed.lock().expect("the stub records"), ["com.notion/mcp"]);
 	}
 
 	#[tokio::test]
