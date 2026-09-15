@@ -2,7 +2,11 @@ import { invoke } from "@tauri-apps/api/core"
 import { listen } from "@tauri-apps/api/event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-import type { Application, ApplicationsError } from "./application-port"
+import type {
+	Application,
+	ApplicationInstall,
+	ApplicationsError,
+} from "./application-port"
 import { applicationTransport, INSTALLED_EVENT } from "./application-transport"
 import { createFakeApplicationPort } from "./fake-application-port"
 
@@ -31,6 +35,19 @@ const NOTION: Application = {
 	config: { type: "http", url: "https://mcp.notion.com/mcp" },
 	tools: [],
 	install: { kind: "oauth" },
+}
+
+const RECORDED: ApplicationInstall = {
+	id: "i1",
+	conversationId: "c1",
+	application: "superset",
+	title: "Superset",
+	logo: "<svg/>",
+	scope: "space",
+	destinationId: "personal",
+	install: { kind: "key", secret: "SUPERSET_API_KEY" },
+	lastMessageSeq: 12,
+	createdAt: 1700000000000,
 }
 
 const REFUSED: ApplicationsError = { kind: "registryRefused", status: 503 }
@@ -67,6 +84,17 @@ describe("applicationTransport", () => {
 		await expect(applicationTransport.search("notion")).rejects.toEqual(REFUSED)
 	})
 
+	it("reads the installs recorded in one conversation", async () => {
+		hostInvoke.mockResolvedValue([RECORDED])
+
+		const recorded = await applicationTransport.installs("c1")
+
+		expect(hostInvoke).toHaveBeenCalledWith("application_installs", {
+			conversationId: "c1",
+		})
+		expect(recorded).toEqual([RECORDED])
+	})
+
 	it("hands on the payload of an install the host announced", async () => {
 		const unsubscribe = vi.fn()
 		hostListen.mockResolvedValue(unsubscribe)
@@ -94,12 +122,17 @@ describe("createFakeApplicationPort", () => {
 		const fake = createFakeApplicationPort()
 		fake.curated = [SUPERSET]
 		fake.found = [NOTION]
+		fake.recorded = [RECORDED]
 
 		expect(await fake.catalogue()).toEqual([SUPERSET])
 		expect(await fake.search("notion")).toEqual([NOTION])
+		expect(await fake.installs("c1")).toEqual([RECORDED])
+		expect(await fake.installs("c2")).toEqual([])
 		expect(fake.calls).toEqual([
 			{ command: "catalogue" },
 			{ command: "search", query: "notion" },
+			{ command: "installs", conversationId: "c1" },
+			{ command: "installs", conversationId: "c2" },
 		])
 	})
 

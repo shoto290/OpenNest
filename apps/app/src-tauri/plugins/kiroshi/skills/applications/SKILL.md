@@ -31,6 +31,10 @@ space of this conversation and the person, as these three destinations and no ot
 - `space`, every companion of the space of this conversation.
 - `user`, the person, in every space and for every companion.
 
+Ask it with `metadata.source` set to `application-scope:` followed by the name
+`connector_search` answered, exactly as it answered it, so `application-scope:linear` or
+`application-scope:com.notion/mcp`. It is never shown to the person.
+
 Install only in the destination the person picked, once, and never in a second one. Never
 pick it in their place.
 

@@ -22,15 +22,41 @@ export type ApplicationsError =
 
 export type ApplicationDestination = "companion" | "space" | "user"
 
-export type ApplicationInstalled = {
+export type InstallCase =
+	| { kind: "nothing" }
+	| { kind: "key"; secret: string }
+	| { kind: "oauth" }
+
+export type ApplicationInstall = {
+	id: string
+	conversationId: string
 	application: string
+	title: string
+	logo?: string
 	scope: ApplicationDestination
 	destinationId?: string
+	install: InstallCase
+	lastMessageSeq: number
+	createdAt: number
+}
+
+export type ApplicationInstalled = {
+	id?: string
+	conversationId: string
+	application: string
+	title: string
+	logo?: string
+	scope: ApplicationDestination
+	destinationId?: string
+	install: InstallCase
+	lastMessageSeq?: number
+	createdAt?: number
 }
 
 export type ApplicationPort = {
 	catalogue: () => Promise<Application[]>
 	search: (query: string) => Promise<Application[]>
+	installs: (conversationId: string) => Promise<ApplicationInstall[]>
 	onInstalled: (
 		listener: (installed: ApplicationInstalled) => void,
 	) => Promise<() => void>

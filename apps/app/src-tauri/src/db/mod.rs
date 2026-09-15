@@ -10,9 +10,10 @@ use tauri::{AppHandle, Runtime};
 
 pub use connection::DatabaseError;
 use repositories::{
-	messages, CatalogueRepository, ConversationsRepository, MessagesRepository, MissionsRepository,
-	RoutinesRepository, RuntimeContextRepository, SearchRepository, SectionsRepository,
-	SpaceSettingsRepository, SpacesRepository, UserRepository,
+	messages, ApplicationInstallsRepository, CatalogueRepository, ConversationsRepository,
+	MessagesRepository, MissionsRepository, RoutinesRepository, RuntimeContextRepository,
+	SearchRepository, SectionsRepository, SpaceSettingsRepository, SpacesRepository,
+	UserRepository,
 };
 
 #[derive(Clone)]
@@ -64,6 +65,7 @@ pub type DatabaseState = Result<Database, DatabaseError>;
 
 pub struct Database {
 	access: Access,
+	application_installs: ApplicationInstallsRepository,
 	catalogue: CatalogueRepository,
 	conversations: ConversationsRepository,
 	messages: MessagesRepository,
@@ -84,6 +86,7 @@ impl Database {
 		messages::sweep_unfinished(&mut connection)?;
 		let access = Access::new(connection);
 		Ok(Self {
+			application_installs: ApplicationInstallsRepository::new(access.clone()),
 			catalogue: CatalogueRepository::new(access.clone()),
 			conversations: ConversationsRepository::new(access.clone()),
 			messages: MessagesRepository::new(access.clone()),
@@ -113,6 +116,10 @@ impl Database {
 		T: Send + 'static,
 	{
 		self.access.call_mut(f).await
+	}
+
+	pub fn application_installs(&self) -> &ApplicationInstallsRepository {
+		&self.application_installs
 	}
 
 	pub fn catalogue(&self) -> &CatalogueRepository {

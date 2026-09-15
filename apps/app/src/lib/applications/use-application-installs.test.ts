@@ -3,29 +3,38 @@
 import { act, cleanup, renderHook } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+import type { ApplicationInstalled } from "./application-port"
 import { createFakeApplicationPort } from "./fake-application-port"
 import {
-	type ApplicationInstall,
+	type AnnouncedInstall,
 	useApplicationInstalls,
 } from "./use-application-installs"
 
 afterEach(cleanup)
 
-const listening = async (
-	onInstalled: (install: ApplicationInstall) => void,
-) => {
+const listening = async (onInstalled: (install: AnnouncedInstall) => void) => {
 	const port = createFakeApplicationPort()
 	const rendered = renderHook(() => useApplicationInstalls(port, onInstalled))
 	await act(async () => undefined)
 	return { port, rendered }
 }
 
+const announced = (
+	held: Pick<ApplicationInstalled, "scope"> & Partial<ApplicationInstalled>,
+): ApplicationInstalled => ({
+	conversationId: "c1",
+	application: "linear",
+	title: "Linear",
+	install: { kind: "oauth" },
+	...held,
+})
+
 describe("useApplicationInstalls", () => {
 	it("hands on an install announced for the user scope", async () => {
 		const onInstalled = vi.fn()
 		const { port } = await listening(onInstalled)
 
-		act(() => port.announce({ application: "linear", scope: "user" }))
+		act(() => port.announce(announced({ scope: "user" })))
 
 		expect(onInstalled).toHaveBeenCalledWith({
 			application: "linear",
@@ -38,18 +47,10 @@ describe("useApplicationInstalls", () => {
 		const { port } = await listening(onInstalled)
 
 		act(() =>
-			port.announce({
-				application: "linear",
-				scope: "space",
-				destinationId: "personal",
-			}),
+			port.announce(announced({ scope: "space", destinationId: "personal" })),
 		)
 		act(() =>
-			port.announce({
-				application: "linear",
-				scope: "companion",
-				destinationId: "scribe",
-			}),
+			port.announce(announced({ scope: "companion", destinationId: "scribe" })),
 		)
 
 		expect(onInstalled.mock.calls.map(([install]) => install.scope)).toEqual([
@@ -62,7 +63,7 @@ describe("useApplicationInstalls", () => {
 		const onInstalled = vi.fn()
 		const { port } = await listening(onInstalled)
 
-		act(() => port.announce({ application: "linear", scope: "space" }))
+		act(() => port.announce(announced({ scope: "space" })))
 
 		expect(onInstalled).not.toHaveBeenCalled()
 	})

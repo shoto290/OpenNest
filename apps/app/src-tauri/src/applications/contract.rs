@@ -64,13 +64,86 @@ pub enum Destination {
 	User,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InstallDraft {
+	pub conversation_id: String,
+	pub application: String,
+	pub title: String,
+	pub logo: Option<String>,
+	pub scope: Destination,
+	pub destination_id: Option<String>,
+	pub install: InstallCase,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApplicationInstall {
+	pub id: String,
+	pub conversation_id: String,
+	pub application: String,
+	pub title: String,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub logo: Option<String>,
+	pub scope: Destination,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub destination_id: Option<String>,
+	pub install: InstallCase,
+	pub last_message_seq: i64,
+	pub created_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ApplicationInstalled {
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub id: Option<String>,
+	pub conversation_id: String,
 	pub application: String,
+	pub title: String,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub logo: Option<String>,
 	pub scope: Destination,
-	#[serde(default, skip_serializing_if = "Option::is_none")]
+	#[serde(skip_serializing_if = "Option::is_none")]
 	pub destination_id: Option<String>,
+	pub install: InstallCase,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub last_message_seq: Option<i64>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub created_at: Option<i64>,
+}
+
+impl From<ApplicationInstall> for ApplicationInstalled {
+	fn from(record: ApplicationInstall) -> Self {
+		Self {
+			id: Some(record.id),
+			conversation_id: record.conversation_id,
+			application: record.application,
+			title: record.title,
+			logo: record.logo,
+			scope: record.scope,
+			destination_id: record.destination_id,
+			install: record.install,
+			last_message_seq: Some(record.last_message_seq),
+			created_at: Some(record.created_at),
+		}
+	}
+}
+
+impl From<InstallDraft> for ApplicationInstalled {
+	fn from(draft: InstallDraft) -> Self {
+		Self {
+			id: None,
+			conversation_id: draft.conversation_id,
+			application: draft.application,
+			title: draft.title,
+			logo: draft.logo,
+			scope: draft.scope,
+			destination_id: draft.destination_id,
+			install: draft.install,
+			last_message_seq: None,
+			created_at: None,
+		}
+	}
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -106,16 +179,9 @@ impl From<Install> for InstallCase {
 #[serde(tag = "outcome", rename_all = "camelCase")]
 pub enum ConnectorInstall {
 	#[serde(rename_all = "camelCase")]
-	Installed {
-		application: String,
-		scope: Destination,
-		install: InstallCase,
-	},
+	Installed { application: String, scope: Destination, install: InstallCase },
 	#[serde(rename_all = "camelCase")]
-	AlreadyInstalled {
-		application: String,
-		scope: Destination,
-	},
+	AlreadyInstalled { application: String, scope: Destination },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -222,6 +288,62 @@ mod tests {
 				"config": { "type": "http", "url": "https://superset.test/mcp" },
 				"tools": ["tasks_list"],
 				"install": { "kind": "key", "name": "Authorization", "secret": "SUPERSET_API_KEY" },
+			})
+		);
+	}
+
+	#[test]
+	fn a_recorded_install_crosses_to_the_front_under_the_names_it_reads() {
+		let record = ApplicationInstall {
+			id: "i1".to_owned(),
+			conversation_id: "c1".to_owned(),
+			application: "superset".to_owned(),
+			title: "Superset".to_owned(),
+			logo: Some("<svg/>".to_owned()),
+			scope: Destination::Space,
+			destination_id: Some("personal".to_owned()),
+			install: InstallCase::Key { secret: "SUPERSET_API_KEY".to_owned() },
+			last_message_seq: 12,
+			created_at: 1_700_000_000_000,
+		};
+
+		assert_eq!(
+			to_value(record).expect("it serialises"),
+			json!({
+				"id": "i1",
+				"conversationId": "c1",
+				"application": "superset",
+				"title": "Superset",
+				"logo": "<svg/>",
+				"scope": "space",
+				"destinationId": "personal",
+				"install": { "kind": "key", "secret": "SUPERSET_API_KEY" },
+				"lastMessageSeq": 12,
+				"createdAt": 1_700_000_000_000_i64,
+			})
+		);
+	}
+
+	#[test]
+	fn an_install_a_conversation_carries_nowhere_leaves_out_what_it_holds_no_value_for() {
+		let draft = InstallDraft {
+			conversation_id: "c1".to_owned(),
+			application: "paper".to_owned(),
+			title: "Paper".to_owned(),
+			logo: None,
+			scope: Destination::User,
+			destination_id: None,
+			install: InstallCase::Nothing,
+		};
+
+		assert_eq!(
+			to_value(ApplicationInstalled::from(draft)).expect("it serialises"),
+			json!({
+				"conversationId": "c1",
+				"application": "paper",
+				"title": "Paper",
+				"scope": "user",
+				"install": { "kind": "nothing" },
 			})
 		);
 	}

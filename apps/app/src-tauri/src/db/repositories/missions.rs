@@ -599,7 +599,7 @@ fn read(transaction: &Transaction<'_>, id: &str) -> Result<Mission, MissionError
 	held(transaction, id)?.ok_or_else(|| MissionError::UnknownMission { id: id.to_owned() })
 }
 
-fn oldest_first<T>(mut newest_first: Vec<T>) -> Vec<T> {
+pub(in crate::db) fn oldest_first<T>(mut newest_first: Vec<T>) -> Vec<T> {
 	newest_first.reverse();
 	newest_first
 }

@@ -3,8 +3,8 @@ use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 
 use super::contract::{
-	Application, ApplicationInstalled, ConnectorError, ConnectorInstall, ConnectorSearch,
-	ConnectorState, Destination, INSTALLED_EVENT,
+	Application, ApplicationInstall, ApplicationInstalled, ConnectorError, ConnectorInstall,
+	ConnectorSearch, ConnectorState, Destination, InstallDraft, INSTALLED_EVENT,
 };
 use super::{catalogue, registry};
 use crate::agent::protocol::HostAnswer;
@@ -94,16 +94,39 @@ impl<R: Runtime> ApplicationHost<R> {
 		}
 		let application = self.application(&asked.application).await?;
 		self.declare(&owner, &application).await?;
-		self.announce(ApplicationInstalled {
+		let draft = InstallDraft {
+			conversation_id: self.conversation_id.clone(),
 			application: application.name.clone(),
+			title: application.title.clone(),
+			logo: application.logo.clone(),
 			scope,
 			destination_id: destination_id(&owner),
-		})?;
+			install: application.install.clone().into(),
+		};
+		self.announce(self.recorded(draft).await)?;
 		Ok(ConnectorInstall::Installed {
 			application: application.name,
 			scope,
 			install: application.install.into(),
 		})
+	}
+
+	async fn recorded(&self, draft: InstallDraft) -> ApplicationInstalled {
+		match self.record(draft.clone()).await {
+			Ok(recorded) => recorded.into(),
+			Err(failure) => {
+				eprintln!(
+					"the install of {} in this conversation was not recorded: {failure:?}",
+					draft.application
+				);
+				draft.into()
+			}
+		}
+	}
+
+	async fn record(&self, draft: InstallDraft) -> Result<ApplicationInstall, ConnectorError> {
+		let state = self.state()?;
+		Ok(ready(&state)?.application_installs().record(draft).await?)
 	}
 
 	async fn status(&self, asked: Named) -> Result<ConnectorState, ConnectorError> {
@@ -284,6 +307,7 @@ mod tests {
 	use tauri::{App, Listener as _};
 
 	use super::*;
+	use crate::applications::contract::{ApplicationInstall, InstallCase};
 	use crate::applications::registry::tests::{holding, serving};
 	use crate::bundles;
 	use crate::mcp_oauth::commands::McpOauthState;
@@ -385,6 +409,15 @@ mod tests {
 			bundles::user::mcp_servers(&user_plugin(app)),
 		]
 		.map(|servers| servers.into_iter().map(|server| (server.name, server.config)).collect())
+	}
+
+	fn curated_logo(name: &str) -> Option<String> {
+		catalogue::curated()
+			.expect("the catalogue reads")
+			.into_iter()
+			.find(|held| held.name == name)
+			.unwrap_or_else(|| panic!("{name} is curated"))
+			.logo
 	}
 
 	fn curated_config(name: &str) -> Value {
@@ -492,8 +525,24 @@ mod tests {
 		cleaned(&app);
 	}
 
+	async fn recorded_in(app: &App<MockRuntime>, conversation_id: &str) -> Vec<ApplicationInstall> {
+		ready(&app.state::<db::DatabaseState>())
+			.expect("the database opens")
+			.application_installs()
+			.of_conversation(conversation_id.to_owned())
+			.await
+			.expect("the installs read")
+	}
+
+	fn without_moments(mut announced: Value) -> Value {
+		let held = announced.as_object_mut().expect("the event is an object");
+		held.remove("id");
+		held.remove("createdAt");
+		announced
+	}
+
 	#[tokio::test]
-	async fn an_install_announces_the_application_the_scope_and_the_id_of_its_destination() {
+	async fn an_install_announces_the_row_it_wrote_and_the_conversation_it_came_from() {
 		let app = a_host("announced").await;
 		let arriving = heard(&app);
 		let host = serving_in(&app, "c1", unreached().await);
@@ -506,14 +555,131 @@ mod tests {
 			announced.push(serde_json::from_str::<Value>(&payload).expect("the event is JSON"));
 		}
 
+		let expected = |scope: &str, destination: Value| {
+			let mut held = json!({
+				"conversationId": "c1",
+				"application": "superset",
+				"title": "Superset",
+				"logo": curated_logo("superset"),
+				"scope": scope,
+				"install": { "kind": "key", "secret": "SUPERSET_API_KEY" },
+				"lastMessageSeq": 0,
+			});
+			if let Some(id) = destination.as_str() {
+				held["destinationId"] = json!(id);
+			}
+			held
+		};
 		assert_eq!(
-			announced,
+			announced.iter().cloned().map(without_moments).collect::<Vec<_>>(),
 			[
-				json!({ "application": "superset", "scope": "companion", "destinationId": "b1" }),
-				json!({ "application": "superset", "scope": "space", "destinationId": "personal" }),
-				json!({ "application": "superset", "scope": "user" }),
+				expected("companion", json!("b1")),
+				expected("space", json!("personal")),
+				expected("user", Value::Null),
 			]
 		);
+		let mut announced_ids = announced
+			.iter()
+			.map(|event| event["id"].as_str().expect("the event names its row").to_owned())
+			.collect::<Vec<_>>();
+		announced_ids.sort();
+		let mut recorded_ids =
+			recorded_in(&app, "c1").await.into_iter().map(|held| held.id).collect::<Vec<_>>();
+		recorded_ids.sort();
+		assert_eq!(
+			announced_ids, recorded_ids,
+			"the announced rows are not the rows that were written"
+		);
+		for event in &announced {
+			assert!(event["createdAt"].as_i64().is_some_and(|held| held > 0), "got {event}");
+		}
+		cleaned(&app);
+	}
+
+	#[tokio::test]
+	async fn an_install_writes_one_row_carrying_the_application_the_destination_and_the_secret_name(
+	) {
+		let app = a_host("recorded").await;
+
+		serving_in(&app, "c1", unreached().await)
+			.answer(an_install("superset", "space"))
+			.await
+			.expect("the install answers");
+
+		let recorded = recorded_in(&app, "c1").await;
+		assert_eq!(recorded.len(), 1);
+		let held = &recorded[0];
+		assert_eq!(held.conversation_id, "c1");
+		assert_eq!(held.application, "superset");
+		assert_eq!(held.title, "Superset");
+		assert_eq!(held.scope, Destination::Space);
+		assert_eq!(held.destination_id.as_deref(), Some("personal"));
+		assert_eq!(held.install, InstallCase::Key { secret: "SUPERSET_API_KEY".to_owned() });
+		assert_eq!(held.logo, curated_logo("superset"));
+		assert_eq!(held.last_message_seq, 0);
+		assert!(held.created_at > 0, "the row holds no moment");
+		cleaned(&app);
+	}
+
+	#[tokio::test]
+	async fn an_install_the_scope_already_declared_writes_no_row() {
+		let app = a_host("kept-no-row").await;
+		bundles::space::set_mcp_server(
+			&space_plugin(&app),
+			"superset",
+			&json!({ "type": "http", "url": "https://mine.test/mcp" }),
+		)
+		.expect("the declaration lands");
+
+		serving_in(&app, "c1", unreached().await)
+			.answer(an_install("superset", "space"))
+			.await
+			.expect("the install answers");
+
+		assert_eq!(recorded_in(&app, "c1").await, Vec::new());
+		cleaned(&app);
+	}
+
+	#[tokio::test]
+	async fn an_install_whose_row_cannot_be_written_still_answers_installed_and_names_no_row() {
+		let app = a_host("unwritable-row").await;
+		let arriving = heard(&app);
+
+		let answer = serving_in(&app, "ghost", unreached().await)
+			.answer(an_install("paper", "user"))
+			.await
+			.expect("the install answers");
+
+		assert_eq!(answer["outcome"], "installed");
+		let announced = serde_json::from_str::<Value>(
+			&arriving.recv_timeout(Duration::from_secs(5)).expect("the event is announced"),
+		)
+		.expect("the event is JSON");
+		assert_eq!(announced.get("id"), None, "got {announced}");
+		assert_eq!(announced.get("lastMessageSeq"), None, "got {announced}");
+		assert_eq!(announced["conversationId"], "ghost");
+		assert_eq!(announced["application"], "paper");
+		assert_eq!(recorded_in(&app, "ghost").await, Vec::new());
+		cleaned(&app);
+	}
+
+	#[tokio::test]
+	async fn every_install_of_a_conversation_is_recorded_and_a_conversation_with_none_reads_empty() {
+		let app = a_host("read-installs").await;
+		let host = serving_in(&app, "c1", unreached().await);
+		for application in ["paper", "linear", "granola"] {
+			host.answer(an_install(application, "user")).await.expect("the install answers");
+		}
+
+		let mut read = recorded_in(&app, "c1")
+			.await
+			.into_iter()
+			.map(|held| held.application)
+			.collect::<Vec<_>>();
+		read.sort();
+
+		assert_eq!(read, ["granola", "linear", "paper"]);
+		assert_eq!(recorded_in(&app, "nowhere").await, Vec::new());
 		cleaned(&app);
 	}
 

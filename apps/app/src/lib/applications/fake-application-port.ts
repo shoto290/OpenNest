@@ -1,21 +1,24 @@
 import type {
 	Application,
+	ApplicationInstall,
 	ApplicationInstalled,
 	ApplicationPort,
 	ApplicationsError,
 } from "./application-port"
 
-export type ApplicationCommand = "catalogue" | "search"
+export type ApplicationCommand = "catalogue" | "search" | "installs"
 
 export type ApplicationCall = {
 	command: ApplicationCommand
 	query?: string
+	conversationId?: string
 }
 
 export type FakeApplicationPort = ApplicationPort & {
 	calls: ApplicationCall[]
 	curated: Application[]
 	found: Application[]
+	recorded: ApplicationInstall[]
 	refusals: Partial<Record<ApplicationCommand, ApplicationsError>>
 	announce: (installed: ApplicationInstalled) => void
 	isListening: () => boolean
@@ -36,6 +39,7 @@ export const createFakeApplicationPort = (): FakeApplicationPort => {
 		calls: [],
 		curated: [],
 		found: [],
+		recorded: [],
 		refusals: {},
 
 		catalogue: async () => {
@@ -46,6 +50,13 @@ export const createFakeApplicationPort = (): FakeApplicationPort => {
 		search: async (query) => {
 			answer({ command: "search", query })
 			return fake.found
+		},
+
+		installs: async (conversationId) => {
+			answer({ command: "installs", conversationId })
+			return fake.recorded.filter(
+				(held) => held.conversationId === conversationId,
+			)
 		},
 
 		onInstalled: async (listener) => {

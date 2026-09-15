@@ -54,9 +54,15 @@ export type AskedQuestion = {
 	multiSelect: boolean
 }
 
+export type QuestionSubject = {
+	kind: "applicationScope"
+	application: string
+}
+
 export type QuestionRequest = {
 	id: string
 	questions: AskedQuestion[]
+	subject?: QuestionSubject
 }
 
 export type QuestionAnswers = Record<string, string>
