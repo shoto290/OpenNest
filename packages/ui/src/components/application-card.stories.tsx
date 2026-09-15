@@ -48,9 +48,6 @@ const APPLICATION_STATUSES = listExhaustively<ApplicationCardStatus>({
 	connected: true,
 })
 
-const fontFamilyOf = (className: string) =>
-	probedStyleOf(className, "fontFamily")
-
 const expectInside = async (inner: Element, outer: Element) => {
 	const innerBox = inner.getBoundingClientRect()
 	const outerBox = outer.getBoundingClientRect()
@@ -108,7 +105,7 @@ export const Default = meta.story({
 		const name = slotIn(canvasElement, "application-card-name")
 		await expect(name).toHaveTextContent("Linear")
 		await expect(getComputedStyle(name).fontFamily).toBe(
-			fontFamilyOf("font-sans"),
+			probedStyleOf("font-sans", "fontFamily"),
 		)
 	},
 })
@@ -140,7 +137,7 @@ export const WithSlug = meta.story({
 		const name = slotIn(canvasElement, "application-card-name")
 		await expect(name).toHaveTextContent("forecast")
 		await expect(getComputedStyle(name).fontFamily).toBe(
-			fontFamilyOf("font-mono"),
+			probedStyleOf("font-mono", "fontFamily"),
 		)
 	},
 })
@@ -295,7 +292,7 @@ export const Receipt = meta.story({
 		await expect(getComputedStyle(footnote).borderTopWidth).toBe("1px")
 		await expect(name).toHaveTextContent("sentry")
 		await expect(getComputedStyle(name).fontFamily).toBe(
-			fontFamilyOf("font-mono"),
+			probedStyleOf("font-mono", "fontFamily"),
 		)
 		await expect(canvas.queryByRole("textbox")).not.toBeInTheDocument()
 		await expect(canvas.getByRole("form")).toHaveAccessibleName(
