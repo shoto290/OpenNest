@@ -17,10 +17,14 @@ import type {
 } from "@workspace/ui/components/tool-question"
 import { Button } from "@workspace/ui/components/ui/button"
 import { useCopyText } from "@workspace/ui/hooks/use-copy-text"
-import { cn } from "@workspace/ui/lib/utils"
+
+const SECONDARY_BUTTON = {
+	outline: { variant: "outline" },
+	quiet: { variant: "ghost", className: "text-muted-foreground" },
+} as const
 
 type ApplicationInstallSecondary = ToolQuestionExit & {
-	emphasis: "outline" | "quiet"
+	emphasis: keyof typeof SECONDARY_BUTTON
 }
 
 type ApplicationInstallProps = {
@@ -48,12 +52,9 @@ const ApplicationInstall = ({
 					</Button>
 					{secondary ? (
 						<Button
-							className={cn(
-								secondary.emphasis === "quiet" && "text-muted-foreground",
-							)}
+							{...SECONDARY_BUTTON[secondary.emphasis]}
 							onClick={secondary.onSelect}
 							type="button"
-							variant={secondary.emphasis === "quiet" ? "ghost" : "outline"}
 						>
 							{secondary.label}
 						</Button>
