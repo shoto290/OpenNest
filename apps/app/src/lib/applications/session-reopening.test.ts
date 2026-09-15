@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
+	type CompanionRosters,
 	createSessionReopener,
-	type ReopenedCompanions,
 	scopeOfOwner,
 } from "./session-reopening"
 
@@ -23,11 +23,9 @@ const ARCHIVIST = companionNamed("archivist", "Archivist")
 const SCRIBE = companionNamed("scribe", "Scribe")
 const DRAFTER = companionNamed("drafter", "Drafter")
 
-const ROSTERS: ReopenedCompanions = {
-	rosters: {
-		personal: [ARCHIVIST, SCRIBE],
-		work: [DRAFTER, ARCHIVIST],
-	},
+const ROSTERS: CompanionRosters = {
+	personal: [ARCHIVIST, SCRIBE],
+	work: [DRAFTER, ARCHIVIST],
 }
 
 const chatWith = (liveIds: string[], reopen = vi.fn(async () => ({}))) => ({
@@ -64,7 +62,7 @@ describe("session reopener", () => {
 		const reopen = vi.fn(async () => ({}))
 		const reopenSessions = createSessionReopener({
 			chat: chatWith(["archivist", "scribe"], reopen),
-			companions: () => ROSTERS,
+			rosters: () => ROSTERS,
 		})
 
 		await reopenSessions({
@@ -79,7 +77,7 @@ describe("session reopener", () => {
 		const reopen = vi.fn(async () => ({}))
 		const reopenSessions = createSessionReopener({
 			chat: chatWith(["archivist", "drafter"], reopen),
-			companions: () => ROSTERS,
+			rosters: () => ROSTERS,
 		})
 
 		await reopenSessions({
@@ -94,7 +92,7 @@ describe("session reopener", () => {
 		const reopen = vi.fn(async () => ({}))
 		const reopenSessions = createSessionReopener({
 			chat: chatWith(["archivist", "drafter"], reopen),
-			companions: () => ROSTERS,
+			rosters: () => ROSTERS,
 		})
 
 		await reopenSessions({ scope: { kind: "user" }, application: "Linear" })
@@ -106,7 +104,7 @@ describe("session reopener", () => {
 		const reopen = vi.fn(async () => ({}))
 		const reopenSessions = createSessionReopener({
 			chat: chatWith([], reopen),
-			companions: () => ROSTERS,
+			rosters: () => ROSTERS,
 		})
 
 		await reopenSessions({ scope: { kind: "user" }, application: "Linear" })
@@ -118,7 +116,7 @@ describe("session reopener", () => {
 	it("names the application once the reopening lands", async () => {
 		const reopenSessions = createSessionReopener({
 			chat: chatWith(["archivist"]),
-			companions: () => ROSTERS,
+			rosters: () => ROSTERS,
 		})
 
 		await reopenSessions({ scope: { kind: "user" }, application: "Linear" })
@@ -135,7 +133,7 @@ describe("session reopener", () => {
 		)
 		const reopenSessions = createSessionReopener({
 			chat: chatWith(["archivist", "drafter"], reopen as never),
-			companions: () => ROSTERS,
+			rosters: () => ROSTERS,
 		})
 
 		await reopenSessions({ scope: { kind: "user" }, application: "Linear" })

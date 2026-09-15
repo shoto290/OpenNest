@@ -1,13 +1,18 @@
 import { invoke } from "@tauri-apps/api/core"
+import { listen } from "@tauri-apps/api/event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { Application, ApplicationsError } from "./application-port"
-import { applicationTransport } from "./application-transport"
+import { applicationTransport, INSTALLED_EVENT } from "./application-transport"
 import { createFakeApplicationPort } from "./fake-application-port"
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }))
 
+vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn() }))
+
 const hostInvoke = vi.mocked(invoke)
+
+const hostListen = vi.mocked(listen)
 
 const SUPERSET: Application = {
 	name: "superset",
@@ -32,6 +37,7 @@ const REFUSED: ApplicationsError = { kind: "registryRefused", status: 503 }
 
 beforeEach(() => {
 	hostInvoke.mockReset()
+	hostListen.mockReset()
 })
 
 describe("applicationTransport", () => {
@@ -59,6 +65,27 @@ describe("applicationTransport", () => {
 		hostInvoke.mockRejectedValue(REFUSED)
 
 		await expect(applicationTransport.search("notion")).rejects.toEqual(REFUSED)
+	})
+
+	it("hands on the payload of an install the host announced", async () => {
+		const unsubscribe = vi.fn()
+		hostListen.mockResolvedValue(unsubscribe)
+		const onInstalled = vi.fn()
+
+		const stop = await applicationTransport.onInstalled(onInstalled)
+		const [event, handler] = hostListen.mock.calls[0] ?? []
+		handler?.({
+			event: INSTALLED_EVENT,
+			id: 1,
+			payload: { application: "linear", scope: "user" },
+		})
+
+		expect(event).toBe("application://installed")
+		expect(onInstalled).toHaveBeenCalledWith({
+			application: "linear",
+			scope: "user",
+		})
+		expect(stop).toBe(unsubscribe)
 	})
 })
 

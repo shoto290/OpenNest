@@ -57,7 +57,7 @@ export const initialApplicationsState: ApplicationsState = {
 const isRecord = (reason: unknown): reason is Record<string, unknown> =>
 	typeof reason === "object" && reason !== null
 
-export const refusalTextOf = (reason: unknown): string => {
+const refusalTextOf = (reason: unknown): string => {
 	if (reason instanceof Error) {
 		return reason.message
 	}
@@ -107,7 +107,12 @@ export const createApplicationsController = (
 
 	const isLastTyped = (typed: string) => state.query.trim() === typed
 
-	const runSearch = (typed: string) => {
+	const searchFor = (query: string) => {
+		const typed = query.trim()
+		if (typed === "") {
+			set({ registry: [], isSearching: false, hasSearchFailed: false })
+			return
+		}
 		set({ isSearching: true, hasSearchFailed: false })
 		void port.search(typed).then(
 			(found) => {
@@ -121,15 +126,6 @@ export const createApplicationsController = (
 				}
 			},
 		)
-	}
-
-	const searchFor = (query: string) => {
-		const typed = query.trim()
-		if (typed === "") {
-			set({ registry: [], isSearching: false, hasSearchFailed: false })
-			return
-		}
-		runSearch(typed)
 	}
 
 	const applicationNamed = (id: string) =>

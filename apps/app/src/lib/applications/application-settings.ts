@@ -29,7 +29,7 @@ import type { EnvOwner, EnvScope } from "../conversations/store-contract"
 import { toEnvironmentRows } from "../environment/environment-rows"
 import type { Environment } from "../environment/use-environment"
 
-export const EVERYTHING_CATEGORY = "everything"
+const EVERYTHING_CATEGORY = "everything"
 
 const SETUP_OF_INSTALL = {
 	nothing: "none",
@@ -82,7 +82,7 @@ const categoriesOf = (count: number): ApplicationCategory[] => [
 	},
 ]
 
-export const connectFor =
+const connectFor =
 	({ controller }: Connectors) =>
 	async (name: string, url: string) => {
 		await controller.connect(name, url)
@@ -99,13 +99,13 @@ const matching = (applications: Application[], typed: string) =>
 			.includes(typed),
 	)
 
-export type ApplicationsCatalogueSource = {
+type ApplicationsCatalogueSource = {
 	state: ApplicationsState
 	controller: ApplicationsController
 	target: InstallTarget
 }
 
-export const toApplicationsCatalogue = ({
+const toApplicationsCatalogue = ({
 	state,
 	controller,
 	target,
@@ -149,7 +149,7 @@ export const openedServerScope = (
 	owner: EnvOwner | null,
 ): EnvScope | null => (name && owner ? serverScopeOf(owner, name) : null)
 
-export type ServerEnvironmentSource = {
+type ServerEnvironmentSource = {
 	environment: Environment
 	opened: EnvScope | null
 	curated: Application[]
@@ -181,7 +181,7 @@ export const toServerEnvironmentSection = ({
 	}
 }
 
-export type ApplicationScopeSource = {
+type ApplicationScopeSource = {
 	applications: Applications
 	servers: McpServers
 	connectors: Connectors
@@ -189,7 +189,7 @@ export type ApplicationScopeSource = {
 	reopen: SessionReopener
 }
 
-export type ApplicationScope = ConnectorSettings & {
+type ApplicationScope = ConnectorSettings & {
 	mcpCatalogue?: ApplicationsCatalogueSection
 	onMcpServerCreate: (name: string, config: Record<string, unknown>) => void
 	onMcpServerChange: (
@@ -239,8 +239,8 @@ export const toApplicationScope = ({
 		onSettled: settleConnector,
 	})
 
-	const installTarget = (target: EnvOwner): InstallTarget => ({
-		owner: target,
+	const installTarget = (owned: EnvOwner): InstallTarget => ({
+		owner: owned,
 		connect: connectFor(connectors),
 		settle: async () => {
 			await servers.controller.reload()

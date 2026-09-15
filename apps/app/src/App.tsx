@@ -321,7 +321,7 @@ export function App() {
 		() =>
 			createSessionReopener({
 				chat: chat.controller,
-				companions: () => ({ rosters: roster.controller.getState().rosters }),
+				rosters: () => roster.controller.getState().rosters,
 			}),
 		[chat.controller, roster.controller],
 	)

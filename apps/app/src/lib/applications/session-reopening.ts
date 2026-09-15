@@ -12,9 +12,7 @@ export type ReopenedScope =
 	| { kind: "space"; id: string }
 	| { kind: "companion"; id: string }
 
-export type ReopenedCompanions = {
-	rosters: Record<string, Bot[]>
-}
+export type CompanionRosters = Record<string, Bot[]>
 
 export type SessionReopening = {
 	scope: ReopenedScope
@@ -23,7 +21,7 @@ export type SessionReopening = {
 
 export type SessionReopenerParts = {
 	chat: Pick<ChatController, "reopen" | "stateFor">
-	companions: () => ReopenedCompanions
+	rosters: () => CompanionRosters
 }
 
 export type SessionReopener = (reopening: SessionReopening) => Promise<void>
@@ -31,32 +29,27 @@ export type SessionReopener = (reopening: SessionReopening) => Promise<void>
 export const scopeOfOwner = (owner: EnvOwner): ReopenedScope =>
 	owner.kind === "bot" ? { kind: "companion", id: owner.id } : owner
 
-const everyCompanion = (rosters: Record<string, Bot[]>) => {
-	const held = new Map<string, Bot>()
-	for (const roster of Object.values(rosters)) {
-		for (const companion of roster) {
-			held.set(companion.id, companion)
-		}
-	}
-	return [...held.values()]
-}
+const everyCompanion = (rosters: CompanionRosters) => [
+	...new Map(
+		Object.values(rosters)
+			.flat()
+			.map((companion) => [companion.id, companion] as const),
+	).values(),
+]
 
-const companionsIn = (
-	{ rosters }: ReopenedCompanions,
-	scope: ReopenedScope,
-): Bot[] => {
-	if (scope.kind === "user") {
-		return everyCompanion(rosters)
-	}
+const companionsIn = (rosters: CompanionRosters, scope: ReopenedScope) => {
 	if (scope.kind === "space") {
 		return rosters[scope.id] ?? []
 	}
-	return everyCompanion(rosters).filter((held) => held.id === scope.id)
+	const every = everyCompanion(rosters)
+	return scope.kind === "user"
+		? every
+		: every.filter((companion) => companion.id === scope.id)
 }
 
 export const createSessionReopener = ({
 	chat,
-	companions,
+	rosters,
 }: SessionReopenerParts): SessionReopener => {
 	const reopenOne = async (companion: Bot, application: string) => {
 		const handle = await chat.reopen(companion.id)
@@ -75,7 +68,7 @@ export const createSessionReopener = ({
 	}
 
 	return async ({ scope, application }) => {
-		const live = companionsIn(companions(), scope).filter(
+		const live = companionsIn(rosters(), scope).filter(
 			(companion) => chat.stateFor(companion.id).sessionOpen,
 		)
 		const landings = await Promise.all(
