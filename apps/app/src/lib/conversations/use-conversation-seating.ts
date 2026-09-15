@@ -11,7 +11,11 @@ import type { RosterBot } from "@workspace/ui/components/roster"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { mentionedBotIdsIn } from "./mentions"
-import { toBotRows, unseatedBots } from "./roster-conversations"
+import {
+	mentionableBots,
+	toBotRows,
+	unseatedBots,
+} from "./roster-conversations"
 import type { Bot, Conversation } from "./store-contract"
 
 export type ConversationSeating = {
@@ -43,10 +47,11 @@ const seatMentionedIn = async ({
 	open,
 	text,
 }: MentionedSeating): Promise<boolean> => {
-	const absent = unseatedBots(bots, conversation)
+	const absent = new Set(unseatedBots(bots, conversation).map((bot) => bot.id))
+	const named = mentionedBotIdsIn(text, mentionableBots(bots, conversation))
 	let held = conversation
 
-	for (const botId of mentionedBotIdsIn(text, absent)) {
+	for (const botId of named.filter((id) => absent.has(id))) {
 		const seated = await seating.seat(conversation.id, botId)
 		if (!seated) {
 			return false

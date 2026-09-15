@@ -3072,19 +3072,24 @@ type SendingRoom = {
 	seat: ReturnType<typeof vi.fn>
 }
 
-const SENDING_ROOM_NAMES = ["Ada", "Vela", "Orb"]
+type SendingRoomFixture = {
+	seatedNames?: string[]
+	absentNames?: string[]
+	refuse?: ConversationSeating["seat"]
+}
 
-const sendingRoomWith = async (
-	refuse: ConversationSeating["seat"] | null = null,
-): Promise<SendingRoom> => {
+const sendingRoomWith = async ({
+	seatedNames = ["Ada"],
+	absentNames = ["Vela", "Orb"],
+	refuse,
+}: SendingRoomFixture = {}): Promise<SendingRoom> => {
 	const store = createFakeTranscriptStore()
-	const bots = await seatBots(store, SPACE, SENDING_ROOM_NAMES)
-	const [host] = bots
+	const bots = await seatBots(store, SPACE, [...seatedNames, ...absentNames])
 	const conversation = await store.createConversation({
 		spaceId: SPACE,
 		sectionId: null,
 		title: "Walls",
-		botIds: [host.id],
+		botIds: bots.slice(0, seatedNames.length).map((bot) => bot.id),
 	})
 	const driver = createScriptedDriver()
 	const runtimes = createConversationRuntimes(driver, store, {})
@@ -3206,8 +3211,23 @@ describe("ThreadScreen sending a message that mentions absent companions", () =>
 		])
 	})
 
+	it("resolves a longer seated name over the unseated companion it starts with", async () => {
+		const room = await sendingRoomWith({
+			seatedNames: ["Rei v"],
+			absentNames: ["Rei"],
+		})
+
+		await sendInComposer("@Rei v hold the wall")
+
+		expect(seatedBotIds(room)).toEqual([])
+		expect(await storedTexts(room)).toEqual([
+			`<@${room.idOf("Rei v")}> hold the wall`,
+		])
+		expect(summonedBotIds(room)).toEqual([room.idOf("Rei v")])
+	})
+
 	it("keeps the text, stores nothing and starts no turn when seating is refused", async () => {
-		const room = await sendingRoomWith(() => Promise.resolve(null))
+		const room = await sendingRoomWith({ refuse: () => Promise.resolve(null) })
 
 		await sendInComposer("@Vela hold the north wall")
 
