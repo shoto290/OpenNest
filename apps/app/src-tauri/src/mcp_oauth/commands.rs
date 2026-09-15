@@ -270,21 +270,16 @@ mod tests {
 		}
 	}
 
-	fn a_host(name: &str) -> (tauri::App<tauri::test::MockRuntime>, std::path::PathBuf) {
+	#[tokio::test]
+	async fn the_connectors_of_the_user_are_the_servers_the_user_plugin_declares() {
 		let mut context = mock_context(noop_assets());
 		context.config_mut().identifier =
-			format!("com.kiroshi.mcp-oauth-{name}-{}", std::process::id()).into();
+			format!("com.kiroshi.mcp-oauth-user-connectors-{}", std::process::id()).into();
 		let app = mock_builder().build(context).expect("the app builds");
 		let data = app.path().app_data_dir().expect("the data dir is named");
 		let _ = std::fs::remove_dir_all(&data);
 		app.manage(McpOauthState::default());
 		app.manage(ConnectorReports::default());
-		(app, data)
-	}
-
-	#[tokio::test]
-	async fn the_connectors_of_the_user_are_the_servers_the_user_plugin_declares() {
-		let (app, data) = a_host("user-connectors");
 		let path = bundles::user::path(app.handle()).expect("the plugin has a home");
 		bundles::user::lay_down(&path).expect("the plugin is laid down");
 		for name in ["clock", "granola"] {
