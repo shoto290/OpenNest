@@ -40,6 +40,16 @@ export type MissionNote = {
 	payload: unknown
 }
 
+export type MissionOutcome = "done" | "failed"
+
+export type MissionClosing = {
+	source: string
+	outcome: MissionOutcome
+	summary: string
+}
+
+export const PERSON_SOURCE = "person"
+
 export type MissionEntry = {
 	kind: MissionEventKind
 	source: string

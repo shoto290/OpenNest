@@ -1,12 +1,14 @@
 import { invoke } from "@tauri-apps/api/core"
 import { listen } from "@tauri-apps/api/event"
 
-import type {
-	ConversationMissions,
-	Mission,
-	MissionChanged,
-	MissionDetail,
-	MissionOnBoard,
+import {
+	type ConversationMissions,
+	type Mission,
+	type MissionChanged,
+	type MissionDetail,
+	type MissionOnBoard,
+	type MissionOutcome,
+	PERSON_SOURCE,
 } from "./mission-contract"
 
 export const MISSION_CHANGED_EVENT = "mission://changed"
@@ -18,6 +20,11 @@ export const missionsTransport = {
 		invoke<Mission>("mission_reported", { missionId, turnId }),
 	answered: (missionId: string, seq: number) =>
 		invoke<Mission>("mission_answered", { missionId, seq }),
+	close: (missionId: string, outcome: MissionOutcome, summary: string) =>
+		invoke<Mission>("mission_close", {
+			missionId,
+			closing: { source: PERSON_SOURCE, outcome, summary },
+		}),
 	detail: (missionId: string) =>
 		invoke<MissionDetail>("mission_detail", { missionId }),
 	rosterBlock: (conversationId: string, botId: string) =>

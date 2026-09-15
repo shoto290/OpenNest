@@ -2,7 +2,11 @@ import { invoke } from "@tauri-apps/api/core"
 import { listen } from "@tauri-apps/api/event"
 import { beforeEach, expect, it, vi } from "vitest"
 
-import type { MissionChanged, MissionDetail } from "./mission-contract"
+import {
+	type MissionChanged,
+	type MissionDetail,
+	PERSON_SOURCE,
+} from "./mission-contract"
 import { MISSION_CHANGED_EVENT, missionsTransport } from "./missions-transport"
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }))
@@ -48,6 +52,30 @@ it("reads one mission and its events from the host", async () => {
 	expect(hostInvoke).toHaveBeenCalledWith("mission_detail", {
 		missionId: "m-1",
 	})
+})
+
+it("closes a mission as the person", async () => {
+	hostInvoke.mockResolvedValueOnce(DETAIL.mission)
+
+	await missionsTransport.close("m-1", "done", "The thread ships.")
+
+	expect(hostInvoke).toHaveBeenCalledWith("mission_close", {
+		missionId: "m-1",
+		closing: {
+			source: PERSON_SOURCE,
+			outcome: "done",
+			summary: "The thread ships.",
+		},
+	})
+})
+
+it("answers a close with the mission the host wrote", async () => {
+	const closed = { ...DETAIL.mission, state: "done" as const, closedAt: 2 }
+	hostInvoke.mockResolvedValueOnce(closed)
+
+	await expect(
+		missionsTransport.close("m-1", "done", "The thread ships."),
+	).resolves.toEqual(closed)
 })
 
 it("reads the open and the done missions of a conversation", async () => {
