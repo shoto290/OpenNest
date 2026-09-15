@@ -70,20 +70,33 @@ export const Small = meta.story({
 	play: ({ canvasElement }) => expectSlotWidth(canvasElement, 28),
 })
 
+export const ExtraSmall = meta.story({
+	args: { size: "xsm" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The 24 slot of the application editor header, beside the name of the application being edited.",
+			},
+		},
+	},
+	play: ({ canvasElement }) => expectSlotWidth(canvasElement, 24),
+})
+
 export const Inline = meta.story({
 	args: { size: "inline" },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The 22 slot that sits on the line of a question, before its text. Pick `ExtraSmall` for the smallest slot.",
+					"The 22 slot that sits on the line of a question, before its text. Pick `Smallest` for the smallest slot.",
 			},
 		},
 	},
 	play: ({ canvasElement }) => expectSlotWidth(canvasElement, 22),
 })
 
-export const ExtraSmall = meta.story({
+export const Smallest = meta.story({
 	args: { size: "xs" },
 	parameters: {
 		docs: {
@@ -93,14 +106,4 @@ export const ExtraSmall = meta.story({
 		},
 	},
 	play: ({ canvasElement }) => expectSlotWidth(canvasElement, 20),
-})
-
-export const ExtraSmall = meta.story({
-	args: { size: "xsm" },
-	play: async ({ canvasElement }) => {
-		const slot = canvasElement.querySelector<HTMLElement>(
-			'[data-slot="application-mark"]',
-		)
-		await expect(slot?.getBoundingClientRect().width).toBe(24)
-	},
 })
