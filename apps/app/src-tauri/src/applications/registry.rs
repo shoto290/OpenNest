@@ -193,7 +193,7 @@ fn unreached(error: reqwest::Error) -> ApplicationsError {
 
 fn descriptor(server: Server) -> Option<Application> {
 	let (config, install) = match transport(&server)? {
-		Transport::Remote(remote) => match asked(&remote.headers) {
+		Transport::Remote(remote) => match asked_header(&remote.headers) {
 			Some(key) => (headed_config(remote), key),
 			None => (remote_config(remote), Install::Oauth),
 		},
@@ -274,11 +274,31 @@ fn reference(declared: &str) -> String {
 }
 
 fn asked(inputs: &[Input]) -> Option<Install> {
-	inputs.iter().find(|input| input.is_required && input.is_secret).map(|input| Install::Key {
+	inputs.iter().find(|input| required_secret(input)).map(key)
+}
+
+fn asked_header(headers: &[Input]) -> Option<Install> {
+	headers.iter().find(|header| required_secret(header) || carries_placeholder(header)).map(key)
+}
+
+fn required_secret(input: &Input) -> bool {
+	input.is_required && input.is_secret
+}
+
+fn carries_placeholder(header: &Input) -> bool {
+	header
+		.value
+		.as_deref()
+		.and_then(|template| template.split_once('{'))
+		.is_some_and(|(_, opened)| opened.contains('}'))
+}
+
+fn key(input: &Input) -> Install {
+	Install::Key {
 		name: input.name.clone(),
 		secret: variable(&input.name),
 		description: input.description.clone(),
-	})
+	}
 }
 
 fn variable(declared: &str) -> String {
@@ -394,7 +414,7 @@ mod tests {
 	}
 
 	#[test]
-	fn a_declared_value_with_no_part_to_fill_answers_the_bare_reference() {
+	fn a_required_secret_header_answers_the_key_case_whatever_its_declared_value() {
 		let application = described(json!({
 			"name": "io.test/fixed",
 			"remotes": [{
@@ -404,7 +424,50 @@ mod tests {
 			}],
 		}));
 
+		assert!(
+			matches!(application.install, Install::Key { .. }),
+			"got {:?}",
+			application.install
+		);
 		assert_eq!(application.config["headers"], json!({ "X-Api-Key": "${X_API_KEY}" }));
+	}
+
+	fn a_remote_declaring(header: Value) -> Application {
+		described(json!({
+			"name": "ai.bowmark/bowmark",
+			"remotes": [{
+				"type": "streamable-http",
+				"url": "https://bowmark.test/mcp",
+				"headers": [header],
+			}],
+		}))
+	}
+
+	#[test]
+	fn a_header_value_carrying_a_placeholder_answers_the_key_case_without_any_flag() {
+		let application =
+			a_remote_declaring(json!({ "name": "Authorization", "value": "Bearer {api_key}" }));
+
+		assert_eq!(
+			application.install,
+			Install::Key {
+				name: "Authorization".to_owned(),
+				secret: "AUTHORIZATION".to_owned(),
+				description: None,
+			}
+		);
+		assert_eq!(
+			application.config["headers"],
+			json!({ "Authorization": "Bearer ${AUTHORIZATION}" })
+		);
+	}
+
+	#[test]
+	fn a_static_header_value_without_any_flag_answers_oauth_and_writes_no_header() {
+		let application = a_remote_declaring(json!({ "name": "X-Client", "value": "kiroshi" }));
+
+		assert_eq!(application.install, Install::Oauth);
+		assert!(application.config.get("headers").is_none(), "got {}", application.config);
 	}
 
 	#[test]
