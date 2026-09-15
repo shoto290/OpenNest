@@ -76,22 +76,23 @@ export const createSessionReopener = ({
 			description: i18n.t("bots:applications.reopen.landed.description"),
 		})
 
+	const isMidTurn = (companion: Bot) =>
+		isTurnBusy(chat.stateFor(companion.id).turn)
+
 	return async ({ scope, application }) => {
 		const live = companionsIn(rosters(), scope).filter(
 			(companion) => chat.stateFor(companion.id).sessionOpen,
 		)
-		const midTurn = live.filter((companion) =>
-			isTurnBusy(chat.stateFor(companion.id).turn),
-		)
-		for (const companion of midTurn) {
+		const waiting = live.filter(isMidTurn)
+		for (const companion of waiting) {
 			void reopenOne(companion, application)
 		}
 		const landings = await Promise.all(
 			live
-				.filter((companion) => !midTurn.includes(companion))
+				.filter((companion) => !isMidTurn(companion))
 				.map((companion) => reopenOne(companion, application)),
 		)
-		if (landings.some(Boolean) || midTurn.length > 0) {
+		if (landings.some(Boolean) || waiting.length > 0) {
 			announceLanding(application)
 		}
 	}

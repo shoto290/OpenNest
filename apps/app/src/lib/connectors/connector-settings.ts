@@ -52,12 +52,10 @@ const isLanded = (
 	name: string,
 	landing: ConnectorLanding,
 ) => {
-	const status = controller
-		.getState()
-		.rows.find((row) => row.name === name)?.status
-	return landing === "connected"
-		? status === "connected"
-		: status !== "connected"
+	const isConnected =
+		controller.getState().rows.find((row) => row.name === name)?.status ===
+		"connected"
+	return landing === "connected" ? isConnected : !isConnected
 }
 
 const settling =
