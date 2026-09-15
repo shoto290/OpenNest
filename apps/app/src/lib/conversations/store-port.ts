@@ -142,6 +142,12 @@ export type TranscriptStore = TranscriptPort & {
 		text: string,
 	) => Promise<BotSkill>
 	deleteUserPluginSkillFile: (skillId: string, path: string) => Promise<void>
+	userPluginMcpServers: () => Promise<BotMcpServer[]>
+	setUserPluginMcpServer: (
+		name: string,
+		config: Record<string, unknown>,
+	) => Promise<BotMcpServer>
+	deleteUserPluginMcpServer: (name: string) => Promise<void>
 	userPluginHistory: () => Promise<BotHistoryEntry[]>
 	userPluginHistoryDiff: (
 		oldestCommitId: string,

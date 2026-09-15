@@ -204,17 +204,26 @@ const learnSkill = (): BotSkill => ({
 	files: [],
 })
 
-const scopeKey = (scope: EnvScope): string =>
-	scope.kind === "server"
+const scopeKey = (scope: EnvScope): string => {
+	if (scope.kind === "user") {
+		return scope.kind
+	}
+	return scope.kind === "server"
 		? `server:${scope.name}:${scopeKey(scope.owner)}`
 		: `${scope.kind}:${scope.id}`
+}
+
+const USER_SCOPE: EnvScope = { kind: "user" }
 
 const scopeChain = (scope: EnvScope): EnvScope[] => {
-	if (scope.kind === "space") {
+	if (scope.kind === "user") {
 		return [scope]
 	}
+	if (scope.kind === "space") {
+		return [scope, USER_SCOPE]
+	}
 	if (scope.kind === "bot") {
-		return [scope, { kind: "space", id: scope.spaceId }]
+		return [scope, { kind: "space", id: scope.spaceId }, USER_SCOPE]
 	}
 	return [scope, ...scopeChain(scope.owner)]
 }
@@ -1306,6 +1315,13 @@ export const createFakeTranscriptStore = (
 
 		deleteUserPluginSkillFile: (skillId: string, path: string) =>
 			dropSkillFile(USER_PLUGIN, skillId, path),
+
+		userPluginMcpServers: () => listServers(USER_PLUGIN),
+
+		setUserPluginMcpServer: (name: string, config: Record<string, unknown>) =>
+			putServer(USER_PLUGIN, name, config),
+
+		deleteUserPluginMcpServer: (name: string) => dropServer(USER_PLUGIN, name),
 
 		userPluginHistory: () => Promise.resolve(historyOf(USER_PLUGIN)),
 

@@ -572,11 +572,15 @@ async fn runtime_identity<R: Runtime>(
 	if let Some(root) = root.as_deref() {
 		reconcile_bot(database, root, &bot).await;
 	}
-	let serving: Vec<PathBuf> =
-		[system.clone(), space.clone(), root.as_deref().map(|root| bundles::dir(root, &bot.id))]
-			.into_iter()
-			.flatten()
-			.collect();
+	let serving: Vec<PathBuf> = [
+		system.clone(),
+		user.clone(),
+		space.clone(),
+		root.as_deref().map(|root| bundles::dir(root, &bot.id)),
+	]
+	.into_iter()
+	.flatten()
+	.collect();
 	let server_env = served_environment(app, sidecar, &bot.id, &space_id, &serving).await;
 	RuntimeIdentity { bundle, working_dir: bot.working_dir, server_env }
 }

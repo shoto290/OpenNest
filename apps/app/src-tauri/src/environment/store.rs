@@ -16,6 +16,7 @@ const SPACE_DIR: &str = "space";
 const BOT_DIR: &str = "bot";
 const SERVER_DIR: &str = "server";
 const PERSON_DIR: &str = "person";
+const USER_DIR: &str = "user";
 
 static WRITES: Mutex<()> = Mutex::new(());
 
@@ -148,9 +149,9 @@ fn copied_scope(root: &Path, source: &EnvScope, target: &EnvScope) -> Result<(),
 
 fn owners(owner: &EnvOwner) -> Vec<EnvOwner> {
 	match owner {
-		EnvOwner::Space { .. } => vec![owner.clone()],
+		EnvOwner::User | EnvOwner::Space { .. } => vec![owner.clone()],
 		EnvOwner::Bot { space_id, .. } => {
-			vec![EnvOwner::Space { id: space_id.clone() }, owner.clone()]
+			vec![EnvOwner::User, EnvOwner::Space { id: space_id.clone() }, owner.clone()]
 		}
 	}
 }
@@ -220,7 +221,8 @@ fn chain(scope: &EnvScope) -> Vec<EnvScope> {
 
 fn broader(scope: &EnvScope) -> Option<EnvScope> {
 	match scope {
-		EnvScope::Space { .. } | EnvScope::Person => None,
+		EnvScope::User | EnvScope::Person => None,
+		EnvScope::Space { .. } => Some(EnvScope::User),
 		EnvScope::Bot { space_id, .. } => Some(EnvScope::Space { id: space_id.clone() }),
 		EnvScope::Server { owner, .. } => Some(owner.into()),
 	}
@@ -232,6 +234,7 @@ fn file(root: &Path, scope: &EnvScope) -> Result<PathBuf, EnvError> {
 
 fn scope_dir(root: &Path, scope: &EnvScope) -> Result<PathBuf, EnvError> {
 	match scope {
+		EnvScope::User => Ok(root.join(USER_DIR)),
 		EnvScope::Space { id } => Ok(root.join(SPACE_DIR).join(segment(id)?)),
 		EnvScope::Bot { id, .. } => Ok(root.join(BOT_DIR).join(segment(id)?)),
 		EnvScope::Server { name, owner } => Ok(servers_dir(root, owner)?.join(segment(name)?)),
@@ -240,11 +243,12 @@ fn scope_dir(root: &Path, scope: &EnvScope) -> Result<PathBuf, EnvError> {
 }
 
 fn servers_dir(root: &Path, owner: &EnvOwner) -> Result<PathBuf, EnvError> {
-	let (kind, id) = match owner {
-		EnvOwner::Space { id } => (SPACE_DIR, id),
-		EnvOwner::Bot { id, .. } => (BOT_DIR, id),
-	};
-	Ok(root.join(SERVER_DIR).join(kind).join(segment(id)?))
+	let servers = root.join(SERVER_DIR);
+	match owner {
+		EnvOwner::User => Ok(servers.join(USER_DIR)),
+		EnvOwner::Space { id } => Ok(servers.join(SPACE_DIR).join(segment(id)?)),
+		EnvOwner::Bot { id, .. } => Ok(servers.join(BOT_DIR).join(segment(id)?)),
+	}
 }
 
 fn segment(value: &str) -> Result<&str, EnvError> {
@@ -506,6 +510,105 @@ mod tests {
 			holding(&[("ONLY_SPACE", "space"), ("SHARED", "bot")])
 		);
 		assert_eq!(resolved.per_server["weather"], holding(&[("TOKEN", "space")]));
+	}
+
+	fn a_user_server(name: &str) -> EnvScope {
+		EnvScope::Server { name: name.to_owned(), owner: EnvOwner::User }
+	}
+
+	#[test]
+	fn a_user_server_is_filed_under_a_path_that_names_no_space_and_no_bot() {
+		let root = a_root("user-server-path");
+		assert_eq!(
+			file(&root, &a_user_server("clock")).expect("the path"),
+			root.join("server/user/clock/.env")
+		);
+	}
+
+	#[test]
+	fn the_environment_of_a_user_server_reaches_a_bot_whose_space_declares_none_of_that_name() {
+		let root = a_root("resolve-user-servers");
+		set(&root, &a_user_server("granola"), "REGION", "eu").expect("the user scope keeps it");
+
+		let resolved = resolve(&root, &an_owner()).expect("the store reads");
+
+		assert_eq!(resolved.per_server["granola"], holding(&[("REGION", "eu")]));
+	}
+
+	#[test]
+	fn resolution_lays_the_user_servers_under_the_space_and_the_bot() {
+		let root = a_root("resolve-user-order");
+		let space_clock = EnvScope::Server {
+			name: "clock".to_owned(),
+			owner: EnvOwner::Space { id: "s1".to_owned() },
+		};
+		set(&root, &a_user_server("clock"), "SHARED", "user").expect("the user scope keeps it");
+		set(&root, &a_user_server("clock"), "SPACE_WINS", "user").expect("the user scope keeps it");
+		set(&root, &a_user_server("clock"), "ONLY_USER", "user")
+			.expect("the user scope keeps it");
+		set(&root, &space_clock, "SPACE_WINS", "space").expect("the space keeps it");
+		set(&root, &space_clock, "SHARED", "space").expect("the space keeps it");
+		set(&root, &a_server(), "SHARED", "bot").expect("the bot keeps it");
+
+		let resolved = resolve(&root, &an_owner()).expect("the store reads");
+
+		assert_eq!(
+			resolved.per_server["clock"],
+			holding(&[("ONLY_USER", "user"), ("SHARED", "bot"), ("SPACE_WINS", "space")])
+		);
+	}
+
+	#[test]
+	fn the_user_owner_resolves_only_what_the_user_scope_holds() {
+		let root = a_root("resolve-user-owner");
+		set(&root, &a_user_server("clock"), "REGION", "eu").expect("the user scope keeps it");
+		set(&root, &a_server(), "REGION", "bot").expect("the bot keeps it");
+
+		let resolved = resolve(&root, &EnvOwner::User).expect("the store reads");
+
+		assert_eq!(resolved.per_server["clock"], holding(&[("REGION", "eu")]));
+		assert_eq!(
+			server_scopes(&root, &EnvOwner::User).expect("the store reads"),
+			vec![a_user_server("clock")]
+		);
+	}
+
+	#[test]
+	fn the_base_of_a_bot_lays_the_user_scope_under_its_space_and_the_narrower_value_is_served() {
+		let root = a_root("resolve-user-base-bot");
+		set(&root, &EnvScope::User, "ONLY_USER", "user").expect("the user scope keeps it");
+		set(&root, &EnvScope::User, "SPACE_WINS", "user").expect("the user scope keeps it");
+		set(&root, &EnvScope::User, "BOT_WINS", "user").expect("the user scope keeps it");
+		set(&root, &a_space(), "SPACE_WINS", "space").expect("the space keeps it");
+		set(&root, &a_bot(), "BOT_WINS", "bot").expect("the bot keeps it");
+
+		let resolved = resolve(&root, &an_owner()).expect("the store reads");
+
+		assert_eq!(
+			resolved.base,
+			holding(&[("BOT_WINS", "bot"), ("ONLY_USER", "user"), ("SPACE_WINS", "space")])
+		);
+	}
+
+	#[test]
+	fn the_base_of_a_space_lays_the_user_scope_under_it_and_the_space_value_is_served() {
+		let root = a_root("resolve-user-base-space");
+		set(&root, &EnvScope::User, "ONLY_USER", "user").expect("the user scope keeps it");
+		set(&root, &EnvScope::User, "SHARED", "user").expect("the user scope keeps it");
+		set(&root, &a_space(), "SHARED", "space").expect("the space keeps it");
+
+		let resolved =
+			resolve(&root, &EnvOwner::Space { id: "s1".to_owned() }).expect("the store reads");
+
+		assert_eq!(resolved.base, holding(&[("ONLY_USER", "user"), ("SHARED", "space")]));
+		assert_eq!(
+			names(&list(&root, &a_space()).expect("the chain reads")),
+			vec![
+				("ONLY_USER", &EnvScope::User, &EnvScope::User),
+				("SHARED", &a_space(), &a_space()),
+				("SHARED", &EnvScope::User, &a_space()),
+			]
+		);
 	}
 
 	#[test]

@@ -44,7 +44,7 @@ export const createFakeConnectorPort = (): FakeConnectorPort => {
 
 	const fake: FakeConnectorPort = {
 		calls: [],
-		rows: { bot: [], space: [] },
+		rows: { user: [], bot: [], space: [] },
 		refusals: {},
 
 		status: async (owner) => {

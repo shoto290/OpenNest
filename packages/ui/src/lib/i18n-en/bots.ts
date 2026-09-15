@@ -520,6 +520,7 @@ const bots = {
 				"Add a secret to pass a value to what runs here. You won't see the value again.",
 		},
 		scope: {
+			user: "You",
 			space: "Space",
 			bot: "Companion",
 			server: "Connector",

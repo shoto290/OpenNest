@@ -57,6 +57,7 @@ impl ConnectionKind {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum EnvOwner {
+	User,
 	#[serde(rename_all = "camelCase")]
 	Space { id: String },
 	#[serde(rename_all = "camelCase")]
@@ -66,6 +67,7 @@ pub enum EnvOwner {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum EnvScope {
+	User,
 	#[serde(rename_all = "camelCase")]
 	Space { id: String },
 	#[serde(rename_all = "camelCase")]
@@ -79,6 +81,7 @@ pub enum EnvScope {
 impl From<&EnvOwner> for EnvScope {
 	fn from(owner: &EnvOwner) -> Self {
 		match owner {
+			EnvOwner::User => EnvScope::User,
 			EnvOwner::Space { id } => EnvScope::Space { id: id.clone() },
 			EnvOwner::Bot { id, space_id } => {
 				EnvScope::Bot { id: id.clone(), space_id: space_id.clone() }

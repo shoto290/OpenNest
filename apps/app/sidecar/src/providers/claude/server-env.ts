@@ -175,6 +175,7 @@ export const resolvedServers = (request: SessionRequest): ResolvedServers =>
 			? sessionServers({
 					pluginPath: request.pluginPath,
 					systemPluginPath: request.systemPluginPath,
+					userPluginPath: request.userPluginPath,
 					spacePluginPath: request.spacePluginPath,
 				})
 			: {},

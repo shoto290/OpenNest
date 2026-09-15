@@ -27,6 +27,7 @@ export const bundleServers = (pluginPath: string): Servers => {
 type SessionPlugins = {
 	pluginPath: string
 	systemPluginPath?: string
+	userPluginPath?: string
 	spacePluginPath?: string
 }
 
@@ -36,9 +37,11 @@ const layeredServers = (pluginPath?: string): Servers =>
 export const sessionServers = ({
 	pluginPath,
 	systemPluginPath,
+	userPluginPath,
 	spacePluginPath,
 }: SessionPlugins): Servers => ({
 	...layeredServers(systemPluginPath),
+	...layeredServers(userPluginPath),
 	...layeredServers(spacePluginPath),
 	...bundleServers(pluginPath),
 })

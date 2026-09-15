@@ -134,6 +134,7 @@ export type BotMcpServer = {
 }
 
 export type EnvOwner =
+	| { kind: "user" }
 	| { kind: "space"; id: string }
 	| { kind: "bot"; id: string; spaceId: string }
 

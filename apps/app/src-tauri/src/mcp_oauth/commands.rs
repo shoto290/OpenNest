@@ -218,7 +218,7 @@ impl Readings<'_> {
 fn last_reported(reports: &ConnectorReports, owner: &EnvOwner, name: &str) -> Option<Standing> {
 	match owner {
 		EnvOwner::Bot { id, .. } => reports.last(id, name),
-		EnvOwner::Space { .. } => None,
+		EnvOwner::User | EnvOwner::Space { .. } => None,
 	}
 }
 
@@ -231,6 +231,8 @@ fn declared_servers<R: Runtime>(
 			.map(|root| bundles::mcp_servers(&root, id))
 			.ok_or_else(|| EnvError::Unreadable { detail: NO_BUNDLES.to_owned() }),
 		EnvOwner::Space { id } => Ok(bundles::space::laid_down(app, id)
+			.map_or_else(Vec::new, |bundle| bundles::mcp_servers_at(&bundle))),
+		EnvOwner::User => Ok(bundles::user::laid_down(app)
 			.map_or_else(Vec::new, |bundle| bundles::mcp_servers_at(&bundle))),
 	}
 }
@@ -259,12 +261,41 @@ async fn revoked<R: Runtime>(app: &AppHandle<R>, url: &str, held: &Values) -> Di
 mod tests {
 	use super::*;
 	use crate::mcp_oauth::status::ConnectorStatus;
+	use tauri::test::{mock_builder, mock_context, noop_assets};
 
 	fn a_server(name: &str) -> EnvScope {
 		EnvScope::Server {
 			name: name.to_owned(),
 			owner: EnvOwner::Bot { id: "b1".to_owned(), space_id: "s1".to_owned() },
 		}
+	}
+
+	#[tokio::test]
+	async fn the_connectors_of_the_user_are_the_servers_the_user_plugin_declares() {
+		let mut context = mock_context(noop_assets());
+		context.config_mut().identifier =
+			format!("com.kiroshi.mcp-oauth-user-connectors-{}", std::process::id()).into();
+		let app = mock_builder().build(context).expect("the app builds");
+		let data = app.path().app_data_dir().expect("the data dir is named");
+		let _ = std::fs::remove_dir_all(&data);
+		app.manage(McpOauthState::default());
+		app.manage(ConnectorReports::default());
+		let path = bundles::user::path(app.handle()).expect("the plugin has a home");
+		bundles::user::lay_down(&path).expect("the plugin is laid down");
+		for name in ["clock", "granola"] {
+			bundles::user::set_mcp_server(&path, name, &serde_json::json!({ "command": name }))
+				.expect("the server lands");
+		}
+
+		let rows = mcp_connector_status(app.handle().clone(), EnvOwner::User)
+			.await
+			.expect("the status reads");
+
+		assert_eq!(
+			rows.iter().map(|row| row.name.as_str()).collect::<Vec<_>>(),
+			["clock", "granola"]
+		);
+		let _ = std::fs::remove_dir_all(&data);
 	}
 
 	#[test]
@@ -408,6 +439,18 @@ mod tests {
 			.expect("the space grant is written");
 
 		assert_eq!(held_at(&root, &a_bot(), "granola"), Ok(granola_of_the_space()));
+
+		let root = a_root("held-at-user");
+		let of_the_user = EnvScope::Server { name: "granola".to_owned(), owner: EnvOwner::User };
+		credentials::store(&root, &of_the_user, &a_live_grant())
+			.expect("the user grant is written");
+
+		assert_eq!(held_at(&root, &a_bot(), "granola"), Ok(of_the_user));
+
+		credentials::store(&root, &a_server("granola"), &a_live_grant())
+			.expect("the bot grant is written");
+
+		assert_eq!(held_at(&root, &a_bot(), "granola"), Ok(a_server("granola")));
 	}
 
 	#[tokio::test]

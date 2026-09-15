@@ -61,16 +61,18 @@ describe("bundleServers", () => {
 describe("sessionServers", () => {
 	let bot: string
 	let system: string
+	let user: string
 	let space: string
 
 	beforeEach(() => {
 		bot = newBundle("bot")
 		system = newBundle("system")
+		user = newBundle("user")
 		space = newBundle("space")
 	})
 
 	afterEach(() => {
-		for (const bundle of [bot, system, space]) {
+		for (const bundle of [bot, system, user, space]) {
 			rmSync(bundle, { recursive: true, force: true })
 		}
 	})
@@ -117,6 +119,60 @@ describe("sessionServers", () => {
 			shared: { command: "space" },
 			team: { command: "only-space" },
 		})
+	})
+
+	it("lays the person over the app, under the space and under the bot", () => {
+		declaringServers(system, {
+			probe: { command: "system" },
+			shared: { command: "system" },
+			mine: { command: "system" },
+			app: { command: "only-system" },
+		})
+		declaringServers(user, {
+			probe: { command: "user" },
+			shared: { command: "user" },
+			mine: { command: "user" },
+		})
+		declaringServers(space, {
+			probe: { command: "space" },
+			shared: { command: "space" },
+		})
+		declaringServers(bot, { probe: { command: "bot" } })
+
+		expect(
+			sessionServers({
+				pluginPath: bot,
+				systemPluginPath: system,
+				userPluginPath: user,
+				spacePluginPath: space,
+			}),
+		).toEqual({
+			probe: { command: "bot" },
+			shared: { command: "space" },
+			mine: { command: "user" },
+			app: { command: "only-system" },
+		})
+	})
+
+	it("opens with the other bundles when the person's declares nothing or cannot be read", () => {
+		declaringServers(system, { app: { command: "system" } })
+		declaringServers(space, { team: { command: "space" } })
+		declaringServers(bot, { own: { command: "bot" } })
+
+		for (const contents of [undefined, "{ not json"]) {
+			expect(
+				sessionServers({
+					pluginPath: bot,
+					systemPluginPath: system,
+					userPluginPath: declaring(user, contents),
+					spacePluginPath: space,
+				}),
+			).toEqual({
+				app: { command: "system" },
+				team: { command: "space" },
+				own: { command: "bot" },
+			})
+		}
 	})
 
 	it("hands over the bot's alone when the host names no app plugin", () => {
