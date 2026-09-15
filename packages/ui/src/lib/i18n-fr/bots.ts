@@ -500,6 +500,9 @@ const bots = {
 			tools: {
 				title: "Ce qu'elle apporte",
 				count: {
+					plain_one: "{{count}} outil",
+					plain_many: "{{count}} outils",
+					plain_other: "{{count}} outils",
 					reads_one: "{{count}} outil, lecture seule",
 					reads_many: "{{count}} outils, lecture seule",
 					reads_other: "{{count}} outils, lecture seule",
@@ -517,6 +520,12 @@ const bots = {
 					"Les applications tournent sur votre machine, sous votre compte. En ajouter une ici donne ses outils à chacun de vos compagnons, dans chaque espace.",
 			},
 			done: "Ajoutée",
+			failed: "Impossible de l’ajouter : {{reason}}",
+			rollback: {
+				title: "{{name}} est restée dans la liste",
+				description:
+					"Sa clé n’a pas été écrite, et son retrait a été refusé lui aussi : {{reason}}.",
+			},
 		},
 		notice:
 			"Ce compagnon lance ses applications sur votre machine, sous votre compte. Ajoutez seulement ceux en qui vous avez confiance.",
@@ -560,6 +569,8 @@ const bots = {
 				failed: "Impossible de joindre le registre MCP.",
 				retry: "Réessayer",
 			},
+			everything: "Tout",
+			unavailable: "Impossible de lire les applications que Kiroshi connaît.",
 			nothing:
 				"Aucun résultat pour {{query}}. Essayez un autre nom, ou collez une configuration.",
 			setup: {
@@ -570,6 +581,18 @@ const bots = {
 		},
 		unavailable:
 			"Impossible de charger les applications. Rouvrez les réglages pour réessayer.",
+		reopen: {
+			landed: {
+				title: "{{name}} est prête",
+				description:
+					"Vos compagnons disposent de ses outils dès leur prochain tour.",
+			},
+			refused: {
+				title: "Impossible de rouvrir la session de {{companion}}",
+				description:
+					"{{name}} la rejoindra à la prochaine ouverture de cette session.",
+			},
+		},
 		name: {
 			label: "Nom",
 			placeholder: "atlas",

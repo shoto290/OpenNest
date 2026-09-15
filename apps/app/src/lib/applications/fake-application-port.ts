@@ -1,10 +1,11 @@
 import type {
 	Application,
+	ApplicationInstalled,
 	ApplicationPort,
 	ApplicationsError,
 } from "./application-port"
 
-export type ApplicationCommand = keyof ApplicationPort
+export type ApplicationCommand = "catalogue" | "search"
 
 export type ApplicationCall = {
 	command: ApplicationCommand
@@ -16,9 +17,13 @@ export type FakeApplicationPort = ApplicationPort & {
 	curated: Application[]
 	found: Application[]
 	refusals: Partial<Record<ApplicationCommand, ApplicationsError>>
+	announce: (installed: ApplicationInstalled) => void
+	isListening: () => boolean
 }
 
 export const createFakeApplicationPort = (): FakeApplicationPort => {
+	const listeners = new Set<(installed: ApplicationInstalled) => void>()
+
 	const answer = (call: ApplicationCall) => {
 		fake.calls.push(call)
 		const refusal = fake.refusals[call.command]
@@ -42,6 +47,21 @@ export const createFakeApplicationPort = (): FakeApplicationPort => {
 			answer({ command: "search", query })
 			return fake.found
 		},
+
+		onInstalled: async (listener) => {
+			listeners.add(listener)
+			return () => {
+				listeners.delete(listener)
+			}
+		},
+
+		announce: (installed) => {
+			for (const listener of listeners) {
+				listener(installed)
+			}
+		},
+
+		isListening: () => listeners.size > 0,
 	}
 
 	return fake

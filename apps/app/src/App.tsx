@@ -16,6 +16,16 @@ import { probeRender } from "@workspace/ui/lib/render-probe"
 import { StartupScreen } from "@/components/startup-screen"
 import { WorkspaceBody } from "@/components/workspace-body"
 import {
+	applicationTitleOf,
+	openedServerScope,
+	toApplicationScope,
+	toServerEnvironmentSection,
+} from "@/lib/applications/application-settings"
+import { applicationTransport } from "@/lib/applications/application-transport"
+import { createSessionReopener } from "@/lib/applications/session-reopening"
+import { useApplicationInstalls } from "@/lib/applications/use-application-installs"
+import { useApplications } from "@/lib/applications/use-applications"
+import {
 	changesRuntime,
 	modelOptionsFor,
 	toRosterBots,
@@ -50,10 +60,7 @@ import {
 	useChat,
 } from "@/lib/chat/use-chat"
 import { useCompanionAnnouncements } from "@/lib/companions/use-companion-announcements"
-import {
-	CONNECTORS_TAB,
-	toConnectorSettings,
-} from "@/lib/connectors/connector-settings"
+import { CONNECTORS_TAB } from "@/lib/connectors/connector-settings"
 import { connectorTransport } from "@/lib/connectors/connector-transport"
 import { useConnectors } from "@/lib/connectors/use-connectors"
 import { SessionConnectorsContext } from "@/lib/connectors/use-session-connector"
@@ -125,6 +132,8 @@ import {
 
 const browseWorkingDirectory = () => undefined
 
+const USER_OWNER: EnvOwner = { kind: "user" }
+
 export function App() {
 	probeRender("App")
 	const driver = useMemo(createChatDriver, [])
@@ -176,8 +185,11 @@ export function App() {
 	const botEnvironment = useEnvironment(store)
 	const spaceEnvironment = useEnvironment(store)
 	const serverEnvironment = useEnvironment(store)
+	const userMcpServers = useMcpServers(store)
 	const botConnectors = useConnectors(connectorTransport)
 	const spaceConnectors = useConnectors(connectorTransport)
+	const userConnectors = useConnectors(connectorTransport)
+	const applications = useApplications(applicationTransport, store)
 	const history = useBotHistory(store)
 	const catalogue = useModelCatalogue()
 	const user = useUser()
@@ -305,6 +317,56 @@ export function App() {
 		(space) => space.id === selectedSpaceId,
 	)
 
+	const reopenSessions = useMemo(
+		() =>
+			createSessionReopener({
+				chat: chat.controller,
+				rosters: () => roster.controller.getState().rosters,
+			}),
+		[chat.controller, roster.controller],
+	)
+
+	useApplicationInstalls(applicationTransport, ({ application, scope }) => {
+		void reopenSessions({
+			scope,
+			application: applicationTitleOf(
+				applications.controller.getState().curated,
+				application,
+			),
+		})
+	})
+
+	const serverEnvironmentSection = toServerEnvironmentSection({
+		environment: serverEnvironment,
+		opened: openedMcpServer,
+		curated: applications.state.curated,
+		reopen: reopenSessions,
+	})
+
+	const userApplications = toApplicationScope({
+		applications,
+		servers: userMcpServers,
+		connectors: userConnectors,
+		openedName: openedServerName,
+		reopen: reopenSessions,
+	})
+
+	const spaceApplications = toApplicationScope({
+		applications,
+		servers: spaceMcpServers,
+		connectors: spaceConnectors,
+		openedName: openedServerName,
+		reopen: reopenSessions,
+	})
+
+	const botApplications = toApplicationScope({
+		applications,
+		servers: botMcpServers,
+		connectors: botConnectors,
+		openedName: openedServerName,
+		reopen: reopenSessions,
+	})
+
 	const botHistory = useHistoryView({
 		...history.state,
 		isOpen: isEditing,
@@ -413,12 +475,14 @@ export function App() {
 			id: settingsBotId,
 			spaceId: selectedSpaceId,
 		} as const
+		void applications.controller.open()
 		void skills.controller.open(settingsBotId)
 		void botMcpServers.controller.open(scope)
 		void botEnvironment.controller.open(scope)
 		void botConnectors.controller.open(scope)
 		void history.controller.open(settingsBotId)
 	}, [
+		applications.controller,
 		history.controller,
 		botEnvironment.controller,
 		botConnectors.controller,
@@ -431,11 +495,13 @@ export function App() {
 	useEffect(() => {
 		if (isSpaceEditing && selectedSpaceId) {
 			const owner = { kind: "space", id: selectedSpaceId } as const
+			void applications.controller.open()
 			void spaceEnvironment.controller.open(owner)
 			void spaceMcpServers.controller.open(owner)
 			void spaceConnectors.controller.open(owner)
 		}
 	}, [
+		applications.controller,
 		spaceEnvironment.controller,
 		spaceMcpServers.controller,
 		spaceConnectors.controller,
@@ -448,6 +514,20 @@ export function App() {
 			void serverEnvironment.controller.open(openedMcpServer)
 		}
 	}, [serverEnvironment.controller, openedMcpServer])
+
+	useEffect(() => {
+		if (!user.state.isSettingsOpen) {
+			return
+		}
+		void applications.controller.open()
+		void userMcpServers.controller.open(USER_OWNER)
+		void userConnectors.controller.open(USER_OWNER)
+	}, [
+		applications.controller,
+		userMcpServers.controller,
+		userConnectors.controller,
+		user.state.isSettingsOpen,
+	])
 
 	const holdsSelectedBot = bots.some((bot) => bot.id === selectedBotId)
 
@@ -871,11 +951,7 @@ export function App() {
 				<BotSettingsDialog
 					history={botHistory}
 					haveMcpServersFailedToLoad={botMcpServers.state.hasFailedToLoad}
-					{...toConnectorSettings({
-						servers: botMcpServers.state.servers,
-						connectors: botConnectors,
-						openedName: openedServerName,
-					})}
+					{...botApplications}
 					tab={settingsTab}
 					environment={toEnvironmentRows(botEnvironment.state.entries)}
 					hasEnvironmentFailedToRead={botEnvironment.state.hasFailedToRead}
@@ -898,13 +974,7 @@ export function App() {
 								: null,
 						)
 					}
-					serverEnvironment={{
-						entries: toEnvironmentRows(serverEnvironment.state.entries),
-						hasFailedToRead: serverEnvironment.state.hasFailedToRead,
-						onSet: ({ name, value }) =>
-							serverEnvironment.controller.set(name, value),
-						onDelete: serverEnvironment.controller.remove,
-					}}
+					serverEnvironment={serverEnvironmentSection}
 					models={modelOptionsFor(settingsBot.model, catalogue)}
 					outputStyle={readBotOutputStyle(settingsBot.outputStyle)}
 					memory={settingsBot.memory}
@@ -935,9 +1005,6 @@ export function App() {
 							chat.controller.redescribe(settingsBot.id)
 						}
 					}}
-					onMcpServerChange={botMcpServers.controller.rename}
-					onMcpServerCreate={botMcpServers.controller.create}
-					onMcpServerDelete={botMcpServers.controller.remove}
 					onSkillChange={(id, draft) =>
 						skills.controller.save(
 							id,
@@ -1001,15 +1068,8 @@ export function App() {
 					environment={toEnvironmentRows(spaceEnvironment.state.entries)}
 					hasEnvironmentFailedToRead={spaceEnvironment.state.hasFailedToRead}
 					haveMcpServersFailedToLoad={spaceMcpServers.state.hasFailedToLoad}
-					{...toConnectorSettings({
-						servers: spaceMcpServers.state.servers,
-						connectors: spaceConnectors,
-						openedName: openedServerName,
-					})}
+					{...spaceApplications}
 					tab={settingsTab}
-					onMcpServerChange={spaceMcpServers.controller.rename}
-					onMcpServerCreate={spaceMcpServers.controller.create}
-					onMcpServerDelete={spaceMcpServers.controller.remove}
 					onMcpServerOpen={(name) =>
 						setOpenedMcpServer(
 							name
@@ -1021,13 +1081,7 @@ export function App() {
 								: null,
 						)
 					}
-					serverEnvironment={{
-						entries: toEnvironmentRows(serverEnvironment.state.entries),
-						hasFailedToRead: serverEnvironment.state.hasFailedToRead,
-						onSet: ({ name, value }) =>
-							serverEnvironment.controller.set(name, value),
-						onDelete: serverEnvironment.controller.remove,
-					}}
+					serverEnvironment={serverEnvironmentSection}
 					history={spaceHistory}
 					isDeletable={spaces.state.spaces.length > 1}
 					onClose={() => {
@@ -1069,6 +1123,19 @@ export function App() {
 				/>
 			) : null}
 			<UserSettingsDialog
+				applications={{
+					servers: userApplications.mcpServers,
+					haveFailedToLoad: userMcpServers.state.hasFailedToLoad,
+					onServerCreate: userApplications.onMcpServerCreate,
+					onServerChange: userApplications.onMcpServerChange,
+					onServerDelete: userApplications.onMcpServerDelete,
+					onServerConnect: userApplications.onServerConnect,
+					onServerOpen: (name) =>
+						setOpenedMcpServer(openedServerScope(name, USER_OWNER)),
+					serverConnection: userApplications.serverConnection,
+					serverEnvironment: serverEnvironmentSection,
+					catalogue: userApplications.mcpCatalogue,
+				}}
 				history={userHistory}
 				onClose={() => user.controller.setSettingsOpen(false)}
 				language={preferences.language}

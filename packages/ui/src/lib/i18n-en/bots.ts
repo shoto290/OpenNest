@@ -490,6 +490,8 @@ const bots = {
 			tools: {
 				title: "What it brings",
 				count: {
+					plain_one: "{{count}} tool",
+					plain_other: "{{count}} tools",
 					reads_one: "{{count}} tool, read only",
 					reads_other: "{{count}} tools, read only",
 					writes_one: "{{count}} tool, reads and writes",
@@ -505,6 +507,12 @@ const bots = {
 					"Applications run on your machine, under your account. Adding one here gives every companion you have its tools, in every space.",
 			},
 			done: "Added",
+			failed: "Couldn’t add it: {{reason}}",
+			rollback: {
+				title: "{{name}} was left in the list",
+				description:
+					"Its key wasn’t written, and removing it again was refused too: {{reason}}.",
+			},
 		},
 		notice:
 			"This companion runs applications on your machine, under your account. Only add ones you trust.",
@@ -544,6 +552,8 @@ const bots = {
 				failed: "Couldn’t reach the MCP registry.",
 				retry: "Retry",
 			},
+			everything: "Everything",
+			unavailable: "Couldn’t read the applications Kiroshi knows.",
 			nothing:
 				"Nothing matched {{query}}. Try another name, or paste a configuration.",
 			setup: {
@@ -553,6 +563,16 @@ const bots = {
 			},
 		},
 		unavailable: "Couldn't load applications. Reopen settings to retry.",
+		reopen: {
+			landed: {
+				title: "{{name}} is ready",
+				description: "Your companions hold its tools from their next turn.",
+			},
+			refused: {
+				title: "Couldn’t reopen {{companion}}’s session",
+				description: "{{name}} reaches it the next time that session opens.",
+			},
+		},
 		name: {
 			label: "Name",
 			placeholder: "atlas",

@@ -22,6 +22,7 @@ type ConnectorSettingsSource = {
 	servers: BotMcpServer[]
 	connectors: Connectors
 	openedName: string | null
+	onSettled?: () => void
 }
 
 const urlOf = (server: BotMcpServer) =>
@@ -44,9 +45,39 @@ const connectionOf = (
 	return status === "unknown" ? undefined : status
 }
 
+type ConnectorLanding = "connected" | "disconnected"
+
+const isLanded = (
+	{ controller }: Connectors,
+	name: string,
+	landing: ConnectorLanding,
+) => {
+	const isConnected =
+		controller.getState().rows.find((row) => row.name === name)?.status ===
+		"connected"
+	return landing === "connected" ? isConnected : !isConnected
+}
+
+const settling =
+	(connectors: Connectors, onSettled?: () => void) =>
+	(name: string, landing: ConnectorLanding, run: Promise<void>) => {
+		void run.then(() => {
+			if (isLanded(connectors, name, landing)) {
+				onSettled?.()
+			}
+		})
+	}
+
+type ConnectorRuns = (
+	name: string,
+	landing: ConnectorLanding,
+	run: Promise<void>,
+) => void
+
 const sectionOf = (
 	{ state, controller }: Connectors,
 	server: BotMcpServer,
+	settle: ConnectorRuns,
 ): McpConnectionSection | undefined => {
 	const connection = connectionOf(state, server.name)
 	if (!connection) {
@@ -58,13 +89,17 @@ const sectionOf = (
 		state: connection,
 		host: hostOf(url),
 		onConnect: () => {
-			void controller.connect(server.name, url)
+			settle(server.name, "connected", controller.connect(server.name, url))
 		},
 		onCancel: () => {
 			void controller.cancel()
 		},
 		onDisconnect: () => {
-			void controller.disconnect(server.name, url)
+			settle(
+				server.name,
+				"disconnected",
+				controller.disconnect(server.name, url),
+			)
 		},
 	}
 }
@@ -73,8 +108,10 @@ export const toConnectorSettings = ({
 	servers,
 	connectors,
 	openedName,
+	onSettled,
 }: ConnectorSettingsSource): ConnectorSettings => {
 	const opened = servers.find((server) => server.name === openedName)
+	const settle = settling(connectors, onSettled)
 
 	return {
 		mcpServers: servers.map((server) => ({
@@ -82,8 +119,12 @@ export const toConnectorSettings = ({
 			connection: connectionOf(connectors.state, server.name),
 		})),
 		onServerConnect: (server) => {
-			void connectors.controller.connect(server.name, urlOf(server))
+			settle(
+				server.name,
+				"connected",
+				connectors.controller.connect(server.name, urlOf(server)),
+			)
 		},
-		serverConnection: opened && sectionOf(connectors, opened),
+		serverConnection: opened && sectionOf(connectors, opened, settle),
 	}
 }

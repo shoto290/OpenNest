@@ -3,7 +3,10 @@ import { expect } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import { slotIn } from "@workspace/storybook/story-utils"
 import { ApplicationMark } from "@workspace/ui/components/plugin-settings/application-mark"
-import { CURATED_APPLICATIONS } from "@workspace/ui/components/plugin-settings/applications.fixtures"
+import {
+	CURATED_APPLICATIONS,
+	DRAWN_MARK,
+} from "@workspace/ui/components/plugin-settings/applications.fixtures"
 
 const meta = preview.meta({
 	title: "Settings/Plugins/ApplicationMark",
@@ -12,7 +15,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The slot an application's mark sits in. The mark comes from the application's data; without one, the slot shows the server glyph on the muted surface at the same size.",
+					"The slot an application's mark sits in. The mark comes from the application's data: drawn markup goes inline and follows the foreground colour, anything else is loaded as an image source. Without a mark, the slot shows the server glyph on the muted surface at the same size.",
 			},
 		},
 	},
@@ -27,6 +30,22 @@ export const WithMark = meta.story({
 
 export const WithoutMark = meta.story({
 	args: { mark: undefined },
+	play: async ({ canvasElement }) => {
+		await expect(canvasElement.querySelector("img")).toBeNull()
+		await expect(canvasElement.querySelector("svg")).not.toBeNull()
+	},
+})
+
+export const WithDrawnMark = meta.story({
+	args: { mark: DRAWN_MARK },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A mark handed as drawing markup goes inline, so it takes the foreground colour of the row it sits on instead of being loaded as an image.",
+			},
+		},
+	},
 	play: async ({ canvasElement }) => {
 		await expect(canvasElement.querySelector("img")).toBeNull()
 		await expect(canvasElement.querySelector("svg")).not.toBeNull()

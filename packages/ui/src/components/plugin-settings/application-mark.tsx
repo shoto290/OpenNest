@@ -17,6 +17,8 @@ const APPLICATION_MARK_STYLE = {
 	xs: { slot: "size-5 rounded-sm", glyph: "size-3" },
 } as const satisfies Record<ApplicationMarkSize, ApplicationMarkStyle>
 
+const isDrawing = (mark: string) => mark.trimStart().startsWith("<svg")
+
 type ApplicationMarkProps = {
 	mark?: string
 	size?: ApplicationMarkSize
@@ -29,6 +31,24 @@ const ApplicationMark = ({
 	isBlank = false,
 }: ApplicationMarkProps) => {
 	const style = APPLICATION_MARK_STYLE[size]
+	const isDrawn = mark !== undefined && isDrawing(mark)
+
+	const content = () => {
+		if (mark === undefined) {
+			return isBlank ? null : <Icons.Server className={style.glyph} />
+		}
+
+		if (isDrawn) {
+			return (
+				<span
+					className={cn(style.glyph, "[&>svg]:size-full")}
+					dangerouslySetInnerHTML={{ __html: mark }}
+				/>
+			)
+		}
+
+		return <img alt="" className="size-full object-cover" src={mark} />
+	}
 
 	return (
 		<span
@@ -36,15 +56,12 @@ const ApplicationMark = ({
 			className={cn(
 				"flex shrink-0 items-center justify-center overflow-hidden border border-border",
 				style.slot,
+				isDrawn && "bg-muted text-foreground",
 				!mark && "bg-muted text-muted-foreground",
 			)}
 			data-slot="application-mark"
 		>
-			{mark ? (
-				<img alt="" className="size-full object-cover" src={mark} />
-			) : (
-				!isBlank && <Icons.Server className={style.glyph} />
-			)}
+			{content()}
 		</span>
 	)
 }

@@ -20,7 +20,18 @@ export type ApplicationsError =
 	| { kind: "registryRefused"; status: number }
 	| { kind: "registryUnreadable"; detail: string }
 
+export type ApplicationDestination = "companion" | "space" | "user"
+
+export type ApplicationInstalled = {
+	application: string
+	scope: ApplicationDestination
+	destinationId?: string
+}
+
 export type ApplicationPort = {
 	catalogue: () => Promise<Application[]>
 	search: (query: string) => Promise<Application[]>
+	onInstalled: (
+		listener: (installed: ApplicationInstalled) => void,
+	) => Promise<() => void>
 }

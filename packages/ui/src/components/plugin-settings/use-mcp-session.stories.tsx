@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { expect, fn } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
@@ -5,6 +6,7 @@ import { A11Y_CONTRAST_AWAITING_DESIGN_DECISION } from "@workspace/storybook/sto
 import type { BotMcpServerItem } from "@workspace/ui/components/bot-settings"
 import { BOT_MCP_SERVERS } from "@workspace/ui/components/bot-settings-dialog/mcp-servers.fixtures"
 import {
+	API_KEY_INSTALL,
 	CATALOGUE_CATEGORIES,
 	CURATED_APPLICATIONS,
 } from "@workspace/ui/components/plugin-settings/applications.fixtures"
@@ -35,6 +37,33 @@ const McpSessionScreen = (props: McpSessionProps) => {
 		<div className="flex min-h-0 flex-1 flex-col gap-4 p-5">
 			{session.panel}
 		</div>
+	)
+}
+
+const PickingScreen = (props: McpSessionProps) => {
+	const [isPicked, setPicked] = useState(false)
+	const { catalogue } = props
+
+	if (!catalogue) return <McpSessionScreen {...props} />
+
+	return (
+		<McpSessionScreen
+			{...props}
+			catalogue={{
+				...catalogue,
+				install: isPicked
+					? {
+							application: API_KEY_INSTALL,
+							onInstall: catalogue.install?.onInstall ?? fn(),
+							onLeave: () => setPicked(false),
+						}
+					: undefined,
+				onPick: (application) => {
+					setPicked(true)
+					catalogue.onPick(application)
+				},
+			}}
+		/>
 	)
 }
 
@@ -108,6 +137,50 @@ export const AddingPushesTheCatalogue = meta.story({
 			canvas.getByRole("button", { name: "Paste a configuration" }),
 		)
 		await expect(canvas.getByRole("tab", { name: "Connection" })).toBeVisible()
+	},
+})
+
+export const PickingPushesTheInstallPage = meta.story({
+	args: {
+		catalogue: {
+			categories: CATALOGUE_CATEGORIES,
+			category: "everything",
+			onCategoryChange: fn(),
+			query: "sentry",
+			onQueryChange: fn(),
+			curated: CURATED_APPLICATIONS,
+			registry: [],
+			onRegistryRetry: fn(),
+			onPick: fn(),
+		},
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Picking an application from the catalogue, inside the same dialog and in the scope of the panel it was opened from. Check that the install page keeps the rail, that its footnote names the scope, and that leaving it brings the catalogue back with what was typed.",
+			},
+		},
+	},
+	render: (args) => <PickingScreen {...args} />,
+	play: async ({ canvas, userEvent }) => {
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Add application" }),
+		)
+		await userEvent.click(canvas.getByRole("button", { name: /^Sentry/ }))
+
+		await expect(
+			canvas.getByRole("heading", { level: 3, name: "Sentry" }),
+		).toBeVisible()
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "All applications" }),
+		)
+
+		await expect(canvas.getByRole("textbox")).toHaveValue("sentry")
+		await expect(
+			canvas.getByRole("heading", { name: "Kiroshi knows these" }),
+		).toBeVisible()
 	},
 })
 

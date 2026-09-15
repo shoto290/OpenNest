@@ -30,7 +30,7 @@ type InstallableApplication = Omit<CatalogueApplication, "description"> & {
 	description?: string
 	packageIdentity: string
 	tools: string[]
-	canWrite: boolean
+	canWrite?: boolean
 	keyPlace?: string
 	keyPrefix?: string
 	unreviewed?: ApplicationPublication
@@ -214,7 +214,12 @@ const UnreviewedNotice = ({ publication, canWrite }: UnreviewedNoticeProps) => {
 
 type ToolListProps = {
 	tools: string[]
-	canWrite: boolean
+	canWrite?: boolean
+}
+
+const toolReachOf = (canWrite?: boolean) => {
+	if (canWrite === undefined) return "plain"
+	return canWrite ? "writes" : "reads"
 }
 
 const ToolList = ({ tools, canWrite }: ToolListProps) => {
@@ -228,10 +233,9 @@ const ToolList = ({ tools, canWrite }: ToolListProps) => {
 					{t("applications.install.tools.title")}
 				</h4>
 				<p className="text-muted-foreground text-xs/4 tabular-nums">
-					{t(
-						`applications.install.tools.count.${canWrite ? "writes" : "reads"}`,
-						{ count: tools.length },
-					)}
+					{t(`applications.install.tools.count.${toolReachOf(canWrite)}`, {
+						count: tools.length,
+					})}
 				</p>
 			</div>
 			<ul className="flex list-none flex-wrap gap-1.5 p-0">
@@ -375,7 +379,7 @@ const ApplicationInstallPage = ({
 					>
 						{application.unreviewed ? (
 							<UnreviewedNotice
-								canWrite={application.canWrite}
+								canWrite={application.canWrite ?? false}
 								publication={application.unreviewed}
 							/>
 						) : null}
