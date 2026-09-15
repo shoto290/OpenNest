@@ -40,4 +40,4 @@ const ApplicationMark = ({ mark, size = "md" }: ApplicationMarkProps) => {
 	)
 }
 
-export { ApplicationMark, type ApplicationMarkProps, type ApplicationMarkSize }
+export { ApplicationMark, type ApplicationMarkProps }
