@@ -28,11 +28,16 @@ const ROSTERS: CompanionRosters = {
 	work: [DRAFTER, ARCHIVIST],
 }
 
-const chatWith = (liveIds: string[], reopen = vi.fn(async () => ({}))) => ({
+const chatWith = (
+	liveIds: string[],
+	reopen = vi.fn(async () => ({})),
+	busyIds: string[] = [],
+) => ({
 	reopen: reopen as never,
 	stateFor: (botId: string) => ({
 		...initialChatState,
 		sessionOpen: liveIds.includes(botId),
+		turn: busyIds.includes(botId) ? ("running" as const) : ("idle" as const),
 	}),
 })
 
@@ -125,6 +130,37 @@ describe("session reopener", () => {
 		expect(raiseTransientNotice.mock.calls[0]?.[0]).toMatchObject({
 			title: expect.stringContaining("Linear"),
 		})
+	})
+
+	it("reopens the others and says so without waiting for a running turn", async () => {
+		const held: (() => void)[] = []
+		const reopen = vi.fn(async (botId: string) => {
+			if (botId !== "archivist") return {}
+			await new Promise<void>((resolve) => held.push(resolve))
+			return {}
+		})
+		const reopenSessions = createSessionReopener({
+			chat: chatWith(["archivist", "drafter"], reopen as never, ["archivist"]),
+			rosters: () => ROSTERS,
+		})
+
+		await reopenSessions({ scope: { kind: "user" }, application: "Linear" })
+
+		expect(reopen.mock.calls.flat().sort()).toEqual(["archivist", "drafter"])
+		expect(raiseTransientNotice).toHaveBeenCalledTimes(1)
+		expect(held).toHaveLength(1)
+	})
+
+	it("says the application is there even when every session is mid turn", async () => {
+		const reopen = vi.fn(async () => new Promise<never>(() => undefined))
+		const reopenSessions = createSessionReopener({
+			chat: chatWith(["archivist"], reopen as never, ["archivist"]),
+			rosters: () => ROSTERS,
+		})
+
+		await reopenSessions({ scope: { kind: "user" }, application: "Linear" })
+
+		expect(raiseTransientNotice).toHaveBeenCalledTimes(1)
 	})
 
 	it("names the companion of a refused reopening and reopens the others", async () => {

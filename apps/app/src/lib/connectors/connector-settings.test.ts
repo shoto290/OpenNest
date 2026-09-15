@@ -217,7 +217,33 @@ describe("space connectors", () => {
 		expect(onSettled).not.toHaveBeenCalled()
 	})
 
+	it("says nothing landed when the connect ended unauthorized", async () => {
+		const port = connectorPort("needsAuthorization")
+		const onSettled = vi.fn()
+		await mounted(port, onSettled)
+
+		await press("Connect atlas")
+		port.grant()
+		await settle()
+
+		expect(within(rowOf("atlas")).getByText("Needs authorization")).toBeTruthy()
+		expect(onSettled).not.toHaveBeenCalled()
+	})
+
 	it("says a disconnect landed once it is confirmed", async () => {
+		const port = connectorPort("connected")
+		const onSettled = vi.fn()
+		await mounted(port, onSettled)
+		await press("Open atlas")
+		port.rows.space = [{ name: "atlas", status: "needsAuthorization" }]
+
+		await press("Disconnect")
+		await press("Disconnect", screen.getByRole("alertdialog"))
+
+		expect(onSettled).toHaveBeenCalledTimes(1)
+	})
+
+	it("says nothing landed when the server is still connected", async () => {
 		const port = connectorPort("connected")
 		const onSettled = vi.fn()
 		await mounted(port, onSettled)
@@ -226,7 +252,7 @@ describe("space connectors", () => {
 		await press("Disconnect")
 		await press("Disconnect", screen.getByRole("alertdialog"))
 
-		expect(onSettled).toHaveBeenCalledTimes(1)
+		expect(onSettled).not.toHaveBeenCalled()
 	})
 
 	it("shows a refused connect as a connector that could not connect", async () => {

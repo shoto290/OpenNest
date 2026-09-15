@@ -5,6 +5,7 @@ import {
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import type { ChatController } from "../chat/chat-controller"
+import { isTurnBusy } from "../chat/chat-state"
 import type { Bot, EnvOwner } from "../conversations/store-contract"
 
 export type ReopenedScope =
@@ -67,20 +68,31 @@ export const createSessionReopener = ({
 		return false
 	}
 
+	const announceLanding = (application: string) =>
+		raiseTransientNotice({
+			title: i18n.t("bots:applications.reopen.landed.title", {
+				name: application,
+			}),
+			description: i18n.t("bots:applications.reopen.landed.description"),
+		})
+
 	return async ({ scope, application }) => {
 		const live = companionsIn(rosters(), scope).filter(
 			(companion) => chat.stateFor(companion.id).sessionOpen,
 		)
-		const landings = await Promise.all(
-			live.map((companion) => reopenOne(companion, application)),
+		const midTurn = live.filter((companion) =>
+			isTurnBusy(chat.stateFor(companion.id).turn),
 		)
-		if (landings.some(Boolean)) {
-			raiseTransientNotice({
-				title: i18n.t("bots:applications.reopen.landed.title", {
-					name: application,
-				}),
-				description: i18n.t("bots:applications.reopen.landed.description"),
-			})
+		for (const companion of midTurn) {
+			void reopenOne(companion, application)
+		}
+		const landings = await Promise.all(
+			live
+				.filter((companion) => !midTurn.includes(companion))
+				.map((companion) => reopenOne(companion, application)),
+		)
+		if (landings.some(Boolean) || midTurn.length > 0) {
+			announceLanding(application)
 		}
 	}
 }

@@ -7,7 +7,7 @@ import { i18n } from "@workspace/ui/lib/i18n"
 
 import type { Application, ApplicationPort } from "./application-port"
 
-import { declareServer } from "../bots/mcp-server-writes"
+import { declareServer, undeclareServer } from "../bots/mcp-server-writes"
 import type { EnvOwner, EnvScope } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
 
@@ -78,6 +78,18 @@ export const serverScopeOf = (owner: EnvOwner, name: string): EnvScope => ({
 	owner,
 })
 
+const ownerKeyOf = (owner: EnvOwner) =>
+	owner.kind === "user" ? "user" : `${owner.kind}:${owner.id}`
+
+const installKeyOf = (owner: EnvOwner, name: string) =>
+	`${ownerKeyOf(owner)}/${name}`
+
+export const isInstalledUnder = (
+	state: ApplicationsState,
+	owner: EnvOwner,
+	name: string,
+) => state.installed.includes(installKeyOf(owner, name))
+
 const urlOf = (application: Application) =>
 	readMcpServerLaunch(application.config).url ?? ""
 
@@ -132,16 +144,25 @@ export const createApplicationsController = (
 		[...state.curated, ...state.registry].find((held) => held.name === id) ??
 		null
 
-	const writeKey = (owner: EnvOwner, application: Application, key: string) => {
+	const writeKey = async (
+		owner: EnvOwner,
+		application: Application,
+		key: string,
+	) => {
 		const { install } = application
 		if (install.kind !== "key") {
-			return Promise.resolve()
+			return
 		}
-		return store.setEnvironmentVariable(
-			serverScopeOf(owner, application.name),
-			install.secret,
-			key,
-		)
+		try {
+			await store.setEnvironmentVariable(
+				serverScopeOf(owner, application.name),
+				install.secret,
+				key,
+			)
+		} catch (refusal) {
+			await undeclareServer(store, owner, application.name)
+			throw refusal
+		}
 	}
 
 	const runInstall = async (
@@ -204,7 +225,7 @@ export const createApplicationsController = (
 			if (
 				!application ||
 				state.installing !== null ||
-				state.installed.includes(application.name)
+				isInstalledUnder(state, target.owner, application.name)
 			) {
 				return
 			}
@@ -222,7 +243,10 @@ export const createApplicationsController = (
 			}
 			set({
 				installing: null,
-				installed: [...state.installed, application.name],
+				installed: [
+					...state.installed,
+					installKeyOf(target.owner, application.name),
+				],
 			})
 			await target.settle()
 		},

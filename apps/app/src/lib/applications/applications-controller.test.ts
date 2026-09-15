@@ -4,6 +4,7 @@ import type { Application } from "./application-port"
 import {
 	createApplicationsController,
 	type InstallTarget,
+	isInstalledUnder,
 } from "./applications-controller"
 import { createFakeApplicationPort } from "./fake-application-port"
 
@@ -11,6 +12,8 @@ import { createFakeTranscriptStore } from "../conversations/fake-transcript-stor
 import type { EnvOwner } from "../conversations/store-contract"
 
 const USER: EnvOwner = { kind: "user" }
+
+const COMPANION: EnvOwner = { kind: "bot", id: "default", spaceId: "personal" }
 
 const PAPER: Application = {
 	name: "paper",
@@ -175,7 +178,7 @@ describe("applications controller", () => {
 		expect(await store.userPluginMcpServers()).toEqual([
 			{ name: "paper", config: PAPER.config },
 		])
-		expect(controller.getState().installed).toEqual(["paper"])
+		expect(isInstalledUnder(controller.getState(), USER, "paper")).toBe(true)
 	})
 
 	it("writes the typed key under the secrets of the declared server", async () => {
@@ -225,7 +228,7 @@ describe("applications controller", () => {
 
 		expect(controller.getState().failure).toContain("the bundle is read only")
 		expect(controller.getState().picked).toEqual(PAPER)
-		expect(controller.getState().installed).toEqual([])
+		expect(isInstalledUnder(controller.getState(), USER, "paper")).toBe(false)
 	})
 
 	it("refuses a second add of the application it is installing", async () => {
@@ -242,6 +245,61 @@ describe("applications controller", () => {
 		await running
 
 		expect(declare).toHaveBeenCalledTimes(1)
+	})
+
+	it("offers an application installed elsewhere to a scope of its own", async () => {
+		const port = createFakeApplicationPort()
+		port.curated = [PAPER]
+		const store = createFakeTranscriptStore()
+		const controller = controllerOn(port, store)
+		await controller.open()
+		controller.pick("paper")
+		await controller.install(targetOf())
+
+		await controller.install(targetOf({ owner: COMPANION }))
+
+		expect(await store.botMcpServers("default")).toEqual([
+			{ name: "paper", config: PAPER.config },
+		])
+		expect(isInstalledUnder(controller.getState(), COMPANION, "paper")).toBe(
+			true,
+		)
+		expect(isInstalledUnder(controller.getState(), USER, "paper")).toBe(true)
+	})
+
+	it("holds an install under the owner it ran for", async () => {
+		const port = createFakeApplicationPort()
+		port.curated = [PAPER]
+		const controller = controllerOn(port)
+		await controller.open()
+		controller.pick("paper")
+
+		await controller.install(targetOf())
+
+		expect(isInstalledUnder(controller.getState(), COMPANION, "paper")).toBe(
+			false,
+		)
+	})
+
+	it("undeclares the server when the key refuses to be written", async () => {
+		const port = createFakeApplicationPort()
+		port.curated = [SUPERSET]
+		const store = createFakeTranscriptStore()
+		vi.spyOn(store, "setEnvironmentVariable").mockRejectedValue({
+			kind: "env",
+			detail: "the keyring is locked",
+		})
+		const controller = controllerOn(port, store)
+		await controller.open()
+		controller.pick("superset")
+
+		await controller.install(targetOf(), "sk-typed")
+
+		expect(await store.userPluginMcpServers()).toEqual([])
+		expect(controller.getState().failure).toContain("the keyring is locked")
+		expect(isInstalledUnder(controller.getState(), USER, "superset")).toBe(
+			false,
+		)
 	})
 
 	it("settles the scope once the install lands", async () => {

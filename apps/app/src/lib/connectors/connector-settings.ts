@@ -45,17 +45,36 @@ const connectionOf = (
 	return status === "unknown" ? undefined : status
 }
 
+type ConnectorLanding = "connected" | "disconnected"
+
+const isLanded = (
+	{ controller }: Connectors,
+	name: string,
+	landing: ConnectorLanding,
+) => {
+	const status = controller
+		.getState()
+		.rows.find((row) => row.name === name)?.status
+	return landing === "connected"
+		? status === "connected"
+		: status !== "connected"
+}
+
 const settling =
-	({ controller }: Connectors, onSettled?: () => void) =>
-	(name: string, run: Promise<void>) => {
+	(connectors: Connectors, onSettled?: () => void) =>
+	(name: string, landing: ConnectorLanding, run: Promise<void>) => {
 		void run.then(() => {
-			if (controller.getState().failure?.name !== name) {
+			if (isLanded(connectors, name, landing)) {
 				onSettled?.()
 			}
 		})
 	}
 
-type ConnectorRuns = (name: string, run: Promise<void>) => void
+type ConnectorRuns = (
+	name: string,
+	landing: ConnectorLanding,
+	run: Promise<void>,
+) => void
 
 const sectionOf = (
 	{ state, controller }: Connectors,
@@ -72,13 +91,17 @@ const sectionOf = (
 		state: connection,
 		host: hostOf(url),
 		onConnect: () => {
-			settle(server.name, controller.connect(server.name, url))
+			settle(server.name, "connected", controller.connect(server.name, url))
 		},
 		onCancel: () => {
 			void controller.cancel()
 		},
 		onDisconnect: () => {
-			settle(server.name, controller.disconnect(server.name, url))
+			settle(
+				server.name,
+				"disconnected",
+				controller.disconnect(server.name, url),
+			)
 		},
 	}
 }
@@ -100,6 +123,7 @@ export const toConnectorSettings = ({
 		onServerConnect: (server) => {
 			settle(
 				server.name,
+				"connected",
 				connectors.controller.connect(server.name, urlOf(server)),
 			)
 		},
