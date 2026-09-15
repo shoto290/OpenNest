@@ -140,7 +140,7 @@ import type {
 } from "@/lib/conversations/transcript-contract"
 import { useConversation } from "@/lib/conversations/use-conversation"
 import {
-	useSeatInConversation,
+	useSeatMentioned,
 	useSuggestedBots,
 } from "@/lib/conversations/use-conversation-seating"
 import type { Mission } from "@/lib/missions/mission-contract"
@@ -353,7 +353,6 @@ type ThreadComposerSlotProps = {
 	isDisabled: boolean
 	placeholder: string
 	bots: Bot[]
-	present: RosterBot[]
 	readDraft: () => string
 	onPromptChange: (draft: string) => void
 	onSubmitPrompt: (text: string) => Promise<boolean>
@@ -368,15 +367,10 @@ const ThreadComposerSlot = ({
 	isDisabled,
 	placeholder,
 	bots,
-	present,
 	readDraft,
 	onPromptChange,
 	onSubmitPrompt,
 }: ThreadComposerSlotProps) => {
-	const seat = useSeatInConversation(
-		thread.kind === "conversation" ? thread.conversation.id : null,
-	)
-
 	const wiring =
 		thread.kind === "bot"
 			? botThreadMenu({
@@ -384,10 +378,8 @@ const ThreadComposerSlot = ({
 					isOverlayOpen: thread.isOverlayOpen,
 				})
 			: conversationThreadMenu({
-					bots: seat ? mentionableBots(bots, thread.conversation) : present,
+					bots: mentionableBots(bots, thread.conversation),
 					leadId: leadOf(thread.conversation),
-					onSeat: seat,
-					promptRef,
 				})
 
 	return (
@@ -480,26 +472,14 @@ const ConversationEmptySlot = ({
 	present,
 	promptRef,
 }: ConversationEmptySlotProps) => {
-	const seatlessId = present.length === 0 ? conversation.id : null
-	const seat = useSeatInConversation(seatlessId)
-	const suggestedBots = useSuggestedBots(seatlessId)
-
-	if (!seat) {
-		return <ConversationEmptyState bots={present} title={conversation.title} />
-	}
-
-	const seatAndMention = (bot: RosterBot) => {
-		void seat(bot.id).then((isSeated) => {
-			if (isSeated) {
-				promptRef.current?.mention(bot.name)
-			}
-		})
-	}
+	const suggestedBots = useSuggestedBots(
+		present.length === 0 ? conversation.id : null,
+	)
 
 	return (
 		<ConversationEmptyState
 			bots={present}
-			onSuggestedBotPress={seatAndMention}
+			onSuggestedBotPress={(bot) => promptRef.current?.mention(bot.name)}
 			suggestedBots={suggestedBots}
 			title={conversation.title}
 		/>
@@ -1128,10 +1108,20 @@ function ThreadView({
 		[pins.bubbles, faceOf, reader, toExcerpt],
 	)
 
+	const seatMentioned = useSeatMentioned({
+		conversation: facts.conversation,
+		bots: known,
+		open: thread.kind === "conversation" ? thread.controller.open : null,
+	})
+	const submitSeated = useCallback(
+		async (text: string, repliedToMessageId?: string) =>
+			(await seatMentioned(text)) && staged.submit(text, repliedToMessageId),
+		[seatMentioned, staged.submit],
+	)
 	const { send, isSentInMount } = useSentInMount({
 		threadId: facts.id,
 		messages: state.messages,
-		send: staged.submit,
+		send: submitSeated,
 	})
 	const { replyTarget, focusComposer, holdReply, releaseReply, submitPrompt } =
 		useThreadReply({ composerRef, scrollerRef, send })
@@ -1272,7 +1262,6 @@ function ThreadView({
 					onPromptChange={rememberDraft}
 					onSubmitPrompt={submitPrompt}
 					placeholder={composerPlaceholder}
-					present={present}
 					promptRef={promptRef}
 					readDraft={readDraft}
 					staged={staged}

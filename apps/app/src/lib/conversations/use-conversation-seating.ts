@@ -1,14 +1,25 @@
-import { createContext, useContext, useEffect, useState } from "react"
+import {
+	createContext,
+	useCallback,
+	useContext,
+	useEffect,
+	useState,
+} from "react"
 
 import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 import type { RosterBot } from "@workspace/ui/components/roster"
 import { i18n } from "@workspace/ui/lib/i18n"
 
-import { toBotRows } from "./roster-conversations"
-import type { Bot } from "./store-contract"
+import { mentionedBotIdsIn } from "./mentions"
+import {
+	mentionableBots,
+	toBotRows,
+	unseatedBots,
+} from "./roster-conversations"
+import type { Bot, Conversation } from "./store-contract"
 
 export type ConversationSeating = {
-	seat: (conversationId: string, botId: string) => Promise<boolean>
+	seat: (conversationId: string, botId: string) => Promise<Conversation | null>
 	botsByPresence: (conversationId: string) => Promise<Bot[]>
 }
 
@@ -19,12 +30,64 @@ const NO_BOTS: RosterBot[] = []
 
 const SUGGESTED_BOTS_SHOWN = 5
 
-export const useSeatInConversation = (conversationId: string | null) => {
+export type OpenConversation = (conversation: Conversation) => Promise<void>
+
+type MentionedSeating = {
+	seating: ConversationSeating
+	conversation: Conversation
+	bots: Bot[]
+	open: OpenConversation
+	text: string
+}
+
+const seatMentionedIn = async ({
+	seating,
+	conversation,
+	bots,
+	open,
+	text,
+}: MentionedSeating): Promise<boolean> => {
+	const absent = new Set(unseatedBots(bots, conversation).map((bot) => bot.id))
+	const namedAbsentIds = mentionedBotIdsIn(
+		text,
+		mentionableBots(bots, conversation),
+	).filter((botId) => absent.has(botId))
+	let held = conversation
+
+	for (const botId of namedAbsentIds) {
+		const seated = await seating.seat(conversation.id, botId)
+		if (!seated) {
+			return false
+		}
+		held = seated
+	}
+
+	if (held !== conversation) {
+		await open(held)
+	}
+	return true
+}
+
+export type MentionedSeats = {
+	conversation: Conversation | null
+	bots: Bot[]
+	open: OpenConversation | null
+}
+
+export const useSeatMentioned = ({
+	conversation,
+	bots,
+	open,
+}: MentionedSeats) => {
 	const seating = useContext(ConversationSeatingContext)
 
-	return seating && conversationId
-		? (botId: string) => seating.seat(conversationId, botId)
-		: undefined
+	return useCallback(
+		(text: string) =>
+			seating && conversation && open
+				? seatMentionedIn({ seating, conversation, bots, open, text })
+				: Promise.resolve(true),
+		[seating, conversation, bots, open],
+	)
 }
 
 export const useSuggestedBots = (conversationId: string | null) => {

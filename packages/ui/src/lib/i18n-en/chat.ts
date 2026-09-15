@@ -291,6 +291,7 @@ const chat = {
 	},
 	conversationSeating: {
 		failed: "Couldn't change who is in this conversation. Retry.",
+		refused: "Couldn't bring {{name}} into this conversation. Retry.",
 		unavailable: "Couldn't load the companions to suggest. Retry.",
 	},
 	conversationSettings: {

@@ -309,6 +309,8 @@ const chat = {
 	},
 	conversationSeating: {
 		failed: "Impossible de changer qui est dans cette conversation. Réessayez.",
+		refused:
+			"Impossible de faire venir {{name}} dans cette conversation. Réessayez.",
 		unavailable: "Impossible de charger les compagnons à suggérer. Réessayez.",
 	},
 	conversationSettings: {
