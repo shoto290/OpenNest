@@ -116,6 +116,16 @@
 	},
 	"overrides": [
 		{
+			"includes": ["apps/app/src-tauri/plugins/kiroshi/applications/logos/**"],
+			"linter": {
+				"rules": {
+					"a11y": {
+						"noSvgWithoutTitle": "off"
+					}
+				}
+			}
+		},
+		{
 			"includes": ["packages/ui/src/components/**"],
 			"linter": {
 				"rules": {
