@@ -240,17 +240,16 @@ export const createApplicationsController = (
 			set({ installing: application.name, failure: null })
 			try {
 				await runInstall(application, target, key)
+				await target.settle()
 			} catch (reason) {
 				set({
-					installing: null,
 					failure: i18n.t("bots:applications.install.failed", {
 						reason: refusalTextOf(reason),
 					}),
 				})
-				return
+			} finally {
+				set({ installing: null })
 			}
-			await target.settle()
-			set({ installing: null })
 		},
 	}
 }
